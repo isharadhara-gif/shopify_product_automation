@@ -215,6 +215,19 @@ def upload():
 def history():
     return jsonify(load_history())
 
+@app.route('/get_settings')
+def get_settings_route():
+    settings = load_settings()
+    # Merge env vars as fallback but don't expose full token
+    out = {
+        'shopify_store':  settings.get('shopify_store')  or os.environ.get('SHOPIFY_STORE',''),
+        'shopify_token':  settings.get('shopify_token')  or os.environ.get('SHOPIFY_TOKEN',''),
+        'groq_api_key':   settings.get('groq_api_key')   or os.environ.get('GROQ_API_KEY',''),
+        'product_vendor': settings.get('product_vendor') or os.environ.get('PRODUCT_VENDOR',''),
+        'product_type':   settings.get('product_type')   or os.environ.get('PRODUCT_TYPE',''),
+    }
+    return jsonify(out)
+
 @app.route('/save_settings', methods=['POST'])
 def save_settings_route():
     data = request.get_json()
