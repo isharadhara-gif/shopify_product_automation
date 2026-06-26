@@ -207,10 +207,15 @@
 
       <!-- Drop zone -->
       <div class="upload-zone" id="dropzone">
-        <input type="file" id="file-input" accept="image/*" multiple>
+        <input type="file" id="file-input" accept="image/*" multiple style="display:none">
+        <input type="file" id="folder-input" accept="image/*" webkitdirectory multiple style="display:none">
         <div class="upload-icon">📁</div>
-        <div class="upload-text">Drop product images here</div>
-        <div class="upload-hint">or click to browse · JPG, PNG, WEBP supported</div>
+        <div class="upload-text">Drop images here</div>
+        <div style="display:flex;gap:10px;justify-content:center;margin-top:14px;">
+          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();document.getElementById('file-input').click()">🖼️ Select Images</button>
+          <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();document.getElementById('folder-input').click()">📂 Select Folder</button>
+        </div>
+        <div class="upload-hint" style="margin-top:8px;">or drag &amp; drop · JPG, PNG, WEBP</div>
       </div>
       <div style="margin-top:14px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 16px;background:var(--surface);border-radius:10px;border:1px solid var(--border);">
         <span style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Markup</span>
@@ -374,6 +379,10 @@ dropzone.addEventListener('drop', e => {
   handleFiles([...e.dataTransfer.files]);
 });
 fileInput.addEventListener('change', () => handleFiles([...fileInput.files]));
+document.getElementById('folder-input').addEventListener('change', function() {
+  handleFiles([...this.files]);
+  this.value = ''; // reset so same folder can be re-selected
+});
 
 function handleFiles(files) {
   files.filter(f => f.type.startsWith('image/')).forEach(addToQueue);
@@ -584,6 +593,22 @@ function addLog(msg, level='info') {
 
 function clearLog() { logBox.innerHTML = ''; firstLog = true; }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// ── Load saved settings into form ─────────────────────────────────────────────
+async function loadSettingsForm() {
+  try {
+    const res  = await fetch('/get_settings');
+    const data = await res.json();
+    if (data.shopify_store) document.getElementById('s-store').value  = data.shopify_store;
+    if (data.shopify_token) document.getElementById('s-token').value  = data.shopify_token;
+    if (data.groq_api_key)  document.getElementById('s-groq').value   = data.groq_api_key;
+    if (data.product_vendor) document.getElementById('s-vendor').value = data.product_vendor;
+    if (data.product_type)  document.getElementById('s-type').value   = data.product_type;
+    if (data.groq_api_key)   document.getElementById('dot-groq').className    = 'dot ok';
+    if (data.shopify_store)  document.getElementById('dot-shopify').className = 'dot ok';
+  } catch(e) {}
+}
+loadSettingsForm();
 </script>
 </body>
 </html>
