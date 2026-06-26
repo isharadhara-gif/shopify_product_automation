@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shopify Upload Pipeline</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+<style>
+  :root {
+    --bg: #0f0f13;
+    --surface: #1a1a22;
+    --surface2: #22222e;
+    --border: #2e2e3e;
+    --accent: #7c6af7;
+    --accent2: #a78bfa;
+    --green: #34d399;
+    --red: #f87171;
+    --yellow: #fbbf24;
+    --text: #e8e8f0;
+    --muted: #7878a0;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; min-height: 100vh; }
+
+  /* Layout */
+  .app { display: grid; grid-template-columns: 300px 1fr; min-height: 100vh; }
+  .sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: 24px 20px; display: flex; flex-direction: column; gap: 24px; }
+  .main { padding: 28px; overflow-y: auto; }
+
+  /* Logo */
+  .logo { display: flex; align-items: center; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+  .logo-icon { width: 36px; height: 36px; background: linear-gradient(135deg, var(--accent), #c084fc); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .logo-text { font-size: 15px; font-weight: 700; letter-spacing: -0.3px; }
+  .logo-sub { font-size: 11px; color: var(--muted); }
+
+  /* Status badges */
+  .status-bar { display: flex; flex-direction: column; gap: 8px; }
+  .status-item { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+  .dot.ok { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .dot.warn { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+
+  /* Nav */
+  .nav { display: flex; flex-direction: column; gap: 4px; }
+  .nav-btn { background: none; border: none; color: var(--muted); font-size: 13px; padding: 9px 12px; border-radius: 8px; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all .15s; }
+  .nav-btn:hover, .nav-btn.active { background: var(--surface2); color: var(--text); }
+  .nav-btn.active { color: var(--accent2); }
+
+  /* Panels */
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* Header */
+  .page-header { margin-bottom: 24px; }
+  .page-title { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+  .page-sub { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+  /* Upload zone */
+  .upload-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 40px 24px; text-align: center; cursor: pointer; transition: all .2s; background: var(--surface); position: relative; }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: rgba(124,106,247,.05); }
+  .upload-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .upload-icon { font-size: 36px; margin-bottom: 12px; }
+  .upload-text { font-size: 15px; font-weight: 600; }
+  .upload-hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+  /* Queue */
+  .queue-header { display: flex; justify-content: space-between; align-items: center; margin: 24px 0 12px; }
+  .queue-title { font-size: 14px; font-weight: 600; }
+  .btn { padding: 8px 16px; border-radius: 8px; border: none; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #6d5de6; }
+  .btn-primary:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-sm { padding: 5px 10px; font-size: 11px; border-radius: 6px; }
+  .btn-ghost { background: var(--surface2); color: var(--muted); }
+  .btn-ghost:hover { color: var(--text); }
+
+  /* Queue items */
+  .queue-list { display: flex; flex-direction: column; gap: 10px; }
+  .queue-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; display: grid; grid-template-columns: 56px 1fr auto; gap: 12px; align-items: center; }
+  .queue-item.uploading { border-color: var(--accent); }
+  .queue-item.done { border-color: var(--green); opacity: .7; }
+  .queue-item.failed { border-color: var(--red); }
+  .thumb { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; background: var(--surface2); }
+  .item-info { min-width: 0; }
+  .item-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item-meta { font-size: 11px; color: var(--muted); margin-top: 3px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .item-price { color: var(--green); font-weight: 600; }
+  .item-actions { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+  .badge { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 99px; }
+  .badge-pending { background: rgba(251,191,36,.15); color: var(--yellow); }
+  .badge-running { background: rgba(124,106,247,.2); color: var(--accent2); }
+  .badge-done { background: rgba(52,211,153,.15); color: var(--green); }
+  .badge-failed { background: rgba(248,113,113,.15); color: var(--red); }
+  .remove-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; line-height: 1; padding: 2px 4px; }
+  .remove-btn:hover { color: var(--red); }
+
+  /* Inline SKU/price inputs on queue item */
+  .item-inputs { display: flex; gap: 8px; margin-top: 6px; }
+  .item-input { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; color: var(--text); font-size: 11px; width: 100px; }
+  .item-input:focus { outline: none; border-color: var(--accent); }
+
+  /* Log panel */
+  .log-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; font-family: 'Courier New', monospace; font-size: 12px; height: 280px; overflow-y: auto; line-height: 1.7; }
+  .log-info { color: var(--text); }
+  .log-success { color: var(--green); }
+  .log-error { color: var(--red); }
+  .log-muted { color: var(--muted); }
+
+  /* Results table */
+  .results-grid { display: flex; flex-direction: column; gap: 10px; }
+  .result-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .result-card.success { border-left: 3px solid var(--green); }
+  .result-card.failed { border-left: 3px solid var(--red); }
+  .result-info { min-width: 0; }
+  .result-title { font-size: 13px; font-weight: 600; }
+  .result-meta { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .result-link { font-size: 11px; color: var(--accent2); text-decoration: none; }
+  .result-link:hover { text-decoration: underline; }
+
+  /* Settings form */
+  .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 640px; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field.full { grid-column: 1 / -1; }
+  label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  input[type=text], input[type=password] { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 13px; width: 100%; }
+  input:focus { outline: none; border-color: var(--accent); }
+  .save-row { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; margin-top: 4px; }
+  .save-msg { font-size: 12px; color: var(--green); display: none; }
+
+  /* History table */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { text-align: left; padding: 10px 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid var(--border); }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  tr:hover td { background: var(--surface); }
+  .status-ok { color: var(--green); }
+  .status-fail { color: var(--red); }
+
+  /* Spinner */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner { width: 14px; height: 14px; border: 2px solid rgba(124,106,247,.3); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; display: inline-block; vertical-align: middle; }
+
+  /* Empty state */
+  .empty { text-align: center; padding: 48px 24px; color: var(--muted); }
+  .empty-icon { font-size: 40px; margin-bottom: 12px; }
+  .empty-text { font-size: 14px; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+
+  @media (max-width: 768px) {
+    .app { grid-template-columns: 1fr; }
+    .sidebar { border-right: none; border-bottom: 1px solid var(--border); flex-direction: row; flex-wrap: wrap; gap: 12px; padding: 16px; }
+    .settings-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-icon">🛍️</div>
+      <div>
+        <div class="logo-text">ShopifyPipeline</div>
+        <div class="logo-sub">Auto upload tool</div>
+      </div>
+    </div>
+
+    <div class="status-bar">
+      <div class="status-item">
+        <div class="dot {% if has_groq %}ok{% else %}warn{% endif %}" id="dot-groq"></div>
+        <span>Groq AI {% if not has_groq %}— not set{% endif %}</span>
+      </div>
+      <div class="status-item">
+        <div class="dot {% if has_shopify %}ok{% else %}warn{% endif %}" id="dot-shopify"></div>
+        <span>Shopify {% if not has_shopify %}— not set{% endif %}</span>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <button class="nav-btn active" onclick="showPanel('upload')">📤 Upload</button>
+      <button class="nav-btn" onclick="showPanel('history')">📋 History</button>
+      <button class="nav-btn" onclick="showPanel('settings')">⚙️ Settings</button>
+    </nav>
+
+    <div style="margin-top:auto; font-size:11px; color:var(--muted); line-height:1.6;">
+      <strong style="color:var(--text)">Naming format</strong><br>
+      SKU_CostPrice.jpg<br>
+      e.g. TSHIRT001_250.jpg
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+
+    <!-- Upload Panel -->
+    <div id="panel-upload" class="panel active">
+      <div class="page-header">
+        <div class="page-title">Upload Products</div>
+        <div class="page-sub">Drop images below — add SKU & cost price — hit Upload All</div>
+      </div>
+
+      <!-- Drop zone -->
+      <div class="upload-zone" id="dropzone">
+        <input type="file" id="file-input" accept="image/*" multiple>
+        <div class="upload-icon">📁</div>
+        <div class="upload-text">Drop product images here</div>
+        <div class="upload-hint">or click to browse · JPG, PNG, WEBP supported</div>
+      </div>
+
+      <!-- Queue -->
+      <div id="queue-section" style="display:none">
+        <div class="queue-header">
+          <span class="queue-title">Queue (<span id="queue-count">0</span>)</span>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-ghost btn-sm" onclick="clearDone()">Clear done</button>
+            <button class="btn btn-primary" id="upload-all-btn" onclick="uploadAll()">⬆ Upload All</button>
+          </div>
+        </div>
+        <div class="queue-list" id="queue-list"></div>
+      </div>
+
+      <!-- Live log -->
+      <div style="margin-top:24px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <span style="font-size:14px;font-weight:600">Live Log</span>
+          <button class="btn btn-ghost btn-sm" onclick="clearLog()">Clear</button>
+        </div>
+        <div class="log-box" id="log-box">
+          <span class="log-muted">Waiting for uploads...</span>
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div id="results-section" style="display:none;margin-top:24px">
+        <div style="font-size:14px;font-weight:600;margin-bottom:12px">Completed</div>
+        <div class="results-grid" id="results-list"></div>
+      </div>
+    </div>
+
+    <!-- History Panel -->
+    <div id="panel-history" class="panel">
+      <div class="page-header">
+        <div class="page-title">Upload History</div>
+        <div class="page-sub">Last 50 uploads from this session</div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th><th>SKU</th><th>Title</th>
+              <th>Cost</th><th>Price</th><th>Status</th><th>Link</th>
+            </tr>
+          </thead>
+          <tbody id="history-tbody">
+            <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:32px">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Settings Panel -->
+    <div id="panel-settings" class="panel">
+      <div class="page-header">
+        <div class="page-title">Settings</div>
+        <div class="page-sub">Your credentials are saved to .env on the server</div>
+      </div>
+      <div class="settings-grid">
+        <div class="field full">
+          <label>Shopify Store URL</label>
+          <input type="text" id="s-store" placeholder="yourstore.myshopify.com" value="{{ shopify_store }}">
+        </div>
+        <div class="field full">
+          <label>Shopify Admin Token</label>
+          <input type="password" id="s-token" placeholder="shpat_xxxxxxxxxxxx">
+        </div>
+        <div class="field full">
+          <label>Groq API Key <a href="https://console.groq.com" target="_blank" style="color:var(--accent2);font-size:11px;font-weight:400;text-decoration:none">Get free key →</a></label>
+          <input type="password" id="s-groq" placeholder="gsk_xxxxxxxxxxxx">
+        </div>
+        <div class="field">
+          <label>Product Vendor</label>
+          <input type="text" id="s-vendor" placeholder="My Brand">
+        </div>
+        <div class="field">
+          <label>Product Type</label>
+          <input type="text" id="s-type" placeholder="Apparel">
+        </div>
+        <div class="save-row">
+          <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+          <span class="save-msg" id="save-msg">✅ Saved!</span>
+        </div>
+      </div>
+
+      <div style="margin-top:32px;padding:16px;background:var(--surface);border-radius:var(--radius);max-width:500px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:10px">💡 Quick Start</div>
+        <div style="font-size:12px;color:var(--muted);line-height:2">
+          1. Get free Groq key → <a href="https://console.groq.com" target="_blank" style="color:var(--accent2)">console.groq.com</a><br>
+          2. Get Shopify token → Admin → Settings → Apps → Develop apps<br>
+          3. Scopes needed: <code style="color:var(--text)">write_products</code>, <code style="color:var(--text)">write_product_listings</code><br>
+          4. Drop images, set prices, click Upload All
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+const socket = io();
+let queue = [];   // { id, file, sku, costPrice, status, thumb }
+let logBox = document.getElementById('log-box');
+let firstLog = true;
+
+// ── Socket events ─────────────────────────────────────────────────────────────
+socket.on('log', ({msg, level}) => {
+  if (firstLog) { logBox.innerHTML = ''; firstLog = false; }
+  const line = document.createElement('div');
+  line.className = `log-${level || 'info'}`;
+  line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  logBox.appendChild(line);
+  logBox.scrollTop = logBox.scrollHeight;
+});
+
+socket.on('product_done', (data) => {
+  const item = queue.find(q => q.sku === data.sku);
+  if (item) {
+    item.status = data.status;
+    renderQueue();
+  }
+  if (data.status === 'success') {
+    addResult(data);
+  }
+  checkAllDone();
+});
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+function showPanel(name) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  event.currentTarget.classList.add('active');
+  if (name === 'history') loadHistory();
+}
+
+// ── File drop & pick ──────────────────────────────────────────────────────────
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('file-input');
+
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('drag');
+  handleFiles([...e.dataTransfer.files]);
+});
+fileInput.addEventListener('change', () => handleFiles([...fileInput.files]));
+
+function handleFiles(files) {
+  files.filter(f => f.type.startsWith('image/')).forEach(addToQueue);
+}
+
+function addToQueue(file) {
+  const id = Date.now() + Math.random();
+  // Try parse SKU/price from filename
+  const stem  = file.name.replace(/\.[^.]+$/, '');
+  const match = stem.match(/^(.+?)_(\d+(?:\.\d+)?)$/);
+  const sku   = match ? match[1].toUpperCase() : stem.toUpperCase().replace(/[^A-Z0-9-]/g,'');
+  const cp    = match ? match[2] : '';
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    queue.push({ id, file, sku, costPrice: cp, status: 'pending', thumb: e.target.result });
+    renderQueue();
+  };
+  reader.readAsDataURL(file);
+}
+
+// ── Render queue ──────────────────────────────────────────────────────────────
+function renderQueue() {
+  const list = document.getElementById('queue-list');
+  const section = document.getElementById('queue-section');
+  section.style.display = queue.length ? 'block' : 'none';
+  document.getElementById('queue-count').textContent = queue.length;
+
+  list.innerHTML = queue.map(item => {
+    const sp = item.costPrice ? calcSP(parseFloat(item.costPrice)) : '—';
+    const badgeClass = {pending:'badge-pending',uploading:'badge-running',success:'badge-done',failed:'badge-failed'}[item.status];
+    const badgeText  = {pending:'Pending',uploading:'Uploading…',success:'Done ✅',failed:'Failed ❌'}[item.status];
+    return `
+    <div class="queue-item ${item.status}" id="qi-${item.id}">
+      <img class="thumb" src="${item.thumb}">
+      <div class="item-info">
+        <div class="item-name">${item.file.name}</div>
+        <div class="item-inputs">
+          <input class="item-input" placeholder="SKU" value="${item.sku}"
+            oninput="updateItem('${item.id}','sku',this.value)" ${item.status!=='pending'?'disabled':''}>
+          <input class="item-input" placeholder="Cost ₹" value="${item.costPrice}" type="number"
+            oninput="updateItem('${item.id}','costPrice',this.value)" ${item.status!=='pending'?'disabled':''}>
+        </div>
+        <div class="item-meta">
+          ${item.costPrice ? `<span>CP: ₹${item.costPrice}</span><span class="item-price">SP: ₹${sp}</span>` : '<span style="color:var(--yellow)">Enter cost price</span>'}
+        </div>
+      </div>
+      <div class="item-actions">
+        <span class="badge ${badgeClass}">${badgeText}</span>
+        ${item.status==='pending' ? `<button class="remove-btn" onclick="removeItem('${item.id}')">×</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function updateItem(id, field, val) {
+  const item = queue.find(q => q.id == id);
+  if (item) { item[field] = val; renderQueue(); }
+}
+
+function removeItem(id) {
+  queue = queue.filter(q => q.id != id);
+  renderQueue();
+}
+
+function clearDone() {
+  queue = queue.filter(q => q.status === 'pending');
+  renderQueue();
+}
+
+// ── Price calculator (mirrors Python logic) ───────────────────────────────────
+function calcSP(cp) {
+  const raw = cp * 4;
+  const base = Math.floor(raw);
+  const rem  = base % 10;
+  let sp = rem < 9 ? base - rem + 9 : base + 9;
+  if (sp < raw) sp += 10;
+  return sp;
+}
+
+// ── Upload all ────────────────────────────────────────────────────────────────
+async function uploadAll() {
+  const pending = queue.filter(q => q.status === 'pending');
+  if (!pending.length) return;
+
+  const btn = document.getElementById('upload-all-btn');
+  btn.disabled = true;
+  btn.textContent = 'Uploading…';
+  if (firstLog) { logBox.innerHTML = ''; firstLog = false; }
+
+  for (const item of pending) {
+    if (!item.sku || !item.costPrice) {
+      addLog(`⚠️ Skipping ${item.file.name} — missing SKU or cost price`, 'error');
+      continue;
+    }
+    item.status = 'uploading';
+    renderQueue();
+
+    try {
+      // 1. Upload file to server
+      const fd = new FormData();
+      fd.append('image', item.file);
+      fd.append('sku', item.sku);
+      fd.append('cost_price', item.costPrice);
+      const res = await fetch('/upload', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      // 2. Trigger pipeline via socket
+      socket.emit('start_upload', { filename: data.filename, sku: item.sku, cost_price: item.costPrice });
+      // status will update via 'product_done' event
+    } catch(e) {
+      item.status = 'failed';
+      renderQueue();
+      addLog(`❌ Upload failed for ${item.file.name}: ${e.message}`, 'error');
+    }
+
+    await sleep(500); // stagger uploads slightly
+  }
+}
+
+function checkAllDone() {
+  const allDone = queue.every(q => q.status !== 'uploading' && q.status !== 'pending');
+  if (allDone) {
+    const btn = document.getElementById('upload-all-btn');
+    btn.disabled = false;
+    btn.textContent = '⬆ Upload All';
+  }
+}
+
+// ── Results ───────────────────────────────────────────────────────────────────
+function addResult(data) {
+  const section = document.getElementById('results-section');
+  const list    = document.getElementById('results-list');
+  section.style.display = 'block';
+  const card = document.createElement('div');
+  card.className = 'result-card success';
+  card.innerHTML = `
+    <div class="result-info">
+      <div class="result-title">${data.title || data.sku}</div>
+      <div class="result-meta">SKU: ${data.sku} · Price: ₹${data.selling_price}</div>
+    </div>
+    <a href="${data.shopify_url}" target="_blank" class="result-link">View in Shopify →</a>`;
+  list.prepend(card);
+}
+
+// ── History ───────────────────────────────────────────────────────────────────
+async function loadHistory() {
+  const tbody = document.getElementById('history-tbody');
+  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:32px">Loading…</td></tr>';
+  const res  = await fetch('/history');
+  const rows = await res.json();
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:32px">No uploads yet</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td style="color:var(--muted)">${r.timestamp?.slice(11,19) || '—'}</td>
+      <td><strong>${r.sku}</strong></td>
+      <td>${r.title || '—'}</td>
+      <td>₹${r.cost_price}</td>
+      <td style="color:var(--green)">₹${r.selling_price}</td>
+      <td class="${r.status==='success'?'status-ok':'status-fail'}">${r.status}</td>
+      <td>${r.shopify_url ? `<a href="${r.shopify_url}" target="_blank" class="result-link">View →</a>` : r.error || '—'}</td>
+    </tr>`).join('');
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+async function saveSettings() {
+  const payload = {
+    shopify_store:  document.getElementById('s-store').value.trim(),
+    shopify_token:  document.getElementById('s-token').value.trim(),
+    groq_api_key:   document.getElementById('s-groq').value.trim(),
+    product_vendor: document.getElementById('s-vendor').value.trim(),
+    product_type:   document.getElementById('s-type').value.trim(),
+  };
+  await fetch('/save_settings', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+  const msg = document.getElementById('save-msg');
+  msg.style.display = 'inline';
+  // Update status dots
+  if (payload.groq_api_key)   document.getElementById('dot-groq').className    = 'dot ok';
+  if (payload.shopify_store)  document.getElementById('dot-shopify').className = 'dot ok';
+  setTimeout(() => msg.style.display = 'none', 2500);
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function addLog(msg, level='info') {
+  if (firstLog) { logBox.innerHTML = ''; firstLog = false; }
+  const line = document.createElement('div');
+  line.className = `log-${level}`;
+  line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  logBox.appendChild(line);
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
+function clearLog() { logBox.innerHTML = ''; firstLog = true; }
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+</script>
+</body>
+</html>
