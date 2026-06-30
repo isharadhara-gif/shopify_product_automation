@@ -363,7 +363,7 @@ def publish_to_all_channels(base_url, headers, product_id, sid):
 # ── Shopify: create product with MULTIPLE images ─────────────────────────────
 def create_shopify_product(image_paths, sku, selling_price, details, sid, manual_title=None,
                             category=None, manual_tags=None, weight_g=None, hs_code=None,
-                            country_of_origin=None, inventory_qty=None):
+                            country_of_origin=None, inventory_qty=None, cost_price=None):
     settings = load_settings()
     store = (settings.get('shopify_store') or os.environ.get('SHOPIFY_STORE', '')).replace('https://', '').replace('http://', '').rstrip('/')
     token = settings.get('shopify_token') or os.environ.get('SHOPIFY_TOKEN', '')
@@ -434,12 +434,13 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid, manual
             'weight': weight_g,
             'weight_unit': 'g',
             'inventory_quantity': inventory_qty,
-            # Setting HS code / country of origin inline at creation time, in
-            # addition to the follow-up PUT below — some store API versions
-            # only persist this when it's sent on creation.
+            # Setting HS code / country of origin / cost inline at creation
+            # time, in addition to the follow-up PUT below — some store API
+            # versions only persist this when it's sent on creation.
             'inventory_item': {
                 'harmonized_system_code': hs_code_clean,
                 'country_code_of_origin': country_of_origin,
+                **({'cost': str(cost_price)} if cost_price not in (None, '', 0) else {}),
             },
         }],
         'status': 'active',
@@ -458,6 +459,9 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid, manual
     # creation field above is not honoured by every store/API version.
     try:
         inventory_item_id = product['variants'][0]['inventory_item_id']
+        cost_payload = {}
+        if cost_price not in (None, '', 0):
+            cost_payload['cost'] = str(cost_price)
         for attempt in range(2):
             hs_resp = requests.put(
                 f'{base_url}/inventory_items/{inventory_item_id}.json',
@@ -466,6 +470,7 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid, manual
                     'id': inventory_item_id,
                     'harmonized_system_code': hs_code_clean,
                     'country_code_of_origin': country_of_origin,
+                    **cost_payload,
                 }},
                 timeout=30
             )
@@ -473,16 +478,21 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid, manual
                 saved = hs_resp.json().get('inventory_item', {})
                 saved_hs = saved.get('harmonized_system_code')
                 saved_origin = saved.get('country_code_of_origin')
-                if saved_hs == hs_code_clean and saved_origin == country_of_origin:
-                    log(sid, f'✅ HS code {hs_code_clean} · Origin {country_of_origin} confirmed', 'success')
+                saved_cost = saved.get('cost')
+                ok = saved_hs == hs_code_clean and saved_origin == country_of_origin
+                if cost_payload:
+                    ok = ok and saved_cost is not None
+                if ok:
+                    cost_note = f' · Cost ₹{saved_cost}' if cost_payload else ''
+                    log(sid, f'✅ HS code {hs_code_clean} · Origin {country_of_origin}{cost_note} confirmed', 'success')
                     break
                 else:
-                    log(sid, f'⚠️ HS/origin saved but mismatched (got hs={saved_hs}, origin={saved_origin}), retrying…', 'error')
+                    log(sid, f'⚠️ HS/origin/cost saved but mismatched (got hs={saved_hs}, origin={saved_origin}, cost={saved_cost}), retrying…', 'error')
             else:
-                log(sid, f'⚠️ HS code/origin update failed (HTTP {hs_resp.status_code}): {hs_resp.text[:300]}', 'error')
+                log(sid, f'⚠️ HS code/origin/cost update failed (HTTP {hs_resp.status_code}): {hs_resp.text[:300]}', 'error')
             time.sleep(1)
     except Exception as e:
-        log(sid, f'⚠️ Could not set HS code/origin: {e}', 'error')
+        log(sid, f'⚠️ Could not set HS code/origin/cost: {e}', 'error')
 
     # Publish to every sales channel the store has enabled (Online Store,
     # POS, Shop app, Google & YouTube, Facebook & Instagram, etc.)
@@ -676,7 +686,8 @@ def handle_start_upload(data):
                                                  category=category, manual_tags=manual_tags,
                                                  weight_g=weight_g, hs_code=hs_code,
                                                  country_of_origin=country_of_origin,
-                                                 inventory_qty=inventory_qty)
+                                                 inventory_qty=inventory_qty,
+                                                 cost_price=cost_price)
 
                 row = {'timestamp': timestamp, 'sku': sku, 'title': result.get('title'),
                        'handle': result.get('handle'), 'cost_price': cost_price,
