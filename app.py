@@ -284,7 +284,7 @@ Respond ONLY with a valid JSON object (no markdown, no extra text):
   "description": "2-3 sentence HTML product description highlighting material, craftsmanship, occasion suitability. Wrap any key feature label in <strong></strong> tags.",
   "handle": "url-slug-from-title-lowercase-hyphens",
   "seo_title": "Buy [Title] Online - {vendor} (max 60 chars)",
-  "seo_description": "Shop [Title] from {vendor}. Brief benefit. Best offers at our online store. (max 160 chars)",
+  "seo_description": "Buy [Title] from {vendor}.Shop Now And Get Best Offers At Our Online Store. (max 160 chars)",
   "alt_text": "{vendor} [Title] - descriptive alt text for image",
   "tags": "comma separated relevant tags"
 }}"""
