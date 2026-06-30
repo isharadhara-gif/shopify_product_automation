@@ -37,12 +37,10 @@ def process_image(path: Path) -> Path:
         w, h = img.size
         ratio = w / h
         if ratio > target_ratio:
-            # source is wider than target — crop the sides
             new_w = max(1, int(h * target_ratio))
             left = (w - new_w) // 2
             img = img.crop((left, 0, left + new_w, h))
         else:
-            # source is taller than target — crop top/bottom
             new_h = max(1, int(w / target_ratio))
             top = (h - new_h) // 2
             img = img.crop((0, top, w, top + new_h))
@@ -59,11 +57,9 @@ def process_image(path: Path) -> Path:
                 pass
         return new_path
     except Exception:
-        # If processing fails for any reason, keep the original file untouched
         return path
 
-# ── Category description templates (used instead of AI description when a
-#    category is picked for a product) ────────────────────────────────────────
+# ── Category description templates ────────────────────────────────────────────
 CATEGORY_DESCRIPTIONS = {
     'Necklace': """Hello lovely souls! Don\u2019t you agree that your look is never complete without a breathtaking necklace? A necklace set isn\u2019t just an accessory. It is the star of the show, ensuring you make a lasting impression every time you step out of your house.
 Ishhaara's necklaces for women whether it be a gold choker necklace set, pearl necklace, silver necklace set, or long necklace offer a phenomenal look. Pair these necklace sets and instantly make a wonderful appeal wherever you go. So, grab this chance and quickly check out the standout features of Ishhaara's necklace.
@@ -165,13 +161,35 @@ Care Label
 4. Clean your hair accessories after every use with a soft brush.""",
 }
 
+# Section headers that should render as bold standalone lines
+_SECTION_HEADERS = {'Product Specification', 'Key Highlights', 'Styling Inspiration', 'Care Label'}
+# Lines like "Material: Skin Friendly" — bold the label before the colon
+_LABEL_LINE_RE = re.compile(r'^([A-Za-z][A-Za-z \u2019\']{1,30}):\s*(.*)$')
+# Numbered list lines like "1. Premium Materials: blah blah" — bold "1. Premium Materials:"
+_NUMBERED_RE = re.compile(r'^(\d+\.\s*[^:]+:)\s*(.*)$')
+
 def template_description_html(category):
-    """Convert a plain-text category template into simple HTML for body_html."""
+    """Convert a plain-text category template into HTML for body_html, with
+    section headers and the lead-in of each bullet/spec line bolded."""
     text = CATEGORY_DESCRIPTIONS.get(category)
     if not text:
         return None
     paragraphs = [p.strip() for p in text.split('\n') if p.strip()]
-    return ''.join(f'<p>{p}</p>' for p in paragraphs)
+    html_parts = []
+    for p in paragraphs:
+        if p in _SECTION_HEADERS:
+            html_parts.append(f'<p><strong>{p}</strong></p>')
+            continue
+        m = _NUMBERED_RE.match(p)
+        if m:
+            html_parts.append(f'<p><strong>{m.group(1)}</strong> {m.group(2)}</p>')
+            continue
+        m = _LABEL_LINE_RE.match(p)
+        if m:
+            html_parts.append(f'<p><strong>{m.group(1)}:</strong> {m.group(2)}</p>')
+            continue
+        html_parts.append(f'<p>{p}</p>')
+    return ''.join(html_parts)
 
 def random_digits(n=10):
     return ''.join(str(random.randint(0, 9)) for _ in range(n))
@@ -186,7 +204,6 @@ UPLOAD_DIR = Path('uploads'); UPLOAD_DIR.mkdir(exist_ok=True)
 HISTORY_FILE = Path('history.json')
 SETTINGS_FILE = Path('settings.json')
 
-# Limit how many products upload to Shopify concurrently (Shopify rate limits apply)
 MAX_CONCURRENT = 3
 upload_semaphore = threading.Semaphore(MAX_CONCURRENT)
 
@@ -224,7 +241,6 @@ def slugify(text):
     return text.strip('-') or f'product-{int(time.time())}'
 
 def calc_sp(cp: float, markup: float = 4.0) -> int:
-    """cost * markup, rounded UP to nearest charm-price tier (x99 / x999 / x9999...)."""
     raw = cp * markup
     tiers = []
     for base in range(1, 100):
@@ -251,7 +267,6 @@ def generate_product_details(image_paths, sku, sid):
 
     log(sid, f'🤖 Generating product content via Groq for {sku}…')
     try:
-        # Use the first image as the reference for AI content generation
         image_path = image_paths[0]
         img_bytes = image_path.read_bytes()
         b64 = base64.b64encode(img_bytes).decode()
@@ -266,7 +281,7 @@ The SKU is {sku}. Look at the product image carefully.
 Respond ONLY with a valid JSON object (no markdown, no extra text):
 {{
   "title": "Short product name 4-7 words",
-  "description": "2-3 sentence HTML product description highlighting material, craftsmanship, occasion suitability",
+  "description": "2-3 sentence HTML product description highlighting material, craftsmanship, occasion suitability. Wrap any key feature label in <strong></strong> tags.",
   "handle": "url-slug-from-title-lowercase-hyphens",
   "seo_title": "Buy [Title] Online - {vendor} (max 60 chars)",
   "seo_description": "Shop [Title] from {vendor}. Brief benefit. Best offers at our online store. (max 160 chars)",
@@ -299,6 +314,52 @@ Respond ONLY with a valid JSON object (no markdown, no extra text):
         return {'title': sku, 'description': '', 'handle': slug,
                 'seo_title': sku, 'seo_description': '', 'alt_text': sku, 'tags': ''}
 
+# ── Shopify: publish a product to every active sales channel ─────────────────
+def publish_to_all_channels(base_url, headers, product_id, sid):
+    """Uses the GraphQL Admin API to publish the product onto every channel
+    the store has available (Online Store, POS, Shop, Google, Facebook, etc).
+    REST product creation only auto-publishes to the Online Store channel, so
+    this is required if the product should be sellable everywhere."""
+    graphql_url = base_url.replace('/admin/api/', '/admin/api/') .rsplit('/admin/api/', 1)
+    store_host = graphql_url[0].replace('https://', '')
+    api_version = graphql_url[1]
+    gql_url = f'https://{store_host}/admin/api/{api_version}/graphql.json'
+    gql_headers = {k: v for k, v in headers.items()}
+
+    try:
+        pub_query = '{ publications(first: 25) { edges { node { id name } } } }'
+        r = requests.post(gql_url, headers=gql_headers, json={'query': pub_query}, timeout=30)
+        r.raise_for_status()
+        data = r.json()
+        if 'errors' in data:
+            log(sid, f'⚠️ Could not list sales channels: {data["errors"]}', 'error')
+            return
+        pubs = data.get('data', {}).get('publications', {}).get('edges', [])
+        if not pubs:
+            log(sid, 'ℹ️ No sales channels found to publish to', 'muted')
+            return
+
+        gid = f'gid://shopify/Product/{product_id}'
+        mutation = """
+        mutation publishablePublish($id: ID!, $input: [PublicationInput!]!) {
+          publishablePublish(id: $id, input: $input) {
+            userErrors { field message }
+          }
+        }"""
+        variables = {'id': gid, 'input': [{'publicationId': p['node']['id']} for p in pubs]}
+        r2 = requests.post(gql_url, headers=gql_headers,
+                            json={'query': mutation, 'variables': variables}, timeout=30)
+        r2.raise_for_status()
+        result = r2.json()
+        errs = result.get('data', {}).get('publishablePublish', {}).get('userErrors', [])
+        if errs:
+            log(sid, f'⚠️ Sales channel publish reported errors: {errs}', 'error')
+        else:
+            names = ', '.join(p['node']['name'] for p in pubs)
+            log(sid, f'✅ Published to all sales channels ({names})', 'success')
+    except Exception as e:
+        log(sid, f'⚠️ Could not publish to all sales channels: {e}', 'error')
+
 # ── Shopify: create product with MULTIPLE images ─────────────────────────────
 def create_shopify_product(image_paths, sku, selling_price, details, sid, manual_title=None,
                             category=None, manual_tags=None, weight_g=None, hs_code=None,
@@ -317,7 +378,6 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid, manual
 
     title = manual_title or details.get('title', sku)
 
-    # Category template overrides the AI-generated description when chosen
     template_desc = template_description_html(category)
     description = template_desc if template_desc else details.get('description', '')
 
@@ -327,11 +387,19 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid, manual
     tags = (manual_tags or '').strip() or details.get('tags', '')
 
     weight_g = weight_g if weight_g not in (None, '', 0) else settings.get('default_weight_g', DEFAULT_WEIGHT_G)
+    try:
+        weight_g = float(weight_g)
+    except (TypeError, ValueError):
+        weight_g = DEFAULT_WEIGHT_G
+
     hs_code_raw = (hs_code or '').strip() or settings.get('default_hs_code', DEFAULT_HS_CODE)
     # Shopify's harmonized_system_code field rejects punctuation (e.g. "7117.90") —
     # it must be digits only. Strip everything else before sending.
     hs_code_clean = re.sub(r'[^0-9]', '', hs_code_raw) or re.sub(r'[^0-9]', '', DEFAULT_HS_CODE)
-    country_of_origin = (country_of_origin or '').strip().upper() or settings.get('default_country_of_origin', DEFAULT_COUNTRY_OF_ORIGIN)
+
+    country_of_origin = (country_of_origin or '').strip().upper() or \
+        (settings.get('default_country_of_origin') or DEFAULT_COUNTRY_OF_ORIGIN).upper()
+
     inventory_qty = inventory_qty if inventory_qty not in (None, '') else settings.get('default_inventory_qty', DEFAULT_INVENTORY_QTY)
     try:
         inventory_qty = int(inventory_qty)
@@ -339,7 +407,6 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid, manual
         inventory_qty = DEFAULT_INVENTORY_QTY
     compare_at_price = int(round(selling_price * 2))
 
-    # Image alt text / filename convention: "ishhaara-product-name-RANDOM10"
     title_slug = slugify(title)
     base_image_name = f'ishhaara-{title_slug}-{random_digits(10)}'
     alt_text = details.get('alt_text') or f'Ishhaara {title}'
@@ -367,6 +434,13 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid, manual
             'weight': weight_g,
             'weight_unit': 'g',
             'inventory_quantity': inventory_qty,
+            # Setting HS code / country of origin inline at creation time, in
+            # addition to the follow-up PUT below — some store API versions
+            # only persist this when it's sent on creation.
+            'inventory_item': {
+                'harmonized_system_code': hs_code_clean,
+                'country_code_of_origin': country_of_origin,
+            },
         }],
         'status': 'active',
         'published': True,
@@ -379,25 +453,40 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid, manual
     product_id = product['id']
     log(sid, f'✅ Product created — ID {product_id} | MRP ₹{compare_at_price} → SP ₹{selling_price} | Qty {inventory_qty}', 'success')
 
-    # Set HS code + country of origin on the inventory item (separate Shopify resource)
+    # Confirm / set HS code + country of origin on the inventory item.
+    # Always re-PUT explicitly and verify with a GET, since the inline
+    # creation field above is not honoured by every store/API version.
     try:
         inventory_item_id = product['variants'][0]['inventory_item_id']
-        hs_resp = requests.put(
-            f'{base_url}/inventory_items/{inventory_item_id}.json',
-            headers=headers,
-            json={'inventory_item': {
-                'id': inventory_item_id,
-                'harmonized_system_code': hs_code_clean,
-                'country_code_of_origin': country_of_origin,
-            }},
-            timeout=30
-        )
-        if hs_resp.ok:
-            log(sid, f'✅ HS code {hs_code_clean} · Origin {country_of_origin} set', 'success')
-        else:
-            log(sid, f'⚠️ HS code/origin update failed (HTTP {hs_resp.status_code}): {hs_resp.text}', 'error')
+        for attempt in range(2):
+            hs_resp = requests.put(
+                f'{base_url}/inventory_items/{inventory_item_id}.json',
+                headers=headers,
+                json={'inventory_item': {
+                    'id': inventory_item_id,
+                    'harmonized_system_code': hs_code_clean,
+                    'country_code_of_origin': country_of_origin,
+                }},
+                timeout=30
+            )
+            if hs_resp.ok:
+                saved = hs_resp.json().get('inventory_item', {})
+                saved_hs = saved.get('harmonized_system_code')
+                saved_origin = saved.get('country_code_of_origin')
+                if saved_hs == hs_code_clean and saved_origin == country_of_origin:
+                    log(sid, f'✅ HS code {hs_code_clean} · Origin {country_of_origin} confirmed', 'success')
+                    break
+                else:
+                    log(sid, f'⚠️ HS/origin saved but mismatched (got hs={saved_hs}, origin={saved_origin}), retrying…', 'error')
+            else:
+                log(sid, f'⚠️ HS code/origin update failed (HTTP {hs_resp.status_code}): {hs_resp.text[:300]}', 'error')
+            time.sleep(1)
     except Exception as e:
         log(sid, f'⚠️ Could not set HS code/origin: {e}', 'error')
+
+    # Publish to every sales channel the store has enabled (Online Store,
+    # POS, Shop app, Google & YouTube, Facebook & Instagram, etc.)
+    publish_to_all_channels(base_url, headers, product_id, sid)
 
     # Upload ALL images, in order, first one becomes the featured image
     total = len(image_paths)
@@ -420,7 +509,8 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid, manual
 
     shopify_url = f'https://{store}/admin/products/{product_id}'
     return {'product_id': product_id, 'shopify_url': shopify_url, 'handle': handle,
-            'title': title, 'compare_at_price': compare_at_price}
+            'title': title, 'compare_at_price': compare_at_price,
+            'hs_code': hs_code_clean, 'country_of_origin': country_of_origin}
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.route('/')
@@ -443,10 +533,8 @@ def index():
 
 @app.route('/upload', methods=['POST'])
 def upload():
-    """Accepts ONE OR MORE images for a single product (same SKU)."""
     files = request.files.getlist('images')
     if not files:
-        # backward-compat single field
         if 'image' in request.files:
             files = [request.files['image']]
         else:
@@ -477,10 +565,12 @@ def history_csv():
     rows = load_history()
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow(['Timestamp', 'SKU', 'Title', 'Cost Price', 'Selling Price', 'Compare At (MRP)', 'Status', 'Shopify URL', 'Error'])
+    writer.writerow(['Timestamp', 'SKU', 'Title', 'Cost Price', 'Selling Price', 'Compare At (MRP)',
+                      'HS Code', 'Country of Origin', 'Status', 'Shopify URL', 'Error'])
     for r in rows:
         writer.writerow([r.get('timestamp'), r.get('sku'), r.get('title'), r.get('cost_price'),
-                          r.get('selling_price'), r.get('compare_at_price'), r.get('status'), r.get('shopify_url'), r.get('error')])
+                          r.get('selling_price'), r.get('compare_at_price'), r.get('hs_code'),
+                          r.get('country_of_origin'), r.get('status'), r.get('shopify_url'), r.get('error')])
     return Response(buf.getvalue(), mimetype='text/csv',
                      headers={'Content-Disposition': 'attachment; filename=upload_history.csv'})
 
@@ -591,6 +681,7 @@ def handle_start_upload(data):
                 row = {'timestamp': timestamp, 'sku': sku, 'title': result.get('title'),
                        'handle': result.get('handle'), 'cost_price': cost_price,
                        'selling_price': selling_price, 'compare_at_price': result.get('compare_at_price'),
+                       'hs_code': result.get('hs_code'), 'country_of_origin': result.get('country_of_origin'),
                        'status': 'success', 'shopify_url': result['shopify_url'], 'error': None,
                        'image_count': len(filenames)}
                 append_history(row)
