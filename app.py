@@ -3,10 +3,60 @@ from datetime import datetime
 from pathlib import Path
 from flask import Flask, request, jsonify, Response
 from flask_socketio import SocketIO
+from PIL import Image, ImageOps
 
 # ── Default catalog values ────────────────────────────────────────────────────
 DEFAULT_HS_CODE = '7117.90'
 DEFAULT_WEIGHT_G = 100
+DEFAULT_COUNTRY_OF_ORIGIN = 'IN'
+
+# Target product photo canvas — portrait 3:4, Shopify-friendly
+TARGET_W, TARGET_H = 1080, 1440
+
+def process_image(path: Path) -> Path:
+    """Crop-to-fit (never stretch/squeeze) to TARGET_W x TARGET_H, then save as a
+    high-quality compressed JPEG. Returns the path of the processed file
+    (always .jpg — original is replaced)."""
+    try:
+        img = Image.open(path)
+        img = ImageOps.exif_transpose(img)
+
+        if img.mode in ('RGBA', 'P', 'LA'):
+            rgba = img.convert('RGBA')
+            background = Image.new('RGB', rgba.size, (255, 255, 255))
+            background.paste(rgba, mask=rgba.split()[-1])
+            img = background
+        else:
+            img = img.convert('RGB')
+
+        target_ratio = TARGET_W / TARGET_H
+        w, h = img.size
+        ratio = w / h
+        if ratio > target_ratio:
+            # source is wider than target — crop the sides
+            new_w = max(1, int(h * target_ratio))
+            left = (w - new_w) // 2
+            img = img.crop((left, 0, left + new_w, h))
+        else:
+            # source is taller than target — crop top/bottom
+            new_h = max(1, int(w / target_ratio))
+            top = (h - new_h) // 2
+            img = img.crop((0, top, w, top + new_h))
+
+        img = img.resize((TARGET_W, TARGET_H), Image.LANCZOS)
+
+        new_path = path.with_suffix('.jpg')
+        img.save(new_path, 'JPEG', quality=95, optimize=True, progressive=True)
+
+        if new_path != path:
+            try:
+                path.unlink()
+            except Exception:
+                pass
+        return new_path
+    except Exception:
+        # If processing fails for any reason, keep the original file untouched
+        return path
 
 # ── Category description templates (used instead of AI description when a
 #    category is picked for a product) ────────────────────────────────────────
@@ -88,6 +138,27 @@ Key Highlights
 3. Full Versatility: Ishhaara\u2019s every piece of ring whether it be silver rings, gold rings, Kundan rings, or Polki rings gives you full flexibility of wearing it alone or stacking with other rings. Perfect for adding a layered chic style that defines your personality.
 4. Free Size: Ishhaara\u2019s every type of artificial ring for women whether it be engagement rings or stainless steel rings is curated to fit every finger size. Ensuring you create a perfect look with a fully comfortable accessory.
 5. Gemstone Setting: Ishhaara\u2019s artificial rings for girls are made in various styles and settings such as prongs, bezels, or channel settings. This ensures you make a vibrantly visual appeal wherever you go.""",
+
+    'Hair accessories': """Hey beautiful! Isn\u2019t it amazing how the right hair accessory can transform your entire look in seconds? A hairpin, clip, or hair band isn\u2019t just functional. It is a styling statement that ties your whole appearance together effortlessly.
+Ishhaara's hair accessories for women whether it be a pearl hairpin, kundan maang tikka, juda pin, or floral hair vine offer a stunning finish to any hairstyle. Pair these pieces and instantly elevate your everyday or festive look. So, grab this chance and quickly check out the standout features of Ishhaara's hair accessories.
+Product Specification
+Material: Skin Friendly | Hypoallergenic
+Craftsmanship: Ethically Handmade
+Waterproof: Retains Colour and Brilliance
+Key Highlights
+1. Premium Materials: From shimmering kundan to delicate pearls, Ishhaara's every hair accessory such as hairpins or maang tikkas is crafted using premium materials only, ensuring durability and long-lasting beauty.
+2. Secure Hold: Whether it be a juda pin, clutcher, or hair vine, Ishhaara's every design is built to hold your hairstyle in place comfortably through long functions and celebrations.
+3. Statement Appeal: From bridal maang tikkas to everyday hair clips, Ishhaara's each piece is designed to be a focal point of your hairstyle, ensuring all eyes are on you.
+4. Versatile Styling: Ishhaara's each piece of hair accessory like Polki, Meenakari, or floral designs is ideal for making a transition across a range of hairstyles from casual buns to grand bridal updos.
+Styling Inspiration
+1. Pair these hair accessories with a traditional bun or braided hairstyle. It will give a classic and regal vibe.
+2. Opt for stacking multiple hairpins or clips along a side parting. It will add an extra sparkle and twist to your look.
+3. Style a single statement hair vine or tikka with an open hairstyle for special occasions for an instant glam finish.
+Care Label
+1. Store the hair accessories in an air-tight jewellery box or sealed pouch.
+2. Keep it away from body sprays, body lotions, or perfumes.
+3. Avoid using detergents, soaps, or toothpaste to clean your hair accessories.
+4. Clean your hair accessories after every use with a soft brush.""",
 }
 
 def template_description_html(category):
@@ -226,7 +297,8 @@ Respond ONLY with a valid JSON object (no markdown, no extra text):
 
 # ── Shopify: create product with MULTIPLE images ─────────────────────────────
 def create_shopify_product(image_paths, sku, selling_price, details, sid, manual_title=None,
-                            category=None, manual_tags=None, weight_g=None, hs_code=None):
+                            category=None, manual_tags=None, weight_g=None, hs_code=None,
+                            country_of_origin=None):
     settings = load_settings()
     store = (settings.get('shopify_store') or os.environ.get('SHOPIFY_STORE', '')).replace('https://', '').replace('http://', '').rstrip('/')
     token = settings.get('shopify_token') or os.environ.get('SHOPIFY_TOKEN', '')
@@ -250,8 +322,12 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid, manual
     seo_desc = details.get('seo_description', '')
     tags = (manual_tags or '').strip() or details.get('tags', '')
 
-    weight_g = weight_g if weight_g not in (None, '', 0) else DEFAULT_WEIGHT_G
-    hs_code = (hs_code or '').strip() or DEFAULT_HS_CODE
+    weight_g = weight_g if weight_g not in (None, '', 0) else settings.get('default_weight_g', DEFAULT_WEIGHT_G)
+    hs_code_raw = (hs_code or '').strip() or settings.get('default_hs_code', DEFAULT_HS_CODE)
+    # Shopify's harmonized_system_code field rejects punctuation (e.g. "7117.90") —
+    # it must be digits only. Strip everything else before sending.
+    hs_code_clean = re.sub(r'[^0-9]', '', hs_code_raw) or re.sub(r'[^0-9]', '', DEFAULT_HS_CODE)
+    country_of_origin = (country_of_origin or '').strip().upper() or settings.get('default_country_of_origin', DEFAULT_COUNTRY_OF_ORIGIN)
     compare_at_price = int(round(selling_price * 2))
 
     # Image alt text / filename convention: "ishhaara-product-name-RANDOM10"
@@ -288,21 +364,25 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid, manual
     product_id = product['id']
     log(sid, f'✅ Product created — ID {product_id} | MRP ₹{compare_at_price} → SP ₹{selling_price}', 'success')
 
-    # Set HS code on the inventory item (separate Shopify resource)
+    # Set HS code + country of origin on the inventory item (separate Shopify resource)
     try:
         inventory_item_id = product['variants'][0]['inventory_item_id']
         hs_resp = requests.put(
             f'{base_url}/inventory_items/{inventory_item_id}.json',
             headers=headers,
-            json={'inventory_item': {'id': inventory_item_id, 'harmonized_system_code': hs_code}},
+            json={'inventory_item': {
+                'id': inventory_item_id,
+                'harmonized_system_code': hs_code_clean,
+                'country_code_of_origin': country_of_origin,
+            }},
             timeout=30
         )
         if hs_resp.ok:
-            log(sid, f'✅ HS code set: {hs_code}', 'success')
+            log(sid, f'✅ HS code {hs_code_clean} · Origin {country_of_origin} set', 'success')
         else:
-            log(sid, f'⚠️ HS code update failed: {hs_resp.text}', 'error')
+            log(sid, f'⚠️ HS code/origin update failed (HTTP {hs_resp.status_code}): {hs_resp.text}', 'error')
     except Exception as e:
-        log(sid, f'⚠️ Could not set HS code: {e}', 'error')
+        log(sid, f'⚠️ Could not set HS code/origin: {e}', 'error')
 
     # Upload ALL images, in order, first one becomes the featured image
     total = len(image_paths)
@@ -366,8 +446,10 @@ def upload():
     for idx, file in enumerate(files):
         ext = Path(file.filename).suffix.lower() or '.jpg'
         filename = f'{sku}_{ts}_{idx}{ext}'
-        file.save(UPLOAD_DIR / filename)
-        saved.append(filename)
+        save_path = UPLOAD_DIR / filename
+        file.save(save_path)
+        processed_path = process_image(save_path)
+        saved.append(processed_path.name)
 
     return jsonify({'filenames': saved, 'sku': sku})
 
@@ -399,6 +481,7 @@ def get_settings_route():
         'default_markup': settings.get('default_markup', 4),
         'default_hs_code': settings.get('default_hs_code', DEFAULT_HS_CODE),
         'default_weight_g': settings.get('default_weight_g', DEFAULT_WEIGHT_G),
+        'default_country_of_origin': settings.get('default_country_of_origin', DEFAULT_COUNTRY_OF_ORIGIN),
     }
     return jsonify(out)
 
@@ -466,6 +549,7 @@ def handle_start_upload(data):
     manual_tags = (data.get('tags') or '').strip() or None
     weight_g = data.get('weight_g')
     hs_code = (data.get('hs_code') or '').strip() or None
+    country_of_origin = (data.get('country_of_origin') or '').strip() or None
     selling_price = calc_sp(cost_price, markup)
     compare_at_price = int(round(selling_price * 2))
     image_paths = [UPLOAD_DIR / fn for fn in filenames]
@@ -483,7 +567,8 @@ def handle_start_upload(data):
                 details = generate_product_details(image_paths, sku, sid)
                 result = create_shopify_product(image_paths, sku, selling_price, details, sid, manual_title,
                                                  category=category, manual_tags=manual_tags,
-                                                 weight_g=weight_g, hs_code=hs_code)
+                                                 weight_g=weight_g, hs_code=hs_code,
+                                                 country_of_origin=country_of_origin)
 
                 row = {'timestamp': timestamp, 'sku': sku, 'title': result.get('title'),
                        'handle': result.get('handle'), 'cost_price': cost_price,
