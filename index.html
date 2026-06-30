@@ -322,7 +322,7 @@
           <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();document.getElementById('file-input').click()">🖼️ Select Images</button>
           <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();document.getElementById('folder-input').click()">📂 Select Folder</button>
         </div>
-        <div class="upload-hint" style="margin-top:8px;">or drag &amp; drop · JPG, PNG, WEBP · same-SKU files auto-group into one product</div>
+        <div class="upload-hint" style="margin-top:8px;">or drag &amp; drop · JPG, PNG, WEBP · auto-cropped to 1080×1440 &amp; compressed · same-SKU files auto-group into one product</div>
       </div>
 
       <div class="toolbar">
@@ -455,6 +455,10 @@
           <label>Default Weight (grams)</label>
           <input type="number" id="s-weight" placeholder="100">
         </div>
+        <div class="field">
+          <label>Default Country of Origin</label>
+          <input type="text" id="s-origin" placeholder="IN">
+        </div>
         <div class="save-row">
           <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
           <span class="save-msg" id="save-msg">✅ Saved!</span>
@@ -577,7 +581,7 @@ function addToQueue(file) {
       item = {
         id: Date.now() + Math.random(),
         groupKey, sku, costPrice: cost, title: '',
-        category: '', tags: '', weight: '', hscode: '',
+        category: '', tags: '', weight: '', hscode: '', origin: '',
         images: [{ file, thumb, name: file.name }],
         status: 'pending', error: null
       };
@@ -636,6 +640,7 @@ function buildQueueItemHtml(item) {
             <option value="Earrings" ${item.category==='Earrings'?'selected':''}>Earrings</option>
             <option value="Hand accessories" ${item.category==='Hand accessories'?'selected':''}>Hand accessories</option>
             <option value="Rings" ${item.category==='Rings'?'selected':''}>Rings</option>
+            <option value="Hair accessories" ${item.category==='Hair accessories'?'selected':''}>Hair accessories</option>
           </select>
           <input class="item-input tags-input" data-field="tags" placeholder="Tags (comma separated)" value="${item.tags}"
             oninput="onFieldInput('${item.id}','tags',this.value)" ${locked?'disabled':''}>
@@ -643,6 +648,8 @@ function buildQueueItemHtml(item) {
             oninput="onFieldInput('${item.id}','weight',this.value)" ${locked?'disabled':''}>
           <input class="item-input narrow" data-field="hscode" placeholder="HS 7117.90" value="${item.hscode}"
             oninput="onFieldInput('${item.id}','hscode',this.value)" ${locked?'disabled':''}>
+          <input class="item-input narrow" data-field="origin" placeholder="Origin IN" value="${item.origin}"
+            oninput="onFieldInput('${item.id}','origin',this.value)" ${locked?'disabled':''}>
         </div>
         <div class="item-meta" id="meta-${item.id}">${metaHtml(item, sp)}</div>
         ${item.status==='failed' && item.error ? `<div class="item-error-msg">⚠ ${item.error}</div>` : ''}
@@ -864,7 +871,8 @@ async function uploadOne(item) {
       category: item.category,
       tags: item.tags,
       weight_g: item.weight || null,
-      hs_code: item.hscode
+      hs_code: item.hscode,
+      country_of_origin: item.origin
     });
     // status updates arrive via 'product_done'; wait for it before worker moves on
     await waitForCompletion(item);
@@ -977,6 +985,7 @@ async function saveSettings() {
     product_type:   document.getElementById('s-type').value.trim(),
     default_hs_code:  document.getElementById('s-hscode').value.trim(),
     default_weight_g: document.getElementById('s-weight').value.trim(),
+    default_country_of_origin: document.getElementById('s-origin').value.trim(),
   };
   await fetch('/save_settings', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
   const msg = document.getElementById('save-msg');
@@ -1039,6 +1048,7 @@ async function loadSettingsForm() {
     if (data.product_type) document.getElementById('s-type').value = data.product_type;
     document.getElementById('s-hscode').value = data.default_hs_code || '7117.90';
     document.getElementById('s-weight').value = data.default_weight_g || 100;
+    document.getElementById('s-origin').value = data.default_country_of_origin || 'IN';
     if (data.groq_api_key) document.getElementById('dot-groq').className = 'dot ok';
     if (data.shopify_store) document.getElementById('dot-shopify').className = 'dot ok';
   } catch(e) {}
