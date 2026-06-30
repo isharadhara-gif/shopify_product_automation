@@ -9,6 +9,10 @@ from PIL import Image, ImageOps
 DEFAULT_HS_CODE = '7117.90'
 DEFAULT_WEIGHT_G = 100
 DEFAULT_COUNTRY_OF_ORIGIN = 'IN'
+# Matches the consistent pattern seen across the existing Shopify catalog export:
+# Inventory Tracker=shopify, Inventory Policy=deny, Fulfillment Service=manual,
+# Requires Shipping=true, Taxable=true, Inventory Qty=10, Status=active.
+DEFAULT_INVENTORY_QTY = 10
 
 # Target product photo canvas — portrait 3:4, Shopify-friendly
 TARGET_W, TARGET_H = 1080, 1440
@@ -298,7 +302,7 @@ Respond ONLY with a valid JSON object (no markdown, no extra text):
 # ── Shopify: create product with MULTIPLE images ─────────────────────────────
 def create_shopify_product(image_paths, sku, selling_price, details, sid, manual_title=None,
                             category=None, manual_tags=None, weight_g=None, hs_code=None,
-                            country_of_origin=None):
+                            country_of_origin=None, inventory_qty=None):
     settings = load_settings()
     store = (settings.get('shopify_store') or os.environ.get('SHOPIFY_STORE', '')).replace('https://', '').replace('http://', '').rstrip('/')
     token = settings.get('shopify_token') or os.environ.get('SHOPIFY_TOKEN', '')
@@ -328,6 +332,11 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid, manual
     # it must be digits only. Strip everything else before sending.
     hs_code_clean = re.sub(r'[^0-9]', '', hs_code_raw) or re.sub(r'[^0-9]', '', DEFAULT_HS_CODE)
     country_of_origin = (country_of_origin or '').strip().upper() or settings.get('default_country_of_origin', DEFAULT_COUNTRY_OF_ORIGIN)
+    inventory_qty = inventory_qty if inventory_qty not in (None, '') else settings.get('default_inventory_qty', DEFAULT_INVENTORY_QTY)
+    try:
+        inventory_qty = int(inventory_qty)
+    except (TypeError, ValueError):
+        inventory_qty = DEFAULT_INVENTORY_QTY
     compare_at_price = int(round(selling_price * 2))
 
     # Image alt text / filename convention: "ishhaara-product-name-RANDOM10"
@@ -352,17 +361,23 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid, manual
             'compare_at_price': str(compare_at_price),
             'inventory_management': 'shopify',
             'inventory_policy': 'deny',
+            'fulfillment_service': 'manual',
+            'requires_shipping': True,
+            'taxable': True,
             'weight': weight_g,
             'weight_unit': 'g',
+            'inventory_quantity': inventory_qty,
         }],
         'status': 'active',
+        'published': True,
+        'gift_card': False,
     }}
 
     resp = requests.post(f'{base_url}/products.json', headers=headers, json=payload, timeout=30)
     resp.raise_for_status()
     product = resp.json()['product']
     product_id = product['id']
-    log(sid, f'✅ Product created — ID {product_id} | MRP ₹{compare_at_price} → SP ₹{selling_price}', 'success')
+    log(sid, f'✅ Product created — ID {product_id} | MRP ₹{compare_at_price} → SP ₹{selling_price} | Qty {inventory_qty}', 'success')
 
     # Set HS code + country of origin on the inventory item (separate Shopify resource)
     try:
@@ -482,6 +497,7 @@ def get_settings_route():
         'default_hs_code': settings.get('default_hs_code', DEFAULT_HS_CODE),
         'default_weight_g': settings.get('default_weight_g', DEFAULT_WEIGHT_G),
         'default_country_of_origin': settings.get('default_country_of_origin', DEFAULT_COUNTRY_OF_ORIGIN),
+        'default_inventory_qty': settings.get('default_inventory_qty', DEFAULT_INVENTORY_QTY),
     }
     return jsonify(out)
 
@@ -550,6 +566,7 @@ def handle_start_upload(data):
     weight_g = data.get('weight_g')
     hs_code = (data.get('hs_code') or '').strip() or None
     country_of_origin = (data.get('country_of_origin') or '').strip() or None
+    inventory_qty = data.get('inventory_qty')
     selling_price = calc_sp(cost_price, markup)
     compare_at_price = int(round(selling_price * 2))
     image_paths = [UPLOAD_DIR / fn for fn in filenames]
@@ -568,7 +585,8 @@ def handle_start_upload(data):
                 result = create_shopify_product(image_paths, sku, selling_price, details, sid, manual_title,
                                                  category=category, manual_tags=manual_tags,
                                                  weight_g=weight_g, hs_code=hs_code,
-                                                 country_of_origin=country_of_origin)
+                                                 country_of_origin=country_of_origin,
+                                                 inventory_qty=inventory_qty)
 
                 row = {'timestamp': timestamp, 'sku': sku, 'title': result.get('title'),
                        'handle': result.get('handle'), 'cost_price': cost_price,
