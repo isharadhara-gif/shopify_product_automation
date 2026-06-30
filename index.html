@@ -7,39 +7,40 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
 <style>
   :root {
-    --bg: #0c0c11;
-    --surface: #16161e;
-    --surface2: #1e1e29;
-    --surface3: #25252f;
-    --border: #2a2a38;
-    --accent: #7c6af7;
-    --accent2: #a78bfa;
-    --accent-glow: rgba(124,106,247,.35);
-    --green: #34d399;
-    --red: #f87171;
+    /* ── Modern theme: deep slate base + teal/violet duo-tone accent ── */
+    --bg: #0a0e14;
+    --surface: #121822;
+    --surface2: #19222e;
+    --surface3: #212c3a;
+    --border: #283546;
+    --accent: #2dd4bf;
+    --accent2: #818cf8;
+    --accent-glow: rgba(45,212,191,.30);
+    --green: #4ade80;
+    --red: #fb7185;
     --yellow: #fbbf24;
-    --text: #edf0f5;
-    --muted: #82829c;
-    --radius: 14px;
-    --radius-sm: 9px;
+    --text: #eef2f7;
+    --muted: #7c8aa0;
+    --radius: 16px;
+    --radius-sm: 10px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     background:
-      radial-gradient(900px 500px at 10% -10%, rgba(124,106,247,.10), transparent),
-      radial-gradient(700px 500px at 100% 0%, rgba(167,139,250,.07), transparent),
+      radial-gradient(1000px 560px at 8% -10%, rgba(45,212,191,.12), transparent),
+      radial-gradient(800px 560px at 100% 0%, rgba(129,140,248,.10), transparent),
       var(--bg);
     color: var(--text); font-family: 'Inter', system-ui, -apple-system, sans-serif; min-height: 100vh;
   }
 
   /* Layout */
   .app { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
-  .sidebar { background: rgba(22,22,30,.7); backdrop-filter: blur(10px); border-right: 1px solid var(--border); padding: 24px 18px; display: flex; flex-direction: column; gap: 22px; position: sticky; top: 0; height: 100vh; }
+  .sidebar { background: rgba(18,24,34,.75); backdrop-filter: blur(12px); border-right: 1px solid var(--border); padding: 24px 18px; display: flex; flex-direction: column; gap: 22px; position: sticky; top: 0; height: 100vh; }
   .main { padding: 30px 32px; overflow-y: auto; max-width: 1180px; width: 100%; }
 
   /* Logo */
   .logo { display: flex; align-items: center; gap: 11px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
-  .logo-icon { width: 38px; height: 38px; background: linear-gradient(135deg, var(--accent), #c084fc); border-radius: 11px; display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 4px 18px var(--accent-glow); }
+  .logo-icon { width: 38px; height: 38px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 4px 18px var(--accent-glow); }
   .logo-text { font-size: 15px; font-weight: 800; letter-spacing: -0.3px; }
   .logo-sub { font-size: 11px; color: var(--muted); }
 
@@ -60,7 +61,7 @@
   .nav { display: flex; flex-direction: column; gap: 4px; }
   .nav-btn { background: none; border: none; color: var(--muted); font-size: 13px; font-weight: 600; padding: 10px 12px; border-radius: var(--radius-sm); text-align: left; cursor: pointer; display: flex; align-items: center; gap: 9px; transition: all .15s; }
   .nav-btn:hover { background: var(--surface2); color: var(--text); }
-  .nav-btn.active { background: linear-gradient(135deg, rgba(124,106,247,.18), rgba(167,139,250,.08)); color: var(--accent2); box-shadow: inset 0 0 0 1px rgba(124,106,247,.3); }
+  .nav-btn.active { background: linear-gradient(135deg, rgba(45,212,191,.18), rgba(129,140,248,.10)); color: var(--accent); box-shadow: inset 0 0 0 1px rgba(45,212,191,.3); }
 
   /* Panels */
   .panel { display: none; }
@@ -74,18 +75,19 @@
 
   /* Stats dashboard row */
   .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 22px; }
-  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; transition: border-color .15s; }
+  .stat-card:hover { border-color: var(--accent); }
   .stat-card .stat-top { display:flex; justify-content:space-between; align-items:center; }
   .stat-icon { font-size: 16px; opacity:.8; }
   .stat-val { font-size: 24px; font-weight: 800; margin-top: 6px; letter-spacing: -0.5px; }
   .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 2px; }
   .stat-card.green .stat-val { color: var(--green); }
   .stat-card.red .stat-val { color: var(--red); }
-  .stat-card.accent .stat-val { color: var(--accent2); }
+  .stat-card.accent .stat-val { color: var(--accent); }
 
   /* Upload zone */
   .upload-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 38px 24px; text-align: center; cursor: pointer; transition: all .2s; background: var(--surface); position: relative; }
-  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: rgba(124,106,247,.06); }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: rgba(45,212,191,.06); }
   .upload-icon { font-size: 34px; margin-bottom: 10px; }
   .upload-text { font-size: 15px; font-weight: 700; }
   .upload-hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
@@ -95,18 +97,18 @@
   .toolbar .divider { width:1px; height:20px; background: var(--border); }
   .chip-radio { display:flex; align-items:center; gap:5px; font-size:12px; cursor:pointer; padding:5px 10px; border-radius:99px; background: var(--surface2); border:1px solid transparent; }
   .chip-radio input { accent-color: var(--accent); }
-  .chip-radio:has(input:checked) { border-color: var(--accent); color: var(--accent2); background: rgba(124,106,247,.12); }
+  .chip-radio:has(input:checked) { border-color: var(--accent); color: var(--accent); background: rgba(45,212,191,.12); }
 
   /* Buttons */
   .btn { padding: 9px 16px; border-radius: var(--radius-sm); border: none; font-size: 13px; font-weight: 700; cursor: pointer; transition: all .15s; display:inline-flex; align-items:center; gap:6px; }
-  .btn-primary { background: linear-gradient(135deg, var(--accent), #6d5de6); color: #fff; box-shadow: 0 4px 14px var(--accent-glow); }
+  .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #06111a; box-shadow: 0 4px 14px var(--accent-glow); }
   .btn-primary:hover { filter: brightness(1.08); transform: translateY(-1px); }
   .btn-primary:disabled { opacity: .4; cursor: not-allowed; transform:none; box-shadow:none; }
-  .btn-sm { padding: 6px 11px; font-size: 11.5px; border-radius: 7px; }
+  .btn-sm { padding: 6px 11px; font-size: 11.5px; border-radius: 8px; }
   .btn-ghost { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
   .btn-ghost:hover { color: var(--text); border-color: var(--accent); }
-  .btn-danger-ghost { background: rgba(248,113,113,.08); color: var(--red); border:1px solid rgba(248,113,113,.25); }
-  .btn-danger-ghost:hover { background: rgba(248,113,113,.16); }
+  .btn-danger-ghost { background: rgba(251,113,133,.08); color: var(--red); border:1px solid rgba(251,113,133,.25); }
+  .btn-danger-ghost:hover { background: rgba(251,113,133,.16); }
 
   /* Overall progress bar */
   .progress-wrap { margin-top: 14px; background: var(--surface2); border-radius: 99px; height: 8px; overflow: hidden; display:none; }
@@ -129,15 +131,15 @@
   .thumb { width: 54px; height: 54px; object-fit: cover; border-radius: 9px; background: var(--surface2); border:1px solid var(--border); }
   .thumb-remove { position:absolute; top:-5px; right:-5px; width:16px; height:16px; border-radius:50%; background: var(--red); color:#fff; font-size:10px; line-height:16px; text-align:center; cursor:pointer; border:none; }
   .thumb-add { width:54px; height:54px; border-radius:9px; border:1.5px dashed var(--border); display:flex; align-items:center; justify-content:center; font-size:18px; color:var(--muted); cursor:pointer; flex-shrink:0; background:var(--surface2); }
-  .thumb-add:hover { border-color: var(--accent); color: var(--accent2); }
+  .thumb-add:hover { border-color: var(--accent); color: var(--accent); }
   .img-count-badge { font-size: 10px; color: var(--muted); margin-top: 5px; text-align:center; }
 
   .item-info { min-width: 0; }
   .item-name { font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .item-inputs { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
-  .item-input { background: var(--surface2); border: 1px solid var(--border); border-radius: 7px; padding: 6px 9px; color: var(--text); font-size: 12px; width: 110px; }
+  .item-input { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 9px; color: var(--text); font-size: 12px; width: 110px; }
   .item-input:focus { outline: none; border-color: var(--accent); }
-  .item-input::placeholder { color: #55556a; }
+  .item-input::placeholder { color: #56627a; }
   .item-input.title-input { width: 220px; }
   .item-input.tags-input { width: 200px; }
   select.item-input { width: 150px; cursor: pointer; }
@@ -149,9 +151,9 @@
   .item-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
   .badge { font-size: 10px; font-weight: 800; padding: 4px 9px; border-radius: 99px; white-space:nowrap; }
   .badge-pending { background: rgba(251,191,36,.15); color: var(--yellow); }
-  .badge-running { background: rgba(124,106,247,.2); color: var(--accent2); }
-  .badge-success { background: rgba(52,211,153,.15); color: var(--green); }
-  .badge-failed { background: rgba(248,113,113,.15); color: var(--red); }
+  .badge-running { background: rgba(45,212,191,.18); color: var(--accent); }
+  .badge-success { background: rgba(74,222,128,.15); color: var(--green); }
+  .badge-failed { background: rgba(251,113,133,.15); color: var(--red); }
   .remove-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 17px; line-height: 1; padding: 2px 4px; }
   .remove-btn:hover { color: var(--red); }
 
@@ -169,7 +171,7 @@
   .result-card.failed { border-left: 3px solid var(--red); }
   .result-title { font-size: 13px; font-weight: 700; }
   .result-meta { font-size: 11px; color: var(--muted); margin-top: 3px; }
-  .result-link { font-size: 11.5px; color: var(--accent2); text-decoration: none; font-weight:600; }
+  .result-link { font-size: 11.5px; color: var(--accent); text-decoration: none; font-weight:600; }
   .result-link:hover { text-decoration: underline; }
 
   /* Settings form */
@@ -199,9 +201,12 @@
   .row-del { background:none; border:none; color: var(--muted); cursor:pointer; font-size:14px; }
   .row-del:hover { color: var(--red); }
 
+  /* Pill for "all channels" hint */
+  .channel-pill { display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:700; padding:3px 9px; border-radius:99px; background: rgba(129,140,248,.15); color: var(--accent2); }
+
   /* Spinner */
   @keyframes spin { to { transform: rotate(360deg); } }
-  .spinner { width: 13px; height: 13px; border: 2px solid rgba(124,106,247,.3); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; display: inline-block; vertical-align: middle; }
+  .spinner { width: 13px; height: 13px; border: 2px solid rgba(45,212,191,.3); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; display: inline-block; vertical-align: middle; }
 
   /* Toasts */
   .toast-stack { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 999; }
@@ -272,7 +277,9 @@
       SKU_CostPrice.jpg<br>
       e.g. SHIRT001_250.jpg<br><br>
       <strong style="color:var(--text)">Multi-image tip</strong><br>
-      Files like SHIRT001_250_1.jpg, SHIRT001_250_2.jpg auto-group into one product.
+      Files like SHIRT001_250_1.jpg, SHIRT001_250_2.jpg auto-group into one product.<br><br>
+      <strong style="color:var(--text)">Sales channels</strong><br>
+      Every product is auto-published to <em>all</em> active sales channels (Online Store, POS, Shop, Google, Facebook/Instagram, etc.) — no manual step needed.
     </div>
   </aside>
 
@@ -286,6 +293,7 @@
           <div class="page-title">Upload Products</div>
           <div class="page-sub">Drop images — group multiple shots per product — set price — hit Upload All</div>
         </div>
+        <span class="channel-pill">🌐 Publishes to all sales channels</span>
       </div>
 
       <!-- Stats -->
@@ -335,6 +343,11 @@
         <span class="toolbar-label">Bulk Cost</span>
         <input id="bulk-cp" type="number" class="item-input" placeholder="₹ cost price" style="width:110px;">
         <button class="btn btn-ghost btn-sm" onclick="bulkSetPrice()">Apply to All Pending</button>
+        <div class="divider"></div>
+        <span class="toolbar-label">Bulk HS / Origin</span>
+        <input id="bulk-hs" type="text" class="item-input narrow" placeholder="HS code">
+        <input id="bulk-origin" type="text" class="item-input narrow" placeholder="Origin">
+        <button class="btn btn-ghost btn-sm" onclick="bulkSetHsOrigin()">Apply</button>
         <div class="divider"></div>
         <span class="toolbar-label">Upload Speed</span>
         <select id="concurrency" class="item-input" style="width:140px;" title="How many products to send to Shopify at once">
@@ -400,11 +413,11 @@
           <thead>
             <tr>
               <th>Time</th><th>SKU</th><th>Title</th><th>Images</th>
-              <th>Cost</th><th>Price</th><th>Status</th><th>Link</th><th></th>
+              <th>Cost</th><th>Price</th><th>HS Code</th><th>Origin</th><th>Status</th><th>Link</th><th></th>
             </tr>
           </thead>
           <tbody id="history-tbody">
-            <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:32px">Loading...</td></tr>
+            <tr><td colspan="11" style="text-align:center;color:var(--muted);padding:32px">Loading...</td></tr>
           </tbody>
         </table>
       </div>
@@ -430,9 +443,10 @@
         <div class="field full">
           <label>Shopify Admin Token</label>
           <input type="password" id="s-token" placeholder="shpat_xxxxxxxxxxxx">
+          <span style="font-size:11px;color:var(--muted)">Needs scopes: write_products, read_products, write_inventory, read_inventory, write_publications</span>
         </div>
         <div class="field full">
-          <label>Groq API Key <a href="https://console.groq.com" target="_blank" style="color:var(--accent2);font-size:11px;font-weight:400;text-decoration:none">Get free key →</a></label>
+          <label>Groq API Key <a href="https://console.groq.com" target="_blank" style="color:var(--accent);font-size:11px;font-weight:400;text-decoration:none">Get free key →</a></label>
           <div class="field-row">
             <input type="password" id="s-groq" placeholder="gsk_xxxxxxxxxxxx">
             <button class="btn btn-ghost btn-sm" onclick="testGroq()">Test</button>
@@ -472,11 +486,12 @@
       <div style="margin-top:32px;padding:16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);max-width:560px">
         <div style="font-size:13px;font-weight:700;margin-bottom:10px">💡 Quick Start</div>
         <div style="font-size:12px;color:var(--muted);line-height:2">
-          1. Get free Groq key → <a href="https://console.groq.com" target="_blank" style="color:var(--accent2)">console.groq.com</a><br>
+          1. Get free Groq key → <a href="https://console.groq.com" target="_blank" style="color:var(--accent)">console.groq.com</a><br>
           2. Get Shopify token → Admin → Settings → Apps → Develop apps<br>
-          3. Scopes needed: <code style="color:var(--text)">write_products</code>, <code style="color:var(--text)">write_product_listings</code><br>
-          4. Drop images (group multiple shots per SKU), set prices, click Upload All<br>
-          5. Use "Test" buttons above to confirm credentials before a big batch
+          3. Scopes needed: <code style="color:var(--text)">write_products</code>, <code style="color:var(--text)">write_inventory</code>, <code style="color:var(--text)">write_publications</code><br>
+          4. Drop images (group multiple shots per SKU), set prices + HS code/origin, click Upload All<br>
+          5. Products are auto-published to every connected sales channel — Online Store, POS, Shop app, Google, Facebook/Instagram, etc.<br>
+          6. Use "Test" buttons above to confirm credentials before a big batch
         </div>
       </div>
     </div>
@@ -555,13 +570,10 @@ document.getElementById('folder-input').addEventListener('change', function() {
 // Returns { sku, cost, groupKey } so multiple shots of the same product merge.
 function parseFilename(filename) {
   const stem = filename.replace(/\.[^.]+$/, '');
-  // SKU_COST_index  e.g. TSHIRT001_250_2
   let m = stem.match(/^(.+?)_(\d+(?:\.\d+)?)_(\d+)$/);
   if (m) return { sku: m[1].toUpperCase(), cost: m[2], groupKey: `${m[1].toUpperCase()}_${m[2]}` };
-  // SKU_COST  e.g. TSHIRT001_250
   m = stem.match(/^(.+?)_(\d+(?:\.\d+)?)$/);
   if (m) return { sku: m[1].toUpperCase(), cost: m[2], groupKey: `${m[1].toUpperCase()}_${m[2]}` };
-  // SKU-index or plain SKU, no cost detected
   m = stem.match(/^(.+?)[-_](\d+)$/);
   const sku = (m ? m[1] : stem).toUpperCase().replace(/[^A-Z0-9-]/g, '');
   return { sku, cost: '', groupKey: sku };
@@ -577,7 +589,6 @@ function addToQueue(file) {
   const reader = new FileReader();
   reader.onload = e => {
     const thumb = e.target.result;
-    // merge into an existing PENDING product with the same group key
     let item = queue.find(q => q.groupKey === groupKey && q.status === 'pending');
     if (item) {
       item.images.push({ file, thumb, name: file.name });
@@ -672,16 +683,12 @@ function metaHtml(item, sp) {
   return `<span>CP: ₹${item.costPrice}</span><span style="color:var(--muted);text-decoration:line-through">MRP: ₹${mrp}</span><span class="item-price">SP: ₹${sp}</span>`;
 }
 
-// ── Targeted, non-destructive updates (THIS fixes the disappearing-input bug) ─
-// We never call renderQueue() on every keystroke — that rebuilt the DOM and
-// stole focus after a single character. Instead we mutate state + update only
-// the small "meta" line (price preview) directly, leaving inputs untouched.
+// ── Targeted, non-destructive updates ─────────────────────────────────────────
 function onFieldInput(id, field, val) {
   const item = queue.find(q => q.id == id);
   if (!item) return;
   item[field] = val;
   if (field === 'sku') {
-    // keep item name label fresh without nuking inputs — patch just the name line
     const nameEl = document.querySelector(`#qi-${id} .item-name`);
     if (nameEl) {
       const extra = item.images.length>1 ? `· ${item.images[0].name} +${item.images.length-1}` : '· '+item.images[0].name;
@@ -696,8 +703,6 @@ function onFieldInput(id, field, val) {
   updateStats();
 }
 
-// Re-render price previews (e.g. when markup changes) without losing focus —
-// safe because it only touches the meta spans, never the inputs themselves.
 document.querySelectorAll('input[name="markup"]').forEach(r => {
   r.addEventListener('change', () => {
     queue.forEach(item => {
@@ -787,6 +792,19 @@ function bulkSetPrice() {
   renderQueue();
   updateStats();
   toast(`Applied ₹${cp} cost to all pending items`, 'success');
+}
+function bulkSetHsOrigin() {
+  const hs = document.getElementById('bulk-hs').value.trim();
+  const origin = document.getElementById('bulk-origin').value.trim();
+  if (!hs && !origin) { toast('Enter an HS code or origin to apply', 'error'); return; }
+  queue.forEach(q => {
+    if (q.status === 'pending') {
+      if (hs) q.hscode = hs;
+      if (origin) q.origin = origin;
+    }
+  });
+  renderQueue();
+  toast('Applied HS code / origin to all pending items', 'success');
 }
 
 // ── Stats dashboard ───────────────────────────────────────────────────────────
@@ -878,7 +896,6 @@ async function uploadOne(item) {
       hs_code: item.hscode,
       country_of_origin: item.origin
     });
-    // status updates arrive via 'product_done'; wait for it before worker moves on
     await waitForCompletion(item);
   } catch (e) {
     item.status = 'failed';
@@ -917,7 +934,7 @@ function addResult(data) {
   card.innerHTML = `
     <div>
       <div class="result-title">${data.title || data.sku}</div>
-      <div class="result-meta">SKU: ${data.sku} · Price: ₹${data.selling_price}</div>
+      <div class="result-meta">SKU: ${data.sku} · Price: ₹${data.selling_price} · <span class="channel-pill" style="padding:2px 7px">🌐 All channels</span></div>
     </div>
     <a href="${data.shopify_url}" target="_blank" class="result-link">View in Shopify →</a>`;
   list.prepend(card);
@@ -926,7 +943,7 @@ function addResult(data) {
 // ── History ───────────────────────────────────────────────────────────────────
 async function loadHistory() {
   const tbody = document.getElementById('history-tbody');
-  tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:32px">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:32px">Loading…</td></tr>';
   const res = await fetch('/history');
   history = await res.json();
   renderHistory();
@@ -936,7 +953,7 @@ function setHistoryFilter(f) {
   historyFilter = f;
   ['all','success','failed'].forEach(k => {
     document.getElementById('hf-'+k).style.background = k===f ? 'var(--accent)' : '';
-    document.getElementById('hf-'+k).style.color = k===f ? '#fff' : '';
+    document.getElementById('hf-'+k).style.color = k===f ? '#06111a' : '';
   });
   renderHistory();
 }
@@ -949,7 +966,7 @@ function renderHistory() {
   if (q) rows = rows.filter(r => (r.sku||'').toLowerCase().includes(q) || (r.title||'').toLowerCase().includes(q));
 
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:32px">No matching uploads</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:32px">No matching uploads</td></tr>';
     return;
   }
   tbody.innerHTML = rows.map((r) => {
@@ -962,6 +979,8 @@ function renderHistory() {
       <td style="color:var(--muted)">${r.image_count || 1}</td>
       <td>₹${r.cost_price}</td>
       <td style="color:var(--green)">₹${r.selling_price}</td>
+      <td style="color:var(--muted)">${r.hs_code || '—'}</td>
+      <td style="color:var(--muted)">${r.country_of_origin || '—'}</td>
       <td class="${r.status==='success'?'status-ok':'status-fail'}">${r.status}</td>
       <td>${r.shopify_url ? `<a href="${r.shopify_url}" target="_blank" class="result-link">View →</a>` : `<span style="color:var(--red);font-size:11px">${(r.error||'—').slice(0,40)}</span>`}</td>
       <td><button class="row-del" onclick="deleteHistoryRow(${origIdx})" title="Delete row">🗑</button></td>
