@@ -1,8 +1,105 @@
-import os, json, time, base64, re, io, csv, threading
+import os, json, time, base64, re, io, csv, random, threading
 from datetime import datetime
 from pathlib import Path
 from flask import Flask, request, jsonify, Response
 from flask_socketio import SocketIO
+
+# ── Default catalog values ────────────────────────────────────────────────────
+DEFAULT_HS_CODE = '7117.90'
+DEFAULT_WEIGHT_G = 100
+
+# ── Category description templates (used instead of AI description when a
+#    category is picked for a product) ────────────────────────────────────────
+CATEGORY_DESCRIPTIONS = {
+    'Necklace': """Hello lovely souls! Don\u2019t you agree that your look is never complete without a breathtaking necklace? A necklace set isn\u2019t just an accessory. It is the star of the show, ensuring you make a lasting impression every time you step out of your house.
+Ishhaara's necklaces for women whether it be a gold choker necklace set, pearl necklace, silver necklace set, or long necklace offer a phenomenal look. Pair these necklace sets and instantly make a wonderful appeal wherever you go. So, grab this chance and quickly check out the standout features of Ishhaara's necklace.
+Product Specification
+Material: Skin Friendly | Hypoallergenic
+Craftsmanship: Ethically Handmade
+Waterproof: Retains Colour and Brilliance
+Key Highlights
+1. Premium Materials: From shimmering gold to lustrous pearls, Ishhaara's every piece of necklace sets such as pendant necklaces or statement necklaces are crafted using premium materials only, ensuring durability and long-lasting beauty.
+2. Perfect for Layering: Whether it be an evil eye necklace, stone necklace, Kundan necklace, or ruby necklace, Ishhaara's every necklace design is ideal for mixing and matching. Ensuring you create a personalised look with multiple layers.
+3. Statement Appeal: From semi-precious and precious bridal necklace sets to western necklace sets, Ishhaara's each piece is designed to be the focal point of your ensemble, ensuring all eyes are on you. Letting you take the centre of the stage.
+4. Versatile Styling: Ishhaara's each piece of artificial necklaces for girls like Polki, Meenakari or temple are ideal for making a transition on a range of outfits from casual outings to grand celebrations. These neckpieces can compliment any occasion and mood effortlessly.
+Styling Inspiration
+1. Pair these necklaces with a traditional silk saree or lehenga. It will give a classic and regal vibe.
+2. Opt for stacking these necklaces with statement bangles, a pair of bold earrings or statement rings. It will add an extra sparkle and twist to your look.
+3. Style these necklaces with a chic pantsuit or tailored blazer. It will give a power-packed, professional look.
+Care Label
+1. Store the necklaces in an air-tight jewellery box or sealed pouch.
+2. Keep it away from body sprays, body lotions, or perfumes.
+3. Avoid using detergents, soaps, or toothpaste to clean your necklace.
+4. Clean your necklace after every use with a soft brush.""",
+
+    'Earrings': """Hello lovely souls! Don\u2019t you agree that your look is never complete without a breathtaking necklace? A necklace set isn\u2019t just an accessory. It is the star of the show, ensuring you make a lasting impression every time you step out of your house.
+Ishhaara's necklaces for women whether it be a gold choker necklace set, pearl necklace, silver necklace set, or long necklace offer a phenomenal look. Pair these necklace sets and instantly make a wonderful appeal wherever you go. So, grab this chance and quickly check out the standout features of Ishhaara's necklace.
+Product Specification
+Material: Skin Friendly | Hypoallergenic
+Craftsmanship: Ethically Handmade
+Waterproof: Retains Colour and Brilliance
+Key Highlights
+1. Premium Materials: From shimmering gold to lustrous pearls, Ishhaara's every piece of necklace sets such as pendant necklaces or statement necklaces are crafted using premium materials only, ensuring durability and long-lasting beauty.
+2. Perfect for Layering: Whether it be an evil eye necklace, stone necklace, Kundan necklace, or ruby necklace, Ishhaara's every necklace design is ideal for mixing and matching. Ensuring you create a personalised look with multiple layers.
+3. Statement Appeal: From semi-precious and precious bridal necklace sets to western necklace sets, Ishhaara's each piece is designed to be the focal point of your ensemble, ensuring all eyes are on you. Letting you take the centre of the stage.
+4. Versatile Styling: Ishhaara's each piece of artificial necklaces for girls like Polki, Meenakari or temple are ideal for making a transition on a range of outfits from casual outings to grand celebrations. These neckpieces can compliment any occasion and mood effortlessly.
+Styling Inspiration
+1. Pair these necklaces with a traditional silk saree or lehenga. It will give a classic and regal vibe.
+2. Opt for stacking these necklaces with statement bangles, a pair of bold earrings or statement rings. It will add an extra sparkle and twist to your look.
+3. Style these necklaces with a chic pantsuit or tailored blazer. It will give a power-packed, professional look.
+Care Label
+1. Store the necklaces in an air-tight jewellery box or sealed pouch.
+2. Keep it away from body sprays, body lotions, or perfumes.
+3. Avoid using detergents, soaps, or toothpaste to clean your necklace.
+4. Clean your necklace after every use with a soft brush.""",
+
+    'Hand accessories': """Hey gorgeous! Are you ready to add a whimsical statement to your \u2018Solah Shringar\u2019? Powerful and graceful a charm it can add, isn't it? From statement handcuffs, delicate bracelets, and traditional bangles to stunning Chooda and Kaleera, Ishhaara\u2019s studio has everything you need to add that \u2018wow\u2019 factor.
+So, if you\u2019re someone who loves making a grand entrance wherever you go, you need to explore these premium pieces. Let\u2019s dive in and discover what makes these hand accessories a must-have!
+Product Specification
+Material: Skin Friendly | Hypoallergenic
+Craftsmanship: Ethically Handmade
+Waterproof: Retains Colour and Brilliance
+Key Highlights
+1. Subtle Yet Impactful Piece: For those who love subtle elegance, Ishhaara's hand accessories from oxidised handcuffs to sleek bangles can instantly add the right amount of sparkle. Letting you bring a refined and eye-catching appeal.
+2. Boosts Confidence: Ishhaara\u2019s premium handcrafted hand accessories whether it be a bridal Chooda or gold bangles will not only complete your whole look. But, also boosts confidence and lets you bring a poised appeal wherever you go.
+3. Cultural Connection: Ishhaara\u2019s hand accessories from bridal Chooda to bridal Kaleera will not only complete your traditional look but also carry cultural significance, letting you feel connected to your roots.
+4. Personalised Touch: Ishhaara\u2019s customisable option on hand accessories like oxidised handcuffs, layered silver bracelets, etc. will beautifully reflect your unique style and add unexpected flair to your accessory collection.
+5. Bollywood Glamour: Ishhaara\u2019s every piece of hand accessories from bangles, and bracelets to gold handcuffs reflects Bollywood\u2019s iconic style. Perfect for adding a touch of luxury and sophistication to even the simplest outfits.
+6. Perfect for Every Occasion: Ishhaara\u2019s every piece of artificial bangles, artificial handcuffs, artificial bracelets, etc are suitable for wide festivities from weddings to casual get-togethers. Making it a favourite choice in your jewellery box.
+Styling Inspiration
+1. Opt for mixing different textures and widths of different bangles and bracelets. This will create a perfect layered look.
+2. Look for complementing your handcuffs with your outfit style. For instance, if you are wearing a solid-coloured dress, opt for silver or gold bangles.
+3. Consider wearing a striking accessory on your favourite hand. For instance, if you work mostly with your right hand, pair a stunning oxidised bracelet with your dominant hand for a bolder look.
+Care Label
+1. Store the hand accessories in an air-tight jewellery box or sealed pouch.
+2. Keep it away from body sprays, body lotions, or perfumes.
+3. Avoid using detergents, soaps, or toothpaste to clean your hand accessories.
+4. Clean your hand accessories after every use with a soft brush.""",
+
+    'Rings': """Howdy, partners! Are you passionate about elevating your style with stunning rings? Isn\u2019t it incredible how these glamorous accessories can add elegance, flair, and trendiness to any outfit? Whether you love adding gold rings, traditional rings, statement rings, or oxidised rings, Ishhaara's treasure trove uncovers a wide variety of choices.
+These rings are perfect for transforming any look into something extraordinary and are essential additions to your jewellery box. Ready to find the perfect piece? Dive in and explore the details now!
+Product Specification
+Material: Skin Friendly | Hypoallergenic
+Craftsmanship: Ethically Handmade
+Waterproof: Retains Colour and Brilliance
+Key Highlights
+1. Timeless Finish: Ishhaara's artificial rings come in various finishes from polished, matte, brushed or hammered texture. Allowing you to bring a glittery shine to your overall look.
+2. Meaningful Piece: Ishhaara's every piece of ring is crafted from precious or semi-precious stones that hold symbolic meanings like love, commitment, friendship, or personal achievements. Making a perfect gift or passing it down to heirlooms.
+3. Full Versatility: Ishhaara\u2019s every piece of ring whether it be silver rings, gold rings, Kundan rings, or Polki rings gives you full flexibility of wearing it alone or stacking with other rings. Perfect for adding a layered chic style that defines your personality.
+4. Free Size: Ishhaara\u2019s every type of artificial ring for women whether it be engagement rings or stainless steel rings is curated to fit every finger size. Ensuring you create a perfect look with a fully comfortable accessory.
+5. Gemstone Setting: Ishhaara\u2019s artificial rings for girls are made in various styles and settings such as prongs, bezels, or channel settings. This ensures you make a vibrantly visual appeal wherever you go.""",
+}
+
+def template_description_html(category):
+    """Convert a plain-text category template into simple HTML for body_html."""
+    text = CATEGORY_DESCRIPTIONS.get(category)
+    if not text:
+        return None
+    paragraphs = [p.strip() for p in text.split('\n') if p.strip()]
+    return ''.join(f'<p>{p}</p>' for p in paragraphs)
+
+def random_digits(n=10):
+    return ''.join(str(random.randint(0, 9)) for _ in range(n))
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret')
@@ -128,7 +225,8 @@ Respond ONLY with a valid JSON object (no markdown, no extra text):
                 'seo_title': sku, 'seo_description': '', 'alt_text': sku, 'tags': ''}
 
 # ── Shopify: create product with MULTIPLE images ─────────────────────────────
-def create_shopify_product(image_paths, sku, selling_price, details, sid, manual_title=None):
+def create_shopify_product(image_paths, sku, selling_price, details, sid, manual_title=None,
+                            category=None, manual_tags=None, weight_g=None, hs_code=None):
     settings = load_settings()
     store = (settings.get('shopify_store') or os.environ.get('SHOPIFY_STORE', '')).replace('https://', '').replace('http://', '').rstrip('/')
     token = settings.get('shopify_token') or os.environ.get('SHOPIFY_TOKEN', '')
@@ -142,12 +240,24 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid, manual
     headers = {'X-Shopify-Access-Token': token, 'Content-Type': 'application/json'}
 
     title = manual_title or details.get('title', sku)
-    description = details.get('description', '')
+
+    # Category template overrides the AI-generated description when chosen
+    template_desc = template_description_html(category)
+    description = template_desc if template_desc else details.get('description', '')
+
     handle = details.get('handle', slugify(title))
     seo_title = details.get('seo_title', f'Buy {title} Online - {vendor}')
     seo_desc = details.get('seo_description', '')
-    alt_text = details.get('alt_text', f'{vendor} {title}')
-    tags = details.get('tags', '')
+    tags = (manual_tags or '').strip() or details.get('tags', '')
+
+    weight_g = weight_g if weight_g not in (None, '', 0) else DEFAULT_WEIGHT_G
+    hs_code = (hs_code or '').strip() or DEFAULT_HS_CODE
+    compare_at_price = int(round(selling_price * 2))
+
+    # Image alt text / filename convention: "ishhaara-product-name-RANDOM10"
+    title_slug = slugify(title)
+    base_image_name = f'ishhaara-{title_slug}-{random_digits(10)}'
+    alt_text = details.get('alt_text') or f'Ishhaara {title}'
 
     log(sid, f'📦 Creating Shopify product: {title}…')
 
@@ -160,8 +270,15 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid, manual
         'tags': tags,
         'metafields_global_title_tag': seo_title,
         'metafields_global_description_tag': seo_desc,
-        'variants': [{'sku': sku, 'price': str(selling_price),
-                      'inventory_management': 'shopify', 'inventory_policy': 'deny'}],
+        'variants': [{
+            'sku': sku,
+            'price': str(selling_price),
+            'compare_at_price': str(compare_at_price),
+            'inventory_management': 'shopify',
+            'inventory_policy': 'deny',
+            'weight': weight_g,
+            'weight_unit': 'g',
+        }],
         'status': 'active',
     }}
 
@@ -169,27 +286,46 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid, manual
     resp.raise_for_status()
     product = resp.json()['product']
     product_id = product['id']
-    log(sid, f'✅ Product created — ID {product_id}', 'success')
+    log(sid, f'✅ Product created — ID {product_id} | MRP ₹{compare_at_price} → SP ₹{selling_price}', 'success')
+
+    # Set HS code on the inventory item (separate Shopify resource)
+    try:
+        inventory_item_id = product['variants'][0]['inventory_item_id']
+        hs_resp = requests.put(
+            f'{base_url}/inventory_items/{inventory_item_id}.json',
+            headers=headers,
+            json={'inventory_item': {'id': inventory_item_id, 'harmonized_system_code': hs_code}},
+            timeout=30
+        )
+        if hs_resp.ok:
+            log(sid, f'✅ HS code set: {hs_code}', 'success')
+        else:
+            log(sid, f'⚠️ HS code update failed: {hs_resp.text}', 'error')
+    except Exception as e:
+        log(sid, f'⚠️ Could not set HS code: {e}', 'error')
 
     # Upload ALL images, in order, first one becomes the featured image
     total = len(image_paths)
     for i, img_path in enumerate(image_paths, start=1):
         log(sid, f'🖼️ Uploading image {i}/{total}…')
         img_b64 = base64.b64encode(img_path.read_bytes()).decode()
+        ext = img_path.suffix.lower() or '.jpg'
+        img_filename = f'{base_image_name}{("-" + str(i)) if total > 1 else ""}{ext}'
         img_alt = alt_text if i == 1 else f'{alt_text} - view {i}'
         img_resp = requests.post(
             f'{base_url}/products/{product_id}/images.json',
             headers=headers,
-            json={'image': {'attachment': img_b64, 'filename': img_path.name, 'alt': img_alt}},
+            json={'image': {'attachment': img_b64, 'filename': img_filename, 'alt': img_alt}},
             timeout=60
         )
         if img_resp.ok:
-            log(sid, f'✅ Image {i}/{total} uploaded', 'success')
+            log(sid, f'✅ Image {i}/{total} uploaded ({img_filename})', 'success')
         else:
             log(sid, f'⚠️ Image {i}/{total} failed: {img_resp.text}', 'error')
 
     shopify_url = f'https://{store}/admin/products/{product_id}'
-    return {'product_id': product_id, 'shopify_url': shopify_url, 'handle': handle, 'title': title}
+    return {'product_id': product_id, 'shopify_url': shopify_url, 'handle': handle,
+            'title': title, 'compare_at_price': compare_at_price}
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.route('/')
@@ -244,10 +380,10 @@ def history_csv():
     rows = load_history()
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow(['Timestamp', 'SKU', 'Title', 'Cost Price', 'Selling Price', 'Status', 'Shopify URL', 'Error'])
+    writer.writerow(['Timestamp', 'SKU', 'Title', 'Cost Price', 'Selling Price', 'Compare At (MRP)', 'Status', 'Shopify URL', 'Error'])
     for r in rows:
         writer.writerow([r.get('timestamp'), r.get('sku'), r.get('title'), r.get('cost_price'),
-                          r.get('selling_price'), r.get('status'), r.get('shopify_url'), r.get('error')])
+                          r.get('selling_price'), r.get('compare_at_price'), r.get('status'), r.get('shopify_url'), r.get('error')])
     return Response(buf.getvalue(), mimetype='text/csv',
                      headers={'Content-Disposition': 'attachment; filename=upload_history.csv'})
 
@@ -261,6 +397,8 @@ def get_settings_route():
         'product_vendor': settings.get('product_vendor') or os.environ.get('PRODUCT_VENDOR', ''),
         'product_type': settings.get('product_type') or os.environ.get('PRODUCT_TYPE', ''),
         'default_markup': settings.get('default_markup', 4),
+        'default_hs_code': settings.get('default_hs_code', DEFAULT_HS_CODE),
+        'default_weight_g': settings.get('default_weight_g', DEFAULT_WEIGHT_G),
     }
     return jsonify(out)
 
@@ -324,11 +462,16 @@ def handle_start_upload(data):
     cost_price = float(data.get('cost_price', 0) or 0)
     markup = float(data.get('markup', 4) or 4)
     manual_title = (data.get('title') or '').strip() or None
+    category = (data.get('category') or '').strip() or None
+    manual_tags = (data.get('tags') or '').strip() or None
+    weight_g = data.get('weight_g')
+    hs_code = (data.get('hs_code') or '').strip() or None
     selling_price = calc_sp(cost_price, markup)
+    compare_at_price = int(round(selling_price * 2))
     image_paths = [UPLOAD_DIR / fn for fn in filenames]
     timestamp = datetime.now().isoformat()
 
-    log(sid, f'▶ {sku} | {len(filenames)} image(s) | CP: ₹{cost_price} → SP: ₹{selling_price}')
+    log(sid, f'▶ {sku} | {len(filenames)} image(s) | CP: ₹{cost_price} → SP: ₹{selling_price} (MRP ₹{compare_at_price})')
 
     def run():
         with upload_semaphore:
@@ -338,24 +481,28 @@ def handle_start_upload(data):
                     raise FileNotFoundError(f'Image(s) not found: {[p.name for p in missing]}')
 
                 details = generate_product_details(image_paths, sku, sid)
-                result = create_shopify_product(image_paths, sku, selling_price, details, sid, manual_title)
+                result = create_shopify_product(image_paths, sku, selling_price, details, sid, manual_title,
+                                                 category=category, manual_tags=manual_tags,
+                                                 weight_g=weight_g, hs_code=hs_code)
 
                 row = {'timestamp': timestamp, 'sku': sku, 'title': result.get('title'),
                        'handle': result.get('handle'), 'cost_price': cost_price,
-                       'selling_price': selling_price, 'status': 'success',
-                       'shopify_url': result['shopify_url'], 'error': None,
+                       'selling_price': selling_price, 'compare_at_price': result.get('compare_at_price'),
+                       'status': 'success', 'shopify_url': result['shopify_url'], 'error': None,
                        'image_count': len(filenames)}
                 append_history(row)
                 log(sid, f'🎉 Done! {result["shopify_url"]}', 'success')
                 socketio.emit('product_done', {
                     'sku': sku, 'title': result.get('title'),
-                    'selling_price': selling_price, 'shopify_url': result['shopify_url'],
+                    'selling_price': selling_price, 'compare_at_price': result.get('compare_at_price'),
+                    'shopify_url': result['shopify_url'],
                     'status': 'success'
                 }, to=sid)
             except Exception as e:
                 log(sid, f'❌ Failed for {sku}: {e}', 'error')
                 append_history({'timestamp': timestamp, 'sku': sku, 'title': manual_title,
                                 'cost_price': cost_price, 'selling_price': selling_price,
+                                'compare_at_price': compare_at_price,
                                 'status': 'failed', 'shopify_url': None, 'error': str(e),
                                 'image_count': len(filenames)})
                 socketio.emit('product_done', {'sku': sku, 'status': 'failed', 'error': str(e)}, to=sid)
