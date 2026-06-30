@@ -280,7 +280,7 @@
       SKU_CostPrice.jpg<br>
       e.g. SHIRT001_250.jpg<br><br>
       <strong style="color:var(--text)">Multi-image tip</strong><br>
-      Files like SHIRT001_250_1.jpg, SHIRT001_250_2.jpg auto-group into one product.<br><br>
+      Use "Select Folder" — every image inside one folder groups into a single product. Name the folder SKU_CostPrice (e.g. SHIRT001_250) to pre-fill SKU + cost.<br><br>
       <strong style="color:var(--text)">Sales channels</strong><br>
       Every product is auto-published to <em>all</em> active sales channels (Online Store, POS, Shop, Google, Facebook/Instagram, etc.) — no manual step needed.
     </div>
@@ -333,7 +333,7 @@
           <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();document.getElementById('file-input').click()">🖼️ Select Images</button>
           <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();document.getElementById('folder-input').click()">📂 Select Folder</button>
         </div>
-        <div class="upload-hint" style="margin-top:8px;">or drag &amp; drop · JPG, PNG, WEBP · auto-cropped to 1080×1440 &amp; compressed · same-SKU files auto-group into one product</div>
+        <div class="upload-hint" style="margin-top:8px;">or drag &amp; drop a folder · JPG, PNG, WEBP · auto-cropped to 1080×1440 &amp; compressed · all images in the same folder group into one product</div>
       </div>
 
       <div class="toolbar">
@@ -342,6 +342,7 @@
         <label class="chip-radio"><input type="radio" name="markup" value="2.5"> 2.5×</label>
         <label class="chip-radio"><input type="radio" name="markup" value="3"> 3×</label>
         <label class="chip-radio"><input type="radio" name="markup" value="4" checked> 4×</label>
+        <label class="chip-radio"><input type="radio" name="markup" value="5"> 5×</label>
         <div class="divider"></div>
         <span class="toolbar-label">Bulk Cost</span>
         <input id="bulk-cp" type="number" class="item-input" placeholder="₹ cost price" style="width:110px;">
@@ -470,7 +471,7 @@
         </div>
         <div class="field">
           <label>Default Weight (grams)</label>
-          <input type="number" id="s-weight" placeholder="100">
+          <input type="number" id="s-weight" placeholder="1">
         </div>
         <div class="field">
           <label>Default Country of Origin</label>
@@ -558,19 +559,57 @@ const fileInput = document.getElementById('file-input');
 
 dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
 dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
-dropzone.addEventListener('drop', e => {
+dropzone.addEventListener('drop', async e => {
   e.preventDefault();
   dropzone.classList.remove('drag');
-  handleFiles([...e.dataTransfer.files]);
+  const items = e.dataTransfer.items;
+  if (items && items.length && items[0].webkitGetAsEntry) {
+    const entries = [...items].map(it => it.webkitGetAsEntry()).filter(Boolean);
+    const groups = await Promise.all(entries.map(en => traverseFileTree(en)));
+    handleEntries(groups.flat());
+  } else {
+    handleEntries([...e.dataTransfer.files].map(f => ({ file: f, relativePath: f.name })));
+  }
 });
-fileInput.addEventListener('change', () => { handleFiles([...fileInput.files]); fileInput.value=''; });
+fileInput.addEventListener('change', () => {
+  handleEntries([...fileInput.files].map(f => ({ file: f, relativePath: f.webkitRelativePath || f.name })));
+  fileInput.value = '';
+});
 document.getElementById('folder-input').addEventListener('change', function() {
-  handleFiles([...this.files]);
+  handleEntries([...this.files].map(f => ({ file: f, relativePath: f.webkitRelativePath || f.name })));
   this.value = '';
 });
 
-// Parse "SKU_COST.ext" or "SKU_COST_2.ext" / "SKU_COST-2.ext" style names.
-// Returns { sku, cost, groupKey } so multiple shots of the same product merge.
+// Recursively walk a dropped folder's DataTransferItem entry tree, returning
+// a flat list of { file, relativePath } so every image keeps its folder path.
+function traverseFileTree(entry, path = '') {
+  return new Promise(resolve => {
+    if (!entry) return resolve([]);
+    if (entry.isFile) {
+      entry.file(file => resolve([{ file, relativePath: path + file.name }]));
+    } else if (entry.isDirectory) {
+      const reader = entry.createReader();
+      let collected = [];
+      const readBatch = () => {
+        reader.readEntries(async batch => {
+          if (!batch.length) {
+            const nested = await Promise.all(collected.map(e => traverseFileTree(e, path + entry.name + '/')));
+            resolve(nested.flat());
+          } else {
+            collected = collected.concat(batch);
+            readBatch();
+          }
+        }, () => resolve([]));
+      };
+      readBatch();
+    } else {
+      resolve([]);
+    }
+  });
+}
+
+// Parse "SKU_COST.ext" or "SKU_COST_2.ext" style names — used ONLY as a
+// fallback for flat (non-folder) selections with no directory structure.
 function parseFilename(filename) {
   const stem = filename.replace(/\.[^.]+$/, '');
   let m = stem.match(/^(.+?)_(\d+(?:\.\d+)?)_(\d+)$/);
@@ -582,13 +621,31 @@ function parseFilename(filename) {
   return { sku, cost: '', groupKey: sku };
 }
 
-function handleFiles(files) {
-  const images = files.filter(f => f.type.startsWith('image/'));
+// Decide how to group a given { file, relativePath } entry into a product:
+// if it came from a folder, EVERY image in that folder is one product,
+// regardless of individual filenames. Folder name "SKU_COST" still pre-fills
+// SKU + cost if it matches that pattern; otherwise just the SKU is filled in.
+function groupKeyFor({ file, relativePath }) {
+  const parts = relativePath.split('/');
+  if (parts.length > 1) {
+    const folderPath = parts.slice(0, -1).join('/');
+    const folderName = parts[parts.length - 2];
+    let sku = folderName.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+    let cost = '';
+    const m = folderName.match(/^(.+?)_(\d+(?:\.\d+)?)$/);
+    if (m) { sku = m[1].toUpperCase().replace(/[^A-Z0-9-]/g, ''); cost = m[2]; }
+    return { sku, cost, groupKey: `folder:${folderPath}` };
+  }
+  return parseFilename(file.name);
+}
+
+function handleEntries(entries) {
+  const images = entries.filter(e => e.file.type.startsWith('image/') || /\.(jpe?g|png|webp)$/i.test(e.file.name));
   images.forEach(addToQueue);
 }
 
-function addToQueue(file) {
-  const { sku, cost, groupKey } = parseFilename(file.name);
+function addToQueue({ file, relativePath }) {
+  const { sku, cost, groupKey } = groupKeyFor({ file, relativePath });
   const reader = new FileReader();
   reader.onload = e => {
     const thumb = e.target.result;
@@ -662,7 +719,7 @@ function buildQueueItemHtml(item) {
           </select>
           <input class="item-input tags-input" data-field="tags" placeholder="Tags (comma separated)" value="${item.tags}"
             oninput="onFieldInput('${item.id}','tags',this.value)" ${locked?'disabled':''}>
-          <input class="item-input narrow" data-field="weight" placeholder="Wt (g) 100" value="${item.weight}" type="number"
+          <input class="item-input narrow" data-field="weight" placeholder="Wt (g) 1" value="${item.weight}" type="number"
             oninput="onFieldInput('${item.id}','weight',this.value)" ${locked?'disabled':''}>
           <input class="item-input narrow" data-field="hscode" placeholder="HS 7117.90" value="${item.hscode}"
             oninput="onFieldInput('${item.id}','hscode',this.value)" ${locked?'disabled':''}>
@@ -1074,7 +1131,7 @@ async function loadSettingsForm() {
     if (data.product_vendor) document.getElementById('s-vendor').value = data.product_vendor;
     if (data.product_type) document.getElementById('s-type').value = data.product_type;
     document.getElementById('s-hscode').value = data.default_hs_code || '7117.90';
-    document.getElementById('s-weight').value = data.default_weight_g || 100;
+    document.getElementById('s-weight').value = data.default_weight_g || 1;
     document.getElementById('s-origin').value = data.default_country_of_origin || 'IN';
     document.getElementById('s-qty').value = data.default_inventory_qty || 10;
     if (data.groq_api_key) document.getElementById('dot-groq').className = 'dot ok';
