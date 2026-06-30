@@ -7,7 +7,7 @@ from PIL import Image, ImageOps
 
 # ── Default catalog values ────────────────────────────────────────────────────
 DEFAULT_HS_CODE = '7117.90'
-DEFAULT_WEIGHT_G = 100
+DEFAULT_WEIGHT_G = 1
 DEFAULT_COUNTRY_OF_ORIGIN = 'IN'
 # Matches the consistent pattern seen across the existing Shopify catalog export:
 # Inventory Tracker=shopify, Inventory Policy=deny, Fulfillment Service=manual,
@@ -82,26 +82,26 @@ Care Label
 3. Avoid using detergents, soaps, or toothpaste to clean your necklace.
 4. Clean your necklace after every use with a soft brush.""",
 
-    'Earrings': """Hello lovely souls! Don\u2019t you agree that your look is never complete without a breathtaking necklace? A necklace set isn\u2019t just an accessory. It is the star of the show, ensuring you make a lasting impression every time you step out of your house.
-Ishhaara's necklaces for women whether it be a gold choker necklace set, pearl necklace, silver necklace set, or long necklace offer a phenomenal look. Pair these necklace sets and instantly make a wonderful appeal wherever you go. So, grab this chance and quickly check out the standout features of Ishhaara's necklace.
+    'Earrings': """Hey gorgeous! Don\u2019t you think your face glows differently the moment the right pair of earrings catches the light? Earrings aren\u2019t just an accessory, they\u2019re the easiest way to switch up an entire look in seconds.
+Ishhaara's earrings for women whether it be gold studs, jhumkas, hoops, danglers, or chandbalis offer a stunning finish to any outfit. Pair these earrings and instantly elevate your everyday or festive look. So, grab this chance and quickly check out the standout features of Ishhaara's earrings.
 Product Specification
 Material: Skin Friendly | Hypoallergenic
 Craftsmanship: Ethically Handmade
 Waterproof: Retains Colour and Brilliance
 Key Highlights
-1. Premium Materials: From shimmering gold to lustrous pearls, Ishhaara's every piece of necklace sets such as pendant necklaces or statement necklaces are crafted using premium materials only, ensuring durability and long-lasting beauty.
-2. Perfect for Layering: Whether it be an evil eye necklace, stone necklace, Kundan necklace, or ruby necklace, Ishhaara's every necklace design is ideal for mixing and matching. Ensuring you create a personalised look with multiple layers.
-3. Statement Appeal: From semi-precious and precious bridal necklace sets to western necklace sets, Ishhaara's each piece is designed to be the focal point of your ensemble, ensuring all eyes are on you. Letting you take the centre of the stage.
-4. Versatile Styling: Ishhaara's each piece of artificial necklaces for girls like Polki, Meenakari or temple are ideal for making a transition on a range of outfits from casual outings to grand celebrations. These neckpieces can compliment any occasion and mood effortlessly.
+1. Lightweight Comfort: Ishhaara's earrings whether it be jhumkas, studs, or chandbalis are crafted to be lightweight, ensuring comfortable wear through long days and longer celebrations.
+2. Premium Finish: From shimmering kundan to lustrous pearls, every pair of earrings is crafted using premium materials only, ensuring durability and long-lasting shine.
+3. Face-Framing Appeal: Whether it be danglers, hoops, or studs, Ishhaara's earrings are designed to frame the face beautifully, drawing attention upward and ensuring all eyes are on you.
+4. Versatile Styling: Each pair of earrings like Polki, Meenakari, or temple is ideal for making a transition across a range of outfits from casual outings to grand celebrations.
 Styling Inspiration
-1. Pair these necklaces with a traditional silk saree or lehenga. It will give a classic and regal vibe.
-2. Opt for stacking these necklaces with statement bangles, a pair of bold earrings or statement rings. It will add an extra sparkle and twist to your look.
-3. Style these necklaces with a chic pantsuit or tailored blazer. It will give a power-packed, professional look.
+1. Pair statement jhumkas or chandbalis with a traditional silk saree or lehenga for a classic, regal vibe.
+2. Opt for delicate studs or small hoops with western wear for an everyday chic look.
+3. Style oversized hoops or danglers with an updo hairstyle to let the earrings take centre stage.
 Care Label
-1. Store the necklaces in an air-tight jewellery box or sealed pouch.
+1. Store the earrings in an air-tight jewellery box or sealed pouch.
 2. Keep it away from body sprays, body lotions, or perfumes.
-3. Avoid using detergents, soaps, or toothpaste to clean your necklace.
-4. Clean your necklace after every use with a soft brush.""",
+3. Avoid using detergents, soaps, or toothpaste to clean your earrings.
+4. Clean your earrings after every use with a soft brush.""",
 
     'Hand accessories': """Hey gorgeous! Are you ready to add a whimsical statement to your \u2018Solah Shringar\u2019? Powerful and graceful a charm it can add, isn't it? From statement handcuffs, delicate bracelets, and traditional bangles to stunning Chooda and Kaleera, Ishhaara\u2019s studio has everything you need to add that \u2018wow\u2019 factor.
 So, if you\u2019re someone who loves making a grand entrance wherever you go, you need to explore these premium pieces. Let\u2019s dive in and discover what makes these hand accessories a must-have!
