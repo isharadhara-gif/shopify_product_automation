@@ -139,6 +139,9 @@
   .item-input:focus { outline: none; border-color: var(--accent); }
   .item-input::placeholder { color: #55556a; }
   .item-input.title-input { width: 220px; }
+  .item-input.tags-input { width: 200px; }
+  select.item-input { width: 150px; cursor: pointer; }
+  .item-input.narrow { width: 90px; }
   .item-meta { font-size: 11.5px; color: var(--muted); margin-top: 7px; display: flex; gap: 12px; flex-wrap: wrap; align-items:center; }
   .item-price { color: var(--green); font-weight: 700; }
   .item-error-msg { font-size: 11px; color: var(--red); margin-top: 6px; }
@@ -444,6 +447,14 @@
           <label>Product Type</label>
           <input type="text" id="s-type" placeholder="Apparel">
         </div>
+        <div class="field">
+          <label>Default HS Code</label>
+          <input type="text" id="s-hscode" placeholder="7117.90">
+        </div>
+        <div class="field">
+          <label>Default Weight (grams)</label>
+          <input type="number" id="s-weight" placeholder="100">
+        </div>
         <div class="save-row">
           <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
           <span class="save-msg" id="save-msg">✅ Saved!</span>
@@ -566,6 +577,7 @@ function addToQueue(file) {
       item = {
         id: Date.now() + Math.random(),
         groupKey, sku, costPrice: cost, title: '',
+        category: '', tags: '', weight: '', hscode: '',
         images: [{ file, thumb, name: file.name }],
         status: 'pending', error: null
       };
@@ -617,6 +629,21 @@ function buildQueueItemHtml(item) {
           <input class="item-input title-input" data-field="title" placeholder="Custom title (optional, AI used if blank)" value="${item.title}"
             oninput="onFieldInput('${item.id}','title',this.value)" ${locked?'disabled':''}>
         </div>
+        <div class="item-inputs">
+          <select class="item-input" data-field="category" onchange="onFieldInput('${item.id}','category',this.value)" ${locked?'disabled':''}>
+            <option value="">No category template</option>
+            <option value="Necklace" ${item.category==='Necklace'?'selected':''}>Necklace</option>
+            <option value="Earrings" ${item.category==='Earrings'?'selected':''}>Earrings</option>
+            <option value="Hand accessories" ${item.category==='Hand accessories'?'selected':''}>Hand accessories</option>
+            <option value="Rings" ${item.category==='Rings'?'selected':''}>Rings</option>
+          </select>
+          <input class="item-input tags-input" data-field="tags" placeholder="Tags (comma separated)" value="${item.tags}"
+            oninput="onFieldInput('${item.id}','tags',this.value)" ${locked?'disabled':''}>
+          <input class="item-input narrow" data-field="weight" placeholder="Wt (g) 100" value="${item.weight}" type="number"
+            oninput="onFieldInput('${item.id}','weight',this.value)" ${locked?'disabled':''}>
+          <input class="item-input narrow" data-field="hscode" placeholder="HS 7117.90" value="${item.hscode}"
+            oninput="onFieldInput('${item.id}','hscode',this.value)" ${locked?'disabled':''}>
+        </div>
         <div class="item-meta" id="meta-${item.id}">${metaHtml(item, sp)}</div>
         ${item.status==='failed' && item.error ? `<div class="item-error-msg">⚠ ${item.error}</div>` : ''}
       </div>
@@ -629,9 +656,9 @@ function buildQueueItemHtml(item) {
 }
 
 function metaHtml(item, sp) {
-  return item.costPrice
-    ? `<span>CP: ₹${item.costPrice}</span><span class="item-price">SP: ₹${sp}</span>`
-    : `<span style="color:var(--yellow)">Enter cost price</span>`;
+  if (!item.costPrice) return `<span style="color:var(--yellow)">Enter cost price</span>`;
+  const mrp = sp * 2;
+  return `<span>CP: ₹${item.costPrice}</span><span style="color:var(--muted);text-decoration:line-through">MRP: ₹${mrp}</span><span class="item-price">SP: ₹${sp}</span>`;
 }
 
 // ── Targeted, non-destructive updates (THIS fixes the disappearing-input bug) ─
@@ -833,7 +860,11 @@ async function uploadOne(item) {
       sku: item.sku,
       cost_price: item.costPrice,
       markup: getMarkup(),
-      title: item.title
+      title: item.title,
+      category: item.category,
+      tags: item.tags,
+      weight_g: item.weight || null,
+      hs_code: item.hscode
     });
     // status updates arrive via 'product_done'; wait for it before worker moves on
     await waitForCompletion(item);
@@ -944,6 +975,8 @@ async function saveSettings() {
     groq_api_key:   document.getElementById('s-groq').value.trim(),
     product_vendor: document.getElementById('s-vendor').value.trim(),
     product_type:   document.getElementById('s-type').value.trim(),
+    default_hs_code:  document.getElementById('s-hscode').value.trim(),
+    default_weight_g: document.getElementById('s-weight').value.trim(),
   };
   await fetch('/save_settings', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
   const msg = document.getElementById('save-msg');
@@ -1004,6 +1037,8 @@ async function loadSettingsForm() {
     if (data.groq_api_key) document.getElementById('s-groq').value = data.groq_api_key;
     if (data.product_vendor) document.getElementById('s-vendor').value = data.product_vendor;
     if (data.product_type) document.getElementById('s-type').value = data.product_type;
+    document.getElementById('s-hscode').value = data.default_hs_code || '7117.90';
+    document.getElementById('s-weight').value = data.default_weight_g || 100;
     if (data.groq_api_key) document.getElementById('dot-groq').className = 'dot ok';
     if (data.shopify_store) document.getElementById('dot-shopify').className = 'dot ok';
   } catch(e) {}
