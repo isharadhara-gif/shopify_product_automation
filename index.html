@@ -459,6 +459,10 @@
           <label>Default Country of Origin</label>
           <input type="text" id="s-origin" placeholder="IN">
         </div>
+        <div class="field">
+          <label>Default Inventory Qty</label>
+          <input type="number" id="s-qty" placeholder="10">
+        </div>
         <div class="save-row">
           <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
           <span class="save-msg" id="save-msg">✅ Saved!</span>
@@ -581,7 +585,7 @@ function addToQueue(file) {
       item = {
         id: Date.now() + Math.random(),
         groupKey, sku, costPrice: cost, title: '',
-        category: '', tags: '', weight: '', hscode: '', origin: '',
+        category: '', tags: '', weight: '', hscode: '', origin: '', qty: '',
         images: [{ file, thumb, name: file.name }],
         status: 'pending', error: null
       };
@@ -986,6 +990,7 @@ async function saveSettings() {
     default_hs_code:  document.getElementById('s-hscode').value.trim(),
     default_weight_g: document.getElementById('s-weight').value.trim(),
     default_country_of_origin: document.getElementById('s-origin').value.trim(),
+    default_inventory_qty: document.getElementById('s-qty').value.trim(),
   };
   await fetch('/save_settings', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
   const msg = document.getElementById('save-msg');
@@ -1049,6 +1054,7 @@ async function loadSettingsForm() {
     document.getElementById('s-hscode').value = data.default_hs_code || '7117.90';
     document.getElementById('s-weight').value = data.default_weight_g || 100;
     document.getElementById('s-origin').value = data.default_country_of_origin || 'IN';
+    document.getElementById('s-qty').value = data.default_inventory_qty || 10;
     if (data.groq_api_key) document.getElementById('dot-groq').className = 'dot ok';
     if (data.shopify_store) document.getElementById('dot-shopify').className = 'dot ok';
   } catch(e) {}
