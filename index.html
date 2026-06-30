@@ -3,105 +3,157 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shopify Upload Pipeline</title>
+<title>ShopifyPipeline</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
 <style>
   :root {
-    --bg: #0f0f13;
-    --surface: #1a1a22;
-    --surface2: #22222e;
-    --border: #2e2e3e;
+    --bg: #0c0c11;
+    --surface: #16161e;
+    --surface2: #1e1e29;
+    --surface3: #25252f;
+    --border: #2a2a38;
     --accent: #7c6af7;
     --accent2: #a78bfa;
+    --accent-glow: rgba(124,106,247,.35);
     --green: #34d399;
     --red: #f87171;
     --yellow: #fbbf24;
-    --text: #e8e8f0;
-    --muted: #7878a0;
-    --radius: 12px;
+    --text: #edf0f5;
+    --muted: #82829c;
+    --radius: 14px;
+    --radius-sm: 9px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; min-height: 100vh; }
+  body {
+    background:
+      radial-gradient(900px 500px at 10% -10%, rgba(124,106,247,.10), transparent),
+      radial-gradient(700px 500px at 100% 0%, rgba(167,139,250,.07), transparent),
+      var(--bg);
+    color: var(--text); font-family: 'Inter', system-ui, -apple-system, sans-serif; min-height: 100vh;
+  }
 
   /* Layout */
-  .app { display: grid; grid-template-columns: 300px 1fr; min-height: 100vh; }
-  .sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: 24px 20px; display: flex; flex-direction: column; gap: 24px; }
-  .main { padding: 28px; overflow-y: auto; }
+  .app { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
+  .sidebar { background: rgba(22,22,30,.7); backdrop-filter: blur(10px); border-right: 1px solid var(--border); padding: 24px 18px; display: flex; flex-direction: column; gap: 22px; position: sticky; top: 0; height: 100vh; }
+  .main { padding: 30px 32px; overflow-y: auto; max-width: 1180px; width: 100%; }
 
   /* Logo */
-  .logo { display: flex; align-items: center; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
-  .logo-icon { width: 36px; height: 36px; background: linear-gradient(135deg, var(--accent), #c084fc); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
-  .logo-text { font-size: 15px; font-weight: 700; letter-spacing: -0.3px; }
+  .logo { display: flex; align-items: center; gap: 11px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+  .logo-icon { width: 38px; height: 38px; background: linear-gradient(135deg, var(--accent), #c084fc); border-radius: 11px; display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 4px 18px var(--accent-glow); }
+  .logo-text { font-size: 15px; font-weight: 800; letter-spacing: -0.3px; }
   .logo-sub { font-size: 11px; color: var(--muted); }
 
   /* Status badges */
-  .status-bar { display: flex; flex-direction: column; gap: 8px; }
-  .status-item { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .status-bar { display: flex; flex-direction: column; gap: 9px; }
+  .status-item { display: flex; align-items: center; gap: 8px; font-size: 12px; cursor: default; }
   .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
-  .dot.ok { background: var(--green); box-shadow: 0 0 6px var(--green); }
-  .dot.warn { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+  .dot.ok { background: var(--green); box-shadow: 0 0 7px var(--green); }
+  .dot.warn { background: var(--yellow); box-shadow: 0 0 7px var(--yellow); }
+
+  /* Mini stats in sidebar */
+  .mini-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .mini-stat { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px; }
+  .mini-stat-val { font-size: 17px; font-weight: 800; }
+  .mini-stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; margin-top: 2px; }
 
   /* Nav */
   .nav { display: flex; flex-direction: column; gap: 4px; }
-  .nav-btn { background: none; border: none; color: var(--muted); font-size: 13px; padding: 9px 12px; border-radius: 8px; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all .15s; }
-  .nav-btn:hover, .nav-btn.active { background: var(--surface2); color: var(--text); }
-  .nav-btn.active { color: var(--accent2); }
+  .nav-btn { background: none; border: none; color: var(--muted); font-size: 13px; font-weight: 600; padding: 10px 12px; border-radius: var(--radius-sm); text-align: left; cursor: pointer; display: flex; align-items: center; gap: 9px; transition: all .15s; }
+  .nav-btn:hover { background: var(--surface2); color: var(--text); }
+  .nav-btn.active { background: linear-gradient(135deg, rgba(124,106,247,.18), rgba(167,139,250,.08)); color: var(--accent2); box-shadow: inset 0 0 0 1px rgba(124,106,247,.3); }
 
   /* Panels */
   .panel { display: none; }
-  .panel.active { display: block; }
+  .panel.active { display: block; animation: fadein .2s ease; }
+  @keyframes fadein { from { opacity:0; transform: translateY(4px);} to {opacity:1; transform:none;} }
 
   /* Header */
-  .page-header { margin-bottom: 24px; }
-  .page-title { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+  .page-header { display:flex; justify-content:space-between; align-items:flex-end; gap:16px; margin-bottom: 22px; flex-wrap: wrap; }
+  .page-title { font-size: 23px; font-weight: 800; letter-spacing: -0.5px; }
   .page-sub { font-size: 13px; color: var(--muted); margin-top: 4px; }
 
+  /* Stats dashboard row */
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 22px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+  .stat-card .stat-top { display:flex; justify-content:space-between; align-items:center; }
+  .stat-icon { font-size: 16px; opacity:.8; }
+  .stat-val { font-size: 24px; font-weight: 800; margin-top: 6px; letter-spacing: -0.5px; }
+  .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 2px; }
+  .stat-card.green .stat-val { color: var(--green); }
+  .stat-card.red .stat-val { color: var(--red); }
+  .stat-card.accent .stat-val { color: var(--accent2); }
+
   /* Upload zone */
-  .upload-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 40px 24px; text-align: center; cursor: pointer; transition: all .2s; background: var(--surface); position: relative; }
-  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: rgba(124,106,247,.05); }
-  .upload-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
-  .upload-icon { font-size: 36px; margin-bottom: 12px; }
-  .upload-text { font-size: 15px; font-weight: 600; }
+  .upload-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 38px 24px; text-align: center; cursor: pointer; transition: all .2s; background: var(--surface); position: relative; }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: rgba(124,106,247,.06); }
+  .upload-icon { font-size: 34px; margin-bottom: 10px; }
+  .upload-text { font-size: 15px; font-weight: 700; }
   .upload-hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
 
-  /* Queue */
-  .queue-header { display: flex; justify-content: space-between; align-items: center; margin: 24px 0 12px; }
-  .queue-title { font-size: 14px; font-weight: 600; }
-  .btn { padding: 8px 16px; border-radius: 8px; border: none; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; }
-  .btn-primary { background: var(--accent); color: #fff; }
-  .btn-primary:hover { background: #6d5de6; }
-  .btn-primary:disabled { opacity: .4; cursor: not-allowed; }
-  .btn-sm { padding: 5px 10px; font-size: 11px; border-radius: 6px; }
-  .btn-ghost { background: var(--surface2); color: var(--muted); }
-  .btn-ghost:hover { color: var(--text); }
+  .toolbar { margin-top: 14px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding: 12px 16px; background: var(--surface); border-radius: var(--radius-sm); border: 1px solid var(--border); }
+  .toolbar-label { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+  .toolbar .divider { width:1px; height:20px; background: var(--border); }
+  .chip-radio { display:flex; align-items:center; gap:5px; font-size:12px; cursor:pointer; padding:5px 10px; border-radius:99px; background: var(--surface2); border:1px solid transparent; }
+  .chip-radio input { accent-color: var(--accent); }
+  .chip-radio:has(input:checked) { border-color: var(--accent); color: var(--accent2); background: rgba(124,106,247,.12); }
 
-  /* Queue items */
+  /* Buttons */
+  .btn { padding: 9px 16px; border-radius: var(--radius-sm); border: none; font-size: 13px; font-weight: 700; cursor: pointer; transition: all .15s; display:inline-flex; align-items:center; gap:6px; }
+  .btn-primary { background: linear-gradient(135deg, var(--accent), #6d5de6); color: #fff; box-shadow: 0 4px 14px var(--accent-glow); }
+  .btn-primary:hover { filter: brightness(1.08); transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: .4; cursor: not-allowed; transform:none; box-shadow:none; }
+  .btn-sm { padding: 6px 11px; font-size: 11.5px; border-radius: 7px; }
+  .btn-ghost { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+  .btn-ghost:hover { color: var(--text); border-color: var(--accent); }
+  .btn-danger-ghost { background: rgba(248,113,113,.08); color: var(--red); border:1px solid rgba(248,113,113,.25); }
+  .btn-danger-ghost:hover { background: rgba(248,113,113,.16); }
+
+  /* Overall progress bar */
+  .progress-wrap { margin-top: 14px; background: var(--surface2); border-radius: 99px; height: 8px; overflow: hidden; display:none; }
+  .progress-bar { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); width:0%; transition: width .3s ease; }
+  .progress-label { font-size: 11px; color: var(--muted); margin-top: 6px; display:none; }
+
+  /* Queue */
+  .queue-header { display: flex; justify-content: space-between; align-items: center; margin: 24px 0 12px; flex-wrap: wrap; gap: 10px; }
+  .queue-title { font-size: 14px; font-weight: 700; }
+
+  /* Queue items (product cards) */
   .queue-list { display: flex; flex-direction: column; gap: 10px; }
-  .queue-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; display: grid; grid-template-columns: 56px 1fr auto; gap: 12px; align-items: center; }
-  .queue-item.uploading { border-color: var(--accent); }
-  .queue-item.done { border-color: var(--green); opacity: .7; }
+  .queue-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: flex-start; transition: border-color .2s; }
+  .queue-item.uploading { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .queue-item.success { border-color: var(--green); opacity: .75; }
   .queue-item.failed { border-color: var(--red); }
-  .thumb { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; background: var(--surface2); }
+
+  .thumb-stack { display:flex; gap:6px; flex-wrap:wrap; max-width: 130px; }
+  .thumb-wrap { position:relative; width: 54px; height: 54px; flex-shrink:0; }
+  .thumb { width: 54px; height: 54px; object-fit: cover; border-radius: 9px; background: var(--surface2); border:1px solid var(--border); }
+  .thumb-remove { position:absolute; top:-5px; right:-5px; width:16px; height:16px; border-radius:50%; background: var(--red); color:#fff; font-size:10px; line-height:16px; text-align:center; cursor:pointer; border:none; }
+  .thumb-add { width:54px; height:54px; border-radius:9px; border:1.5px dashed var(--border); display:flex; align-items:center; justify-content:center; font-size:18px; color:var(--muted); cursor:pointer; flex-shrink:0; background:var(--surface2); }
+  .thumb-add:hover { border-color: var(--accent); color: var(--accent2); }
+  .img-count-badge { font-size: 10px; color: var(--muted); margin-top: 5px; text-align:center; }
+
   .item-info { min-width: 0; }
-  .item-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .item-meta { font-size: 11px; color: var(--muted); margin-top: 3px; display: flex; gap: 10px; flex-wrap: wrap; }
-  .item-price { color: var(--green); font-weight: 600; }
-  .item-actions { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
-  .badge { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 99px; }
+  .item-name { font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item-inputs { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .item-input { background: var(--surface2); border: 1px solid var(--border); border-radius: 7px; padding: 6px 9px; color: var(--text); font-size: 12px; width: 110px; }
+  .item-input:focus { outline: none; border-color: var(--accent); }
+  .item-input::placeholder { color: #55556a; }
+  .item-input.title-input { width: 220px; }
+  .item-meta { font-size: 11.5px; color: var(--muted); margin-top: 7px; display: flex; gap: 12px; flex-wrap: wrap; align-items:center; }
+  .item-price { color: var(--green); font-weight: 700; }
+  .item-error-msg { font-size: 11px; color: var(--red); margin-top: 6px; }
+
+  .item-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+  .badge { font-size: 10px; font-weight: 800; padding: 4px 9px; border-radius: 99px; white-space:nowrap; }
   .badge-pending { background: rgba(251,191,36,.15); color: var(--yellow); }
   .badge-running { background: rgba(124,106,247,.2); color: var(--accent2); }
-  .badge-done { background: rgba(52,211,153,.15); color: var(--green); }
+  .badge-success { background: rgba(52,211,153,.15); color: var(--green); }
   .badge-failed { background: rgba(248,113,113,.15); color: var(--red); }
-  .remove-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; line-height: 1; padding: 2px 4px; }
+  .remove-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 17px; line-height: 1; padding: 2px 4px; }
   .remove-btn:hover { color: var(--red); }
 
-  /* Inline SKU/price inputs on queue item */
-  .item-inputs { display: flex; gap: 8px; margin-top: 6px; }
-  .item-input { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; color: var(--text); font-size: 11px; width: 100px; }
-  .item-input:focus { outline: none; border-color: var(--accent); }
-
   /* Log panel */
-  .log-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; font-family: 'Courier New', monospace; font-size: 12px; height: 280px; overflow-y: auto; line-height: 1.7; }
+  .log-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; font-family: 'SF Mono', 'Courier New', monospace; font-size: 12px; height: 260px; overflow-y: auto; line-height: 1.7; }
   .log-info { color: var(--text); }
   .log-success { color: var(--green); }
   .log-error { color: var(--red); }
@@ -112,53 +164,72 @@
   .result-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
   .result-card.success { border-left: 3px solid var(--green); }
   .result-card.failed { border-left: 3px solid var(--red); }
-  .result-info { min-width: 0; }
-  .result-title { font-size: 13px; font-weight: 600; }
+  .result-title { font-size: 13px; font-weight: 700; }
   .result-meta { font-size: 11px; color: var(--muted); margin-top: 3px; }
-  .result-link { font-size: 11px; color: var(--accent2); text-decoration: none; }
+  .result-link { font-size: 11.5px; color: var(--accent2); text-decoration: none; font-weight:600; }
   .result-link:hover { text-decoration: underline; }
 
   /* Settings form */
-  .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 640px; }
+  .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 680px; }
   .field { display: flex; flex-direction: column; gap: 6px; }
   .field.full { grid-column: 1 / -1; }
-  label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
-  input[type=text], input[type=password] { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 13px; width: 100%; }
+  label { font-size: 11.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  .field-row { display:flex; gap:8px; align-items:center; }
+  input[type=text], input[type=password], input[type=number] { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 13px; width: 100%; }
   input:focus { outline: none; border-color: var(--accent); }
-  .save-row { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; margin-top: 4px; }
+  .save-row { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; margin-top: 4px; flex-wrap:wrap; }
   .save-msg { font-size: 12px; color: var(--green); display: none; }
+  .test-result { font-size: 12px; margin-left: 4px; }
 
-  /* History table */
-  .table-wrap { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  th { text-align: left; padding: 10px 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid var(--border); }
-  td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
-  tr:hover td { background: var(--surface); }
-  .status-ok { color: var(--green); }
-  .status-fail { color: var(--red); }
+  /* History */
+  .table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; padding: 12px 14px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .5px; font-size: 10.5px; border-bottom: 1px solid var(--border); }
+  td { padding: 11px 14px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface2); }
+  .status-ok { color: var(--green); font-weight:600; }
+  .status-fail { color: var(--red); font-weight:600; }
+  .history-toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; gap:10px; flex-wrap:wrap; }
+  .search-input { background: var(--surface); border:1px solid var(--border); border-radius: var(--radius-sm); padding:9px 14px; color:var(--text); font-size:13px; width: 260px; }
+  .search-input:focus { outline:none; border-color: var(--accent); }
+  .row-del { background:none; border:none; color: var(--muted); cursor:pointer; font-size:14px; }
+  .row-del:hover { color: var(--red); }
 
   /* Spinner */
   @keyframes spin { to { transform: rotate(360deg); } }
-  .spinner { width: 14px; height: 14px; border: 2px solid rgba(124,106,247,.3); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; display: inline-block; vertical-align: middle; }
+  .spinner { width: 13px; height: 13px; border: 2px solid rgba(124,106,247,.3); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; display: inline-block; vertical-align: middle; }
+
+  /* Toasts */
+  .toast-stack { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 999; }
+  .toast { background: var(--surface3); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 11px 16px; font-size: 12.5px; box-shadow: 0 8px 24px rgba(0,0,0,.4); animation: toastin .2s ease; max-width: 320px; }
+  .toast.success { border-left: 3px solid var(--green); }
+  .toast.error { border-left: 3px solid var(--red); }
+  @keyframes toastin { from { opacity:0; transform: translateX(20px);} to {opacity:1; transform:none;} }
 
   /* Empty state */
   .empty { text-align: center; padding: 48px 24px; color: var(--muted); }
-  .empty-icon { font-size: 40px; margin-bottom: 12px; }
+  .empty-icon { font-size: 38px; margin-bottom: 12px; }
   .empty-text { font-size: 14px; }
 
-  /* Scrollbar */
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
 
+  @media (max-width: 900px) {
+    .stats-row { grid-template-columns: 1fr 1fr; }
+  }
   @media (max-width: 768px) {
     .app { grid-template-columns: 1fr; }
-    .sidebar { border-right: none; border-bottom: 1px solid var(--border); flex-direction: row; flex-wrap: wrap; gap: 12px; padding: 16px; }
+    .sidebar { position: static; height:auto; border-right: none; border-bottom: 1px solid var(--border); }
     .settings-grid { grid-template-columns: 1fr; }
+    .queue-item { grid-template-columns: 1fr; }
   }
 </style>
 </head>
 <body>
+
+<div class="toast-stack" id="toast-stack"></div>
 
 <div class="app">
   <!-- Sidebar -->
@@ -182,16 +253,23 @@
       </div>
     </div>
 
+    <div class="mini-stats" id="sidebar-stats">
+      <div class="mini-stat"><div class="mini-stat-val" id="ms-total">0</div><div class="mini-stat-label">Listed</div></div>
+      <div class="mini-stat"><div class="mini-stat-val" id="ms-rate">—</div><div class="mini-stat-label">Success</div></div>
+    </div>
+
     <nav class="nav">
-      <button class="nav-btn active" onclick="showPanel('upload')">📤 Upload</button>
-      <button class="nav-btn" onclick="showPanel('history')">📋 History</button>
-      <button class="nav-btn" onclick="showPanel('settings')">⚙️ Settings</button>
+      <button class="nav-btn active" onclick="showPanel('upload', event)">📤 Upload</button>
+      <button class="nav-btn" onclick="showPanel('history', event)">📋 History</button>
+      <button class="nav-btn" onclick="showPanel('settings', event)">⚙️ Settings</button>
     </nav>
 
-    <div style="margin-top:auto; font-size:11px; color:var(--muted); line-height:1.6;">
+    <div style="margin-top:auto; font-size:11px; color:var(--muted); line-height:1.7;">
       <strong style="color:var(--text)">Naming format</strong><br>
       SKU_CostPrice.jpg<br>
-      e.g. TSHIRT001_250.jpg
+      e.g. SHIRT001_250.jpg<br><br>
+      <strong style="color:var(--text)">Multi-image tip</strong><br>
+      Files like SHIRT001_250_1.jpg, SHIRT001_250_2.jpg auto-group into one product.
     </div>
   </aside>
 
@@ -201,8 +279,34 @@
     <!-- Upload Panel -->
     <div id="panel-upload" class="panel active">
       <div class="page-header">
-        <div class="page-title">Upload Products</div>
-        <div class="page-sub">Drop images below — add SKU & cost price — hit Upload All</div>
+        <div>
+          <div class="page-title">Upload Products</div>
+          <div class="page-sub">Drop images — group multiple shots per product — set price — hit Upload All</div>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-top"><span class="stat-icon">📦</span></div>
+          <div class="stat-val" id="stat-queued">0</div>
+          <div class="stat-label">In Queue</div>
+        </div>
+        <div class="stat-card green">
+          <div class="stat-top"><span class="stat-icon">✅</span></div>
+          <div class="stat-val" id="stat-success">0</div>
+          <div class="stat-label">Uploaded</div>
+        </div>
+        <div class="stat-card red">
+          <div class="stat-top"><span class="stat-icon">❌</span></div>
+          <div class="stat-val" id="stat-failed">0</div>
+          <div class="stat-label">Failed</div>
+        </div>
+        <div class="stat-card accent">
+          <div class="stat-top"><span class="stat-icon">💰</span></div>
+          <div class="stat-val" id="stat-value">₹0</div>
+          <div class="stat-label">Potential Value</div>
+        </div>
       </div>
 
       <!-- Drop zone -->
@@ -215,35 +319,48 @@
           <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();document.getElementById('file-input').click()">🖼️ Select Images</button>
           <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();document.getElementById('folder-input').click()">📂 Select Folder</button>
         </div>
-        <div class="upload-hint" style="margin-top:8px;">or drag &amp; drop · JPG, PNG, WEBP</div>
+        <div class="upload-hint" style="margin-top:8px;">or drag &amp; drop · JPG, PNG, WEBP · same-SKU files auto-group into one product</div>
       </div>
-      <div style="margin-top:14px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 16px;background:var(--surface);border-radius:10px;border:1px solid var(--border);">
-        <span style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Markup</span>
-        <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;"><input type="radio" name="markup" value="2"> 2×</label>
-        <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;"><input type="radio" name="markup" value="2.5"> 2.5×</label>
-        <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;"><input type="radio" name="markup" value="3"> 3×</label>
-        <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;"><input type="radio" name="markup" value="4" checked> 4×</label>
-        <div style="width:1px;height:20px;background:var(--border);"></div>
-        <span style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Bulk Cost</span>
+
+      <div class="toolbar">
+        <span class="toolbar-label">Markup</span>
+        <label class="chip-radio"><input type="radio" name="markup" value="2"> 2×</label>
+        <label class="chip-radio"><input type="radio" name="markup" value="2.5"> 2.5×</label>
+        <label class="chip-radio"><input type="radio" name="markup" value="3"> 3×</label>
+        <label class="chip-radio"><input type="radio" name="markup" value="4" checked> 4×</label>
+        <div class="divider"></div>
+        <span class="toolbar-label">Bulk Cost</span>
         <input id="bulk-cp" type="number" class="item-input" placeholder="₹ cost price" style="width:110px;">
         <button class="btn btn-ghost btn-sm" onclick="bulkSetPrice()">Apply to All Pending</button>
+        <div class="divider"></div>
+        <span class="toolbar-label">Upload Speed</span>
+        <select id="concurrency" class="item-input" style="width:140px;" title="How many products to send to Shopify at once">
+          <option value="1">1 at a time</option>
+          <option value="2">2 at a time</option>
+          <option value="3" selected>3 at a time</option>
+          <option value="5">5 at a time</option>
+        </select>
       </div>
+
       <!-- Queue -->
       <div id="queue-section" style="display:none">
         <div class="queue-header">
           <span class="queue-title">Queue (<span id="queue-count">0</span>)</span>
-          <div style="display:flex;gap:8px">
-            <button class="btn btn-ghost btn-sm" onclick="clearDone()">Clear done</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" onclick="retryFailed()">↻ Retry Failed</button>
+            <button class="btn btn-ghost btn-sm" onclick="clearDone()">Clear Done</button>
             <button class="btn btn-primary" id="upload-all-btn" onclick="uploadAll()">⬆ Upload All</button>
           </div>
         </div>
+        <div class="progress-wrap" id="progress-wrap"><div class="progress-bar" id="progress-bar"></div></div>
+        <div class="progress-label" id="progress-label"></div>
         <div class="queue-list" id="queue-list"></div>
       </div>
 
       <!-- Live log -->
       <div style="margin-top:24px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-          <span style="font-size:14px;font-weight:600">Live Log</span>
+          <span style="font-size:14px;font-weight:700">Live Log</span>
           <button class="btn btn-ghost btn-sm" onclick="clearLog()">Clear</button>
         </div>
         <div class="log-box" id="log-box">
@@ -253,7 +370,7 @@
 
       <!-- Results -->
       <div id="results-section" style="display:none;margin-top:24px">
-        <div style="font-size:14px;font-weight:600;margin-bottom:12px">Completed</div>
+        <div style="font-size:14px;font-weight:700;margin-bottom:12px">Completed</div>
         <div class="results-grid" id="results-list"></div>
       </div>
     </div>
@@ -261,19 +378,30 @@
     <!-- History Panel -->
     <div id="panel-history" class="panel">
       <div class="page-header">
-        <div class="page-title">Upload History</div>
-        <div class="page-sub">Last 50 uploads from this session</div>
+        <div>
+          <div class="page-title">Upload History</div>
+          <div class="page-sub">All uploads from this session</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="exportCsv()">⬇ Export CSV</button>
+      </div>
+      <div class="history-toolbar">
+        <input class="search-input" id="history-search" placeholder="Search by SKU or title…" oninput="renderHistory()">
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" onclick="setHistoryFilter('all')" id="hf-all">All</button>
+          <button class="btn btn-ghost btn-sm" onclick="setHistoryFilter('success')" id="hf-success">Success</button>
+          <button class="btn btn-ghost btn-sm" onclick="setHistoryFilter('failed')" id="hf-failed">Failed</button>
+        </div>
       </div>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>Time</th><th>SKU</th><th>Title</th>
-              <th>Cost</th><th>Price</th><th>Status</th><th>Link</th>
+              <th>Time</th><th>SKU</th><th>Title</th><th>Images</th>
+              <th>Cost</th><th>Price</th><th>Status</th><th>Link</th><th></th>
             </tr>
           </thead>
           <tbody id="history-tbody">
-            <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:32px">Loading...</td></tr>
+            <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:32px">Loading...</td></tr>
           </tbody>
         </table>
       </div>
@@ -282,13 +410,19 @@
     <!-- Settings Panel -->
     <div id="panel-settings" class="panel">
       <div class="page-header">
-        <div class="page-title">Settings</div>
-        <div class="page-sub">Your credentials are saved to .env on the server</div>
+        <div>
+          <div class="page-title">Settings</div>
+          <div class="page-sub">Your credentials are saved to .env / settings.json on the server</div>
+        </div>
       </div>
       <div class="settings-grid">
         <div class="field full">
           <label>Shopify Store URL</label>
-          <input type="text" id="s-store" placeholder="yourstore.myshopify.com" value="{{ shopify_store }}">
+          <div class="field-row">
+            <input type="text" id="s-store" placeholder="yourstore.myshopify.com" value="{{ shopify_store }}">
+            <button class="btn btn-ghost btn-sm" onclick="testShopify()">Test</button>
+          </div>
+          <span class="test-result" id="test-shopify-result"></span>
         </div>
         <div class="field full">
           <label>Shopify Admin Token</label>
@@ -296,7 +430,11 @@
         </div>
         <div class="field full">
           <label>Groq API Key <a href="https://console.groq.com" target="_blank" style="color:var(--accent2);font-size:11px;font-weight:400;text-decoration:none">Get free key →</a></label>
-          <input type="password" id="s-groq" placeholder="gsk_xxxxxxxxxxxx">
+          <div class="field-row">
+            <input type="password" id="s-groq" placeholder="gsk_xxxxxxxxxxxx">
+            <button class="btn btn-ghost btn-sm" onclick="testGroq()">Test</button>
+          </div>
+          <span class="test-result" id="test-groq-result"></span>
         </div>
         <div class="field">
           <label>Product Vendor</label>
@@ -312,13 +450,14 @@
         </div>
       </div>
 
-      <div style="margin-top:32px;padding:16px;background:var(--surface);border-radius:var(--radius);max-width:500px">
-        <div style="font-size:13px;font-weight:600;margin-bottom:10px">💡 Quick Start</div>
+      <div style="margin-top:32px;padding:16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);max-width:560px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:10px">💡 Quick Start</div>
         <div style="font-size:12px;color:var(--muted);line-height:2">
           1. Get free Groq key → <a href="https://console.groq.com" target="_blank" style="color:var(--accent2)">console.groq.com</a><br>
           2. Get Shopify token → Admin → Settings → Apps → Develop apps<br>
           3. Scopes needed: <code style="color:var(--text)">write_products</code>, <code style="color:var(--text)">write_product_listings</code><br>
-          4. Drop images, set prices, click Upload All
+          4. Drop images (group multiple shots per SKU), set prices, click Upload All<br>
+          5. Use "Test" buttons above to confirm credentials before a big batch
         </div>
       </div>
     </div>
@@ -328,38 +467,51 @@
 
 <script>
 const socket = io();
-let queue = [];   // { id, file, sku, costPrice, status, thumb }
+
+// Each queue item = one PRODUCT, can hold multiple images.
+// { id, sku, costPrice, title, images: [{file, thumb, name}], status, error }
+let queue = [];
+let history = [];
+let historyFilter = 'all';
 let logBox = document.getElementById('log-box');
 let firstLog = true;
 
+// ── Toasts ────────────────────────────────────────────────────────────────────
+function toast(msg, type='success') {
+  const stack = document.getElementById('toast-stack');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  stack.appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
 // ── Socket events ─────────────────────────────────────────────────────────────
-socket.on('log', ({msg, level}) => {
-  if (firstLog) { logBox.innerHTML = ''; firstLog = false; }
-  const line = document.createElement('div');
-  line.className = `log-${level || 'info'}`;
-  line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-  logBox.appendChild(line);
-  logBox.scrollTop = logBox.scrollHeight;
-});
+socket.on('log', ({msg, level}) => addLog(msg, level));
 
 socket.on('product_done', (data) => {
-  const item = queue.find(q => q.sku === data.sku);
+  const item = queue.find(q => q.sku === data.sku && q.status === 'uploading');
   if (item) {
     item.status = data.status;
+    item.error = data.error || null;
     renderQueue();
   }
   if (data.status === 'success') {
     addResult(data);
+    toast(`${data.sku} listed on Shopify`, 'success');
+  } else {
+    toast(`${data.sku} failed: ${data.error || 'see log'}`, 'error');
   }
+  updateStats();
   checkAllDone();
 });
 
 // ── Navigation ────────────────────────────────────────────────────────────────
-function showPanel(name) {
+function showPanel(name, evt) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('panel-' + name).classList.add('active');
-  event.currentTarget.classList.add('active');
+  if (evt) evt.currentTarget.classList.add('active');
   if (name === 'history') loadHistory();
 }
 
@@ -374,82 +526,208 @@ dropzone.addEventListener('drop', e => {
   dropzone.classList.remove('drag');
   handleFiles([...e.dataTransfer.files]);
 });
-fileInput.addEventListener('change', () => handleFiles([...fileInput.files]));
+fileInput.addEventListener('change', () => { handleFiles([...fileInput.files]); fileInput.value=''; });
 document.getElementById('folder-input').addEventListener('change', function() {
   handleFiles([...this.files]);
-  this.value = ''; // reset so same folder can be re-selected
+  this.value = '';
 });
 
+// Parse "SKU_COST.ext" or "SKU_COST_2.ext" / "SKU_COST-2.ext" style names.
+// Returns { sku, cost, groupKey } so multiple shots of the same product merge.
+function parseFilename(filename) {
+  const stem = filename.replace(/\.[^.]+$/, '');
+  // SKU_COST_index  e.g. TSHIRT001_250_2
+  let m = stem.match(/^(.+?)_(\d+(?:\.\d+)?)_(\d+)$/);
+  if (m) return { sku: m[1].toUpperCase(), cost: m[2], groupKey: `${m[1].toUpperCase()}_${m[2]}` };
+  // SKU_COST  e.g. TSHIRT001_250
+  m = stem.match(/^(.+?)_(\d+(?:\.\d+)?)$/);
+  if (m) return { sku: m[1].toUpperCase(), cost: m[2], groupKey: `${m[1].toUpperCase()}_${m[2]}` };
+  // SKU-index or plain SKU, no cost detected
+  m = stem.match(/^(.+?)[-_](\d+)$/);
+  const sku = (m ? m[1] : stem).toUpperCase().replace(/[^A-Z0-9-]/g, '');
+  return { sku, cost: '', groupKey: sku };
+}
+
 function handleFiles(files) {
-  files.filter(f => f.type.startsWith('image/')).forEach(addToQueue);
+  const images = files.filter(f => f.type.startsWith('image/'));
+  images.forEach(addToQueue);
 }
 
 function addToQueue(file) {
-  const id = Date.now() + Math.random();
-  // Try parse SKU/price from filename
-  const stem  = file.name.replace(/\.[^.]+$/, '');
-  const match = stem.match(/^(.+?)_(\d+(?:\.\d+)?)$/);
-  const sku   = match ? match[1].toUpperCase() : stem.toUpperCase().replace(/[^A-Z0-9-]/g,'');
-  const cp    = match ? match[2] : '';
-
+  const { sku, cost, groupKey } = parseFilename(file.name);
   const reader = new FileReader();
   reader.onload = e => {
-    queue.push({ id, file, sku, costPrice: cp, status: 'pending', thumb: e.target.result });
+    const thumb = e.target.result;
+    // merge into an existing PENDING product with the same group key
+    let item = queue.find(q => q.groupKey === groupKey && q.status === 'pending');
+    if (item) {
+      item.images.push({ file, thumb, name: file.name });
+    } else {
+      item = {
+        id: Date.now() + Math.random(),
+        groupKey, sku, costPrice: cost, title: '',
+        images: [{ file, thumb, name: file.name }],
+        status: 'pending', error: null
+      };
+      queue.push(item);
+    }
     renderQueue();
+    updateStats();
   };
   reader.readAsDataURL(file);
 }
 
-// ── Render queue ──────────────────────────────────────────────────────────────
+// ── Render queue (full rebuild — only called on add/remove/status change) ────
 function renderQueue() {
   const list = document.getElementById('queue-list');
   const section = document.getElementById('queue-section');
   section.style.display = queue.length ? 'block' : 'none';
   document.getElementById('queue-count').textContent = queue.length;
 
-  list.innerHTML = queue.map(item => {
-    const sp = item.costPrice ? calcSP(parseFloat(item.costPrice), getMarkup()) : '—';
-    const badgeClass = {pending:'badge-pending',uploading:'badge-running',success:'badge-done',failed:'badge-failed'}[item.status];
-    const badgeText  = {pending:'Pending',uploading:'Uploading…',success:'Done ✅',failed:'Failed ❌'}[item.status];
-    return `
+  list.innerHTML = queue.map(item => buildQueueItemHtml(item)).join('');
+}
+
+function buildQueueItemHtml(item) {
+  const sp = item.costPrice ? calcSP(parseFloat(item.costPrice), getMarkup()) : null;
+  const badgeClass = {pending:'badge-pending',uploading:'badge-running',success:'badge-success',failed:'badge-failed'}[item.status];
+  const badgeText  = {pending:'Pending',uploading:'Uploading…',success:'Done ✅',failed:'Failed ❌'}[item.status];
+  const locked = item.status !== 'pending';
+
+  const thumbs = item.images.map((img, idx) => `
+      <div class="thumb-wrap">
+        <img class="thumb" src="${img.thumb}" title="${img.name}">
+        ${!locked ? `<button class="thumb-remove" onclick="removeImage('${item.id}', ${idx})">×</button>` : ''}
+      </div>`).join('');
+
+  const addBtn = !locked ? `<div class="thumb-add" onclick="addImagesToItem('${item.id}')">+</div>` : '';
+
+  return `
     <div class="queue-item ${item.status}" id="qi-${item.id}">
-      <img class="thumb" src="${item.thumb}">
+      <div>
+        <div class="thumb-stack">${thumbs}${addBtn}</div>
+        <div class="img-count-badge">${item.images.length} image${item.images.length>1?'s':''}</div>
+      </div>
       <div class="item-info">
-        <div class="item-name">${item.file.name}</div>
+        <div class="item-name">${item.sku || '(no SKU)'} ${item.images.length>1 ? `· ${item.images[0].name} +${item.images.length-1}` : '· '+item.images[0].name}</div>
         <div class="item-inputs">
-          <input class="item-input" placeholder="SKU" value="${item.sku}"
-            oninput="updateItem('${item.id}','sku',this.value)" ${item.status!=='pending'?'disabled':''}>
-          <input class="item-input" placeholder="Cost ₹" value="${item.costPrice}" type="number"
-            oninput="updateItem('${item.id}','costPrice',this.value)" ${item.status!=='pending'?'disabled':''}>
+          <input class="item-input" data-field="sku" placeholder="SKU" value="${item.sku}"
+            oninput="onFieldInput('${item.id}','sku',this.value)" ${locked?'disabled':''}>
+          <input class="item-input" data-field="costPrice" placeholder="Cost ₹" value="${item.costPrice}" type="number"
+            oninput="onFieldInput('${item.id}','costPrice',this.value)" ${locked?'disabled':''}>
+          <input class="item-input title-input" data-field="title" placeholder="Custom title (optional, AI used if blank)" value="${item.title}"
+            oninput="onFieldInput('${item.id}','title',this.value)" ${locked?'disabled':''}>
         </div>
-        <div class="item-meta">
-          ${item.costPrice ? `<span>CP: ₹${item.costPrice}</span><span class="item-price">SP: ₹${sp}</span>` : '<span style="color:var(--yellow)">Enter cost price</span>'}
-        </div>
+        <div class="item-meta" id="meta-${item.id}">${metaHtml(item, sp)}</div>
+        ${item.status==='failed' && item.error ? `<div class="item-error-msg">⚠ ${item.error}</div>` : ''}
       </div>
       <div class="item-actions">
         <span class="badge ${badgeClass}">${badgeText}</span>
         ${item.status==='pending' ? `<button class="remove-btn" onclick="removeItem('${item.id}')">×</button>` : ''}
+        ${item.status==='failed' ? `<button class="btn btn-ghost btn-sm" onclick="retryItem('${item.id}')">↻ Retry</button>` : ''}
       </div>
     </div>`;
-  }).join('');
 }
 
-function updateItem(id, field, val) {
+function metaHtml(item, sp) {
+  return item.costPrice
+    ? `<span>CP: ₹${item.costPrice}</span><span class="item-price">SP: ₹${sp}</span>`
+    : `<span style="color:var(--yellow)">Enter cost price</span>`;
+}
+
+// ── Targeted, non-destructive updates (THIS fixes the disappearing-input bug) ─
+// We never call renderQueue() on every keystroke — that rebuilt the DOM and
+// stole focus after a single character. Instead we mutate state + update only
+// the small "meta" line (price preview) directly, leaving inputs untouched.
+function onFieldInput(id, field, val) {
   const item = queue.find(q => q.id == id);
-  if (item) { item[field] = val; renderQueue(); }
+  if (!item) return;
+  item[field] = val;
+  if (field === 'sku') {
+    // keep item name label fresh without nuking inputs — patch just the name line
+    const nameEl = document.querySelector(`#qi-${id} .item-name`);
+    if (nameEl) {
+      const extra = item.images.length>1 ? `· ${item.images[0].name} +${item.images.length-1}` : '· '+item.images[0].name;
+      nameEl.textContent = `${item.sku || '(no SKU)'} ${extra}`;
+    }
+  }
+  if (field === 'costPrice' || field === 'sku') {
+    const sp = item.costPrice ? calcSP(parseFloat(item.costPrice), getMarkup()) : null;
+    const metaEl = document.getElementById(`meta-${id}`);
+    if (metaEl) metaEl.innerHTML = metaHtml(item, sp);
+  }
+  updateStats();
+}
+
+// Re-render price previews (e.g. when markup changes) without losing focus —
+// safe because it only touches the meta spans, never the inputs themselves.
+document.querySelectorAll('input[name="markup"]').forEach(r => {
+  r.addEventListener('change', () => {
+    queue.forEach(item => {
+      const sp = item.costPrice ? calcSP(parseFloat(item.costPrice), getMarkup()) : null;
+      const metaEl = document.getElementById(`meta-${item.id}`);
+      if (metaEl) metaEl.innerHTML = metaHtml(item, sp);
+    });
+    updateStats();
+  });
+});
+
+function addImagesToItem(id) {
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = 'image/*'; input.multiple = true;
+  input.onchange = () => {
+    const item = queue.find(q => q.id == id);
+    if (!item) return;
+    [...input.files].forEach(file => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        item.images.push({ file, thumb: e.target.result, name: file.name });
+        renderQueue();
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+  input.click();
+}
+
+function removeImage(id, idx) {
+  const item = queue.find(q => q.id == id);
+  if (!item) return;
+  item.images.splice(idx, 1);
+  if (item.images.length === 0) {
+    queue = queue.filter(q => q.id != id);
+  }
+  renderQueue();
+  updateStats();
 }
 
 function removeItem(id) {
   queue = queue.filter(q => q.id != id);
   renderQueue();
+  updateStats();
 }
 
 function clearDone() {
-  queue = queue.filter(q => q.status === 'pending');
+  queue = queue.filter(q => q.status !== 'success');
+  renderQueue();
+  updateStats();
+}
+
+function retryItem(id) {
+  const item = queue.find(q => q.id == id);
+  if (!item) return;
+  item.status = 'pending'; item.error = null;
   renderQueue();
 }
 
-// ── Price calculator: cost×markup, round up to nearest price tier ─────────────
+function retryFailed() {
+  let count = 0;
+  queue.forEach(q => { if (q.status === 'failed') { q.status = 'pending'; q.error = null; count++; } });
+  renderQueue();
+  if (count) { toast(`Re-queued ${count} failed item(s)`, 'success'); uploadAll(); }
+  else toast('No failed items to retry', 'error');
+}
+
+// ── Price calculator: cost×markup, round up to nearest charm-price tier ───────
 function getMarkup() {
   return parseFloat(document.querySelector('input[name="markup"]:checked')?.value || 4);
 }
@@ -466,50 +744,115 @@ function calcSP(cp, markup) {
 }
 function bulkSetPrice() {
   const cp = parseFloat(document.getElementById('bulk-cp').value);
-  if (!cp || isNaN(cp)) return;
+  if (!cp || isNaN(cp)) { toast('Enter a valid bulk cost price', 'error'); return; }
   queue.forEach(q => { if (q.status === 'pending') q.costPrice = String(cp); });
   renderQueue();
+  updateStats();
+  toast(`Applied ₹${cp} cost to all pending items`, 'success');
 }
 
-// ── Upload all ────────────────────────────────────────────────────────────────
+// ── Stats dashboard ───────────────────────────────────────────────────────────
+function updateStats() {
+  const queued  = queue.filter(q => q.status === 'pending' || q.status === 'uploading').length;
+  const success = queue.filter(q => q.status === 'success').length;
+  const failed  = queue.filter(q => q.status === 'failed').length;
+  const value   = queue.reduce((sum, q) => {
+    if (!q.costPrice) return sum;
+    return sum + calcSP(parseFloat(q.costPrice), getMarkup());
+  }, 0);
+
+  document.getElementById('stat-queued').textContent  = queued;
+  document.getElementById('stat-success').textContent = success;
+  document.getElementById('stat-failed').textContent  = failed;
+  document.getElementById('stat-value').textContent   = `₹${value.toLocaleString('en-IN')}`;
+
+  document.getElementById('ms-total').textContent = success;
+  const total = success + failed;
+  document.getElementById('ms-rate').textContent = total ? Math.round((success/total)*100) + '%' : '—';
+}
+
+// ── Upload all (with concurrency control) ─────────────────────────────────────
 async function uploadAll() {
   const pending = queue.filter(q => q.status === 'pending');
-  if (!pending.length) return;
+  if (!pending.length) { toast('Nothing to upload', 'error'); return; }
+
+  const invalid = pending.filter(q => !q.sku || !q.costPrice);
+  if (invalid.length) {
+    invalid.forEach(q => addLog(`⚠️ Skipping ${q.sku || q.images[0].name} — missing SKU or cost price`, 'error'));
+  }
+  const valid = pending.filter(q => q.sku && q.costPrice);
+  if (!valid.length) { toast('All pending items are missing SKU or cost price', 'error'); return; }
 
   const btn = document.getElementById('upload-all-btn');
   btn.disabled = true;
-  btn.textContent = 'Uploading…';
+  btn.innerHTML = '<span class="spinner"></span> Uploading…';
   if (firstLog) { logBox.innerHTML = ''; firstLog = false; }
 
-  for (const item of pending) {
-    if (!item.sku || !item.costPrice) {
-      addLog(`⚠️ Skipping ${item.file.name} — missing SKU or cost price`, 'error');
-      continue;
+  const progWrap = document.getElementById('progress-wrap');
+  const progBar  = document.getElementById('progress-bar');
+  const progLbl  = document.getElementById('progress-label');
+  progWrap.style.display = 'block'; progLbl.style.display = 'block';
+  let done = 0;
+  const total = valid.length;
+  const updateProgress = () => {
+    progBar.style.width = `${Math.round((done/total)*100)}%`;
+    progLbl.textContent = `${done} / ${total} products processed`;
+  };
+  updateProgress();
+
+  const concurrency = parseInt(document.getElementById('concurrency').value || '3');
+  let cursor = 0;
+
+  async function worker() {
+    while (cursor < valid.length) {
+      const item = valid[cursor++];
+      await uploadOne(item);
+      done++; updateProgress();
     }
-    item.status = 'uploading';
-    renderQueue();
-
-    try {
-      // 1. Upload file to server
-      const fd = new FormData();
-      fd.append('image', item.file);
-      fd.append('sku', item.sku);
-      fd.append('cost_price', item.costPrice);
-      const res = await fetch('/upload', { method: 'POST', body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-
-      // 2. Trigger pipeline via socket
-      socket.emit('start_upload', { filename: data.filename, sku: item.sku, cost_price: item.costPrice });
-      // status will update via 'product_done' event
-    } catch(e) {
-      item.status = 'failed';
-      renderQueue();
-      addLog(`❌ Upload failed for ${item.file.name}: ${e.message}`, 'error');
-    }
-
-    await sleep(500); // stagger uploads slightly
   }
+
+  await Promise.all(Array.from({length: Math.min(concurrency, valid.length)}, worker));
+
+  setTimeout(() => { progWrap.style.display = 'none'; progLbl.style.display = 'none'; }, 1200);
+}
+
+async function uploadOne(item) {
+  item.status = 'uploading';
+  renderQueue();
+
+  try {
+    const fd = new FormData();
+    item.images.forEach(img => fd.append('images', img.file));
+    fd.append('sku', item.sku);
+    const res = await fetch('/upload', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Upload failed');
+
+    socket.emit('start_upload', {
+      filenames: data.filenames,
+      sku: item.sku,
+      cost_price: item.costPrice,
+      markup: getMarkup(),
+      title: item.title
+    });
+    // status updates arrive via 'product_done'; wait for it before worker moves on
+    await waitForCompletion(item);
+  } catch (e) {
+    item.status = 'failed';
+    item.error = e.message;
+    renderQueue();
+    addLog(`❌ Upload failed for ${item.sku}: ${e.message}`, 'error');
+  }
+}
+
+function waitForCompletion(item) {
+  return new Promise(resolve => {
+    const check = () => {
+      if (item.status !== 'uploading') return resolve();
+      setTimeout(check, 300);
+    };
+    check();
+  });
 }
 
 function checkAllDone() {
@@ -517,19 +860,19 @@ function checkAllDone() {
   if (allDone) {
     const btn = document.getElementById('upload-all-btn');
     btn.disabled = false;
-    btn.textContent = '⬆ Upload All';
+    btn.innerHTML = '⬆ Upload All';
   }
 }
 
 // ── Results ───────────────────────────────────────────────────────────────────
 function addResult(data) {
   const section = document.getElementById('results-section');
-  const list    = document.getElementById('results-list');
+  const list = document.getElementById('results-list');
   section.style.display = 'block';
   const card = document.createElement('div');
   card.className = 'result-card success';
   card.innerHTML = `
-    <div class="result-info">
+    <div>
       <div class="result-title">${data.title || data.sku}</div>
       <div class="result-meta">SKU: ${data.sku} · Price: ₹${data.selling_price}</div>
     </div>
@@ -540,23 +883,57 @@ function addResult(data) {
 // ── History ───────────────────────────────────────────────────────────────────
 async function loadHistory() {
   const tbody = document.getElementById('history-tbody');
-  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:32px">Loading…</td></tr>';
-  const res  = await fetch('/history');
-  const rows = await res.json();
+  tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:32px">Loading…</td></tr>';
+  const res = await fetch('/history');
+  history = await res.json();
+  renderHistory();
+}
+
+function setHistoryFilter(f) {
+  historyFilter = f;
+  ['all','success','failed'].forEach(k => {
+    document.getElementById('hf-'+k).style.background = k===f ? 'var(--accent)' : '';
+    document.getElementById('hf-'+k).style.color = k===f ? '#fff' : '';
+  });
+  renderHistory();
+}
+
+function renderHistory() {
+  const tbody = document.getElementById('history-tbody');
+  const q = (document.getElementById('history-search').value || '').toLowerCase();
+  let rows = history;
+  if (historyFilter !== 'all') rows = rows.filter(r => r.status === historyFilter);
+  if (q) rows = rows.filter(r => (r.sku||'').toLowerCase().includes(q) || (r.title||'').toLowerCase().includes(q));
+
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:32px">No uploads yet</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:32px">No matching uploads</td></tr>';
     return;
   }
-  tbody.innerHTML = rows.map(r => `
+  tbody.innerHTML = rows.map((r) => {
+    const origIdx = history.indexOf(r);
+    return `
     <tr>
-      <td style="color:var(--muted)">${r.timestamp?.slice(11,19) || '—'}</td>
+      <td style="color:var(--muted)">${r.timestamp?.slice(0,19).replace('T',' ') || '—'}</td>
       <td><strong>${r.sku}</strong></td>
       <td>${r.title || '—'}</td>
+      <td style="color:var(--muted)">${r.image_count || 1}</td>
       <td>₹${r.cost_price}</td>
       <td style="color:var(--green)">₹${r.selling_price}</td>
       <td class="${r.status==='success'?'status-ok':'status-fail'}">${r.status}</td>
-      <td>${r.shopify_url ? `<a href="${r.shopify_url}" target="_blank" class="result-link">View →</a>` : r.error || '—'}</td>
-    </tr>`).join('');
+      <td>${r.shopify_url ? `<a href="${r.shopify_url}" target="_blank" class="result-link">View →</a>` : `<span style="color:var(--red);font-size:11px">${(r.error||'—').slice(0,40)}</span>`}</td>
+      <td><button class="row-del" onclick="deleteHistoryRow(${origIdx})" title="Delete row">🗑</button></td>
+    </tr>`;
+  }).join('');
+}
+
+async function deleteHistoryRow(idx) {
+  await fetch(`/history/${idx}`, { method: 'DELETE' });
+  history.splice(idx, 1);
+  renderHistory();
+}
+
+function exportCsv() {
+  window.open('/history/csv', '_blank');
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────────
@@ -571,10 +948,34 @@ async function saveSettings() {
   await fetch('/save_settings', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
   const msg = document.getElementById('save-msg');
   msg.style.display = 'inline';
-  // Update status dots
   if (payload.groq_api_key)   document.getElementById('dot-groq').className    = 'dot ok';
   if (payload.shopify_store)  document.getElementById('dot-shopify').className = 'dot ok';
+  toast('Settings saved', 'success');
   setTimeout(() => msg.style.display = 'none', 2500);
+}
+
+async function testShopify() {
+  await saveSettings();
+  const el = document.getElementById('test-shopify-result');
+  el.textContent = 'Testing…'; el.style.color = 'var(--muted)';
+  try {
+    const res = await fetch('/test_shopify', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) { el.textContent = `✅ Connected to ${data.shop_name}`; el.style.color = 'var(--green)'; }
+    else { el.textContent = `❌ ${data.error}`; el.style.color = 'var(--red)'; }
+  } catch (e) { el.textContent = `❌ ${e.message}`; el.style.color = 'var(--red)'; }
+}
+
+async function testGroq() {
+  await saveSettings();
+  const el = document.getElementById('test-groq-result');
+  el.textContent = 'Testing…'; el.style.color = 'var(--muted)';
+  try {
+    const res = await fetch('/test_groq', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) { el.textContent = '✅ Groq key works'; el.style.color = 'var(--green)'; }
+    else { el.textContent = `❌ ${data.error}`; el.style.color = 'var(--red)'; }
+  } catch (e) { el.textContent = `❌ ${e.message}`; el.style.color = 'var(--red)'; }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -586,25 +987,30 @@ function addLog(msg, level='info') {
   logBox.appendChild(line);
   logBox.scrollTop = logBox.scrollHeight;
 }
-
 function clearLog() { logBox.innerHTML = ''; firstLog = true; }
-const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// Keyboard shortcut: Ctrl/Cmd+Enter uploads all pending
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') uploadAll();
+});
 
 // ── Load saved settings into form ─────────────────────────────────────────────
 async function loadSettingsForm() {
   try {
-    const res  = await fetch('/get_settings');
+    const res = await fetch('/get_settings');
     const data = await res.json();
-    if (data.shopify_store) document.getElementById('s-store').value  = data.shopify_store;
-    if (data.shopify_token) document.getElementById('s-token').value  = data.shopify_token;
-    if (data.groq_api_key)  document.getElementById('s-groq').value   = data.groq_api_key;
+    if (data.shopify_store) document.getElementById('s-store').value = data.shopify_store;
+    if (data.shopify_token) document.getElementById('s-token').value = data.shopify_token;
+    if (data.groq_api_key) document.getElementById('s-groq').value = data.groq_api_key;
     if (data.product_vendor) document.getElementById('s-vendor').value = data.product_vendor;
-    if (data.product_type)  document.getElementById('s-type').value   = data.product_type;
-    if (data.groq_api_key)   document.getElementById('dot-groq').className    = 'dot ok';
-    if (data.shopify_store)  document.getElementById('dot-shopify').className = 'dot ok';
+    if (data.product_type) document.getElementById('s-type').value = data.product_type;
+    if (data.groq_api_key) document.getElementById('dot-groq').className = 'dot ok';
+    if (data.shopify_store) document.getElementById('dot-shopify').className = 'dot ok';
   } catch(e) {}
 }
 loadSettingsForm();
+updateStats();
+setHistoryFilter('all');
 </script>
 </body>
 </html>
