@@ -139,17 +139,21 @@
 
   .item-info { min-width: 0; }
   .item-name { font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .item-inputs { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .item-inputs { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; align-items: center; }
   .item-input { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 9px; color: var(--text); font-size: 12px; width: 110px; }
   .item-input:focus { outline: none; border-color: var(--accent); }
   .item-input::placeholder { color: #56627a; }
   .item-input.title-input { width: 220px; }
   .item-input.tags-input { width: 200px; }
+  .item-input.variant-input { width: 170px; }
   select.item-input { width: 150px; cursor: pointer; }
   .item-input.narrow { width: 90px; }
   .item-meta { font-size: 11.5px; color: var(--muted); margin-top: 7px; display: flex; gap: 12px; flex-wrap: wrap; align-items:center; }
   .item-price { color: var(--green); font-weight: 700; }
   .item-error-msg { font-size: 11px; color: var(--red); margin-top: 6px; }
+  .variant-pill { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 99px; background: rgba(139,92,246,.15); color: var(--accent); }
+  .preset-btn { font-size: 10.5px; padding: 5px 9px; border-radius: 7px; background: var(--surface3); color: var(--muted); border: 1px solid var(--border); cursor: pointer; }
+  .preset-btn:hover { color: var(--accent); border-color: var(--accent); }
 
   .item-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
   .badge { font-size: 10px; font-weight: 800; padding: 4px 9px; border-radius: 99px; white-space:nowrap; }
@@ -281,6 +285,8 @@
       e.g. SHIRT001_250.jpg<br><br>
       <strong style="color:var(--text)">Multi-image tip</strong><br>
       Use "Select Folder" — every image inside one folder groups into a single product. Name the folder SKU_CostPrice (e.g. SHIRT001_250) to pre-fill SKU + cost.<br><br>
+      <strong style="color:var(--text)">Color / Size variants</strong><br>
+      Fill Colors and/or Sizes on a product card to generate real Shopify variants (e.g. Red/2.4, Red/2.6...). Leave both blank for a single-variant product.<br><br>
       <strong style="color:var(--text)">Sales channels</strong><br>
       Every product is auto-published to <em>all</em> active sales channels (Online Store, POS, Shop, Google, Facebook/Instagram, etc.) — no manual step needed.
     </div>
@@ -294,7 +300,7 @@
       <div class="page-header">
         <div>
           <div class="page-title">Upload Products</div>
-          <div class="page-sub">Drop images — group multiple shots per product — set price — hit Upload All</div>
+          <div class="page-sub">Drop images — group multiple shots per product — set price &amp; variants — hit Upload All</div>
         </div>
         <span class="channel-pill">🌐 Publishes to all sales channels</span>
       </div>
@@ -352,6 +358,10 @@
         <input id="bulk-hs" type="text" class="item-input narrow" placeholder="HS code">
         <input id="bulk-origin" type="text" class="item-input narrow" placeholder="Origin">
         <button class="btn btn-ghost btn-sm" onclick="bulkSetHsOrigin()">Apply</button>
+        <div class="divider"></div>
+        <span class="toolbar-label">Bulk Sizes</span>
+        <input id="bulk-sizes" type="text" class="item-input variant-input" placeholder="e.g. 2.4,2.6,2.8">
+        <button class="btn btn-ghost btn-sm" onclick="bulkSetSizes()">Apply</button>
         <div class="divider"></div>
         <span class="toolbar-label">Upload Speed</span>
         <select id="concurrency" class="item-input" style="width:140px;" title="How many products to send to Shopify at once">
@@ -416,12 +426,12 @@
         <table>
           <thead>
             <tr>
-              <th>Time</th><th>SKU</th><th>Title</th><th>Images</th>
+              <th>Time</th><th>SKU</th><th>Title</th><th>Images</th><th>Variants</th>
               <th>Cost</th><th>Price</th><th>HS Code</th><th>Origin</th><th>Status</th><th>Link</th><th></th>
             </tr>
           </thead>
           <tbody id="history-tbody">
-            <tr><td colspan="11" style="text-align:center;color:var(--muted);padding:32px">Loading...</td></tr>
+            <tr><td colspan="12" style="text-align:center;color:var(--muted);padding:32px">Loading...</td></tr>
           </tbody>
         </table>
       </div>
@@ -456,6 +466,7 @@
             <button class="btn btn-ghost btn-sm" onclick="testGroq()">Test</button>
           </div>
           <span class="test-result" id="test-groq-result"></span>
+          <span style="font-size:11px;color:var(--muted)">Free tier is rate-limited — the pipeline auto-retries on 429s, but very fast/large batches may still hit limits occasionally.</span>
         </div>
         <div class="field">
           <label>Product Vendor</label>
@@ -481,6 +492,10 @@
           <label>Default Inventory Qty</label>
           <input type="number" id="s-qty" placeholder="10">
         </div>
+        <div class="field full">
+          <label>Default Bangle Sizes (for quick-fill preset)</label>
+          <input type="text" id="s-bangle-sizes" placeholder="2.4,2.6,2.8">
+        </div>
         <div class="save-row">
           <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
           <span class="save-msg" id="save-msg">✅ Saved!</span>
@@ -493,7 +508,7 @@
           1. Get free Groq key → <a href="https://console.groq.com" target="_blank" style="color:var(--accent)">console.groq.com</a><br>
           2. Get Shopify token → Admin → Settings → Apps → Develop apps<br>
           3. Scopes needed: <code style="color:var(--text)">write_products</code>, <code style="color:var(--text)">write_inventory</code>, <code style="color:var(--text)">write_publications</code><br>
-          4. Drop images (group multiple shots per SKU), set prices + HS code/origin, click Upload All<br>
+          4. Drop images, set prices + HS code/origin, optionally add Colors/Sizes for variants, click Upload All<br>
           5. Products are auto-published to every connected sales channel — Online Store, POS, Shop app, Google, Facebook/Instagram, etc.<br>
           6. Use "Test" buttons above to confirm credentials before a big batch
         </div>
@@ -507,12 +522,13 @@
 const socket = io();
 
 // Each queue item = one PRODUCT, can hold multiple images.
-// { id, sku, costPrice, title, images: [{file, thumb, name}], status, error }
+// { id, sku, costPrice, title, colors, sizes, images: [{file, thumb, name}], status, error }
 let queue = [];
 let history = [];
 let historyFilter = 'all';
 let logBox = document.getElementById('log-box');
 let firstLog = true;
+let DEFAULT_BANGLE_SIZES = '2.4,2.6,2.8';
 
 // ── Toasts ────────────────────────────────────────────────────────────────────
 function toast(msg, type='success') {
@@ -657,6 +673,7 @@ function addToQueue({ file, relativePath }) {
         id: Date.now() + Math.random(),
         groupKey, sku, costPrice: cost, title: '',
         category: '', tags: '', weight: '', hscode: '', origin: '', qty: '',
+        colors: '', sizes: '',
         images: [{ file, thumb, name: file.name }],
         status: 'pending', error: null
       };
@@ -678,11 +695,19 @@ function renderQueue() {
   list.innerHTML = queue.map(item => buildQueueItemHtml(item)).join('');
 }
 
+function variantCountFor(item) {
+  const colors = (item.colors || '').split(',').map(s => s.trim()).filter(Boolean);
+  const sizes = (item.sizes || '').split(',').map(s => s.trim()).filter(Boolean);
+  if (!colors.length && !sizes.length) return 1;
+  return Math.max(colors.length, 1) * Math.max(sizes.length, 1);
+}
+
 function buildQueueItemHtml(item) {
   const sp = item.costPrice ? calcSP(parseFloat(item.costPrice), getMarkup()) : null;
   const badgeClass = {pending:'badge-pending',uploading:'badge-running',success:'badge-success',failed:'badge-failed'}[item.status];
   const badgeText  = {pending:'Pending',uploading:'Uploading…',success:'Done ✅',failed:'Failed ❌'}[item.status];
   const locked = item.status !== 'pending';
+  const vCount = variantCountFor(item);
 
   const thumbs = item.images.map((img, idx) => `
       <div class="thumb-wrap">
@@ -699,7 +724,9 @@ function buildQueueItemHtml(item) {
         <div class="img-count-badge">${item.images.length} image${item.images.length>1?'s':''}</div>
       </div>
       <div class="item-info">
-        <div class="item-name">${item.sku || '(no SKU)'} ${item.images.length>1 ? `· ${item.images[0].name} +${item.images.length-1}` : '· '+item.images[0].name}</div>
+        <div class="item-name">${item.sku || '(no SKU)'} ${item.images.length>1 ? `· ${item.images[0].name} +${item.images.length-1}` : '· '+item.images[0].name}
+          ${vCount > 1 ? `<span class="variant-pill" id="vpill-${item.id}">${vCount} variants</span>` : ''}
+        </div>
         <div class="item-inputs">
           <input class="item-input" data-field="sku" placeholder="SKU" value="${item.sku}"
             oninput="onFieldInput('${item.id}','sku',this.value)" ${locked?'disabled':''}>
@@ -725,6 +752,13 @@ function buildQueueItemHtml(item) {
             oninput="onFieldInput('${item.id}','hscode',this.value)" ${locked?'disabled':''}>
           <input class="item-input narrow" data-field="origin" placeholder="Origin IN" value="${item.origin}"
             oninput="onFieldInput('${item.id}','origin',this.value)" ${locked?'disabled':''}>
+        </div>
+        <div class="item-inputs">
+          <input class="item-input variant-input" data-field="colors" placeholder="Colors e.g. Red, Gold, Silver" value="${item.colors}"
+            oninput="onFieldInput('${item.id}','colors',this.value)" ${locked?'disabled':''}>
+          <input class="item-input variant-input" data-field="sizes" placeholder="Sizes e.g. 2.4,2.6,2.8" value="${item.sizes}"
+            oninput="onFieldInput('${item.id}','sizes',this.value)" ${locked?'disabled':''}>
+          ${!locked ? `<button class="preset-btn" onclick="applyBangleSizes('${item.id}')" title="Fill default bangle sizes">📏 Bangle sizes</button>` : ''}
         </div>
         <div class="item-meta" id="meta-${item.id}">${metaHtml(item, sp)}</div>
         ${item.status==='failed' && item.error ? `<div class="item-error-msg">⚠ ${item.error}</div>` : ''}
@@ -752,7 +786,8 @@ function onFieldInput(id, field, val) {
     const nameEl = document.querySelector(`#qi-${id} .item-name`);
     if (nameEl) {
       const extra = item.images.length>1 ? `· ${item.images[0].name} +${item.images.length-1}` : '· '+item.images[0].name;
-      nameEl.textContent = `${item.sku || '(no SKU)'} ${extra}`;
+      const vCount = variantCountFor(item);
+      nameEl.innerHTML = `${item.sku || '(no SKU)'} ${extra} ${vCount > 1 ? `<span class="variant-pill">${vCount} variants</span>` : ''}`;
     }
   }
   if (field === 'costPrice' || field === 'sku') {
@@ -760,7 +795,23 @@ function onFieldInput(id, field, val) {
     const metaEl = document.getElementById(`meta-${id}`);
     if (metaEl) metaEl.innerHTML = metaHtml(item, sp);
   }
+  if (field === 'colors' || field === 'sizes') {
+    const nameEl = document.querySelector(`#qi-${id} .item-name`);
+    if (nameEl) {
+      const extra = item.images.length>1 ? `· ${item.images[0].name} +${item.images.length-1}` : '· '+item.images[0].name;
+      const vCount = variantCountFor(item);
+      nameEl.innerHTML = `${item.sku || '(no SKU)'} ${extra} ${vCount > 1 ? `<span class="variant-pill">${vCount} variants</span>` : ''}`;
+    }
+  }
   updateStats();
+}
+
+function applyBangleSizes(id) {
+  const item = queue.find(q => q.id == id);
+  if (!item) return;
+  item.sizes = DEFAULT_BANGLE_SIZES;
+  renderQueue();
+  toast(`Applied default bangle sizes (${DEFAULT_BANGLE_SIZES})`, 'success');
 }
 
 document.querySelectorAll('input[name="markup"]').forEach(r => {
@@ -866,6 +917,13 @@ function bulkSetHsOrigin() {
   renderQueue();
   toast('Applied HS code / origin to all pending items', 'success');
 }
+function bulkSetSizes() {
+  const sizes = document.getElementById('bulk-sizes').value.trim();
+  if (!sizes) { toast('Enter sizes to apply', 'error'); return; }
+  queue.forEach(q => { if (q.status === 'pending') q.sizes = sizes; });
+  renderQueue();
+  toast(`Applied sizes "${sizes}" to all pending items`, 'success');
+}
 
 // ── Stats dashboard ───────────────────────────────────────────────────────────
 function updateStats() {
@@ -874,7 +932,7 @@ function updateStats() {
   const failed  = queue.filter(q => q.status === 'failed').length;
   const value   = queue.reduce((sum, q) => {
     if (!q.costPrice) return sum;
-    return sum + calcSP(parseFloat(q.costPrice), getMarkup());
+    return sum + calcSP(parseFloat(q.costPrice), getMarkup()) * variantCountFor(q);
   }, 0);
 
   document.getElementById('stat-queued').textContent  = queued;
@@ -954,7 +1012,9 @@ async function uploadOne(item) {
       tags: item.tags,
       weight_g: item.weight || null,
       hs_code: item.hscode,
-      country_of_origin: item.origin
+      country_of_origin: item.origin,
+      colors: item.colors,
+      sizes: item.sizes
     });
     await waitForCompletion(item);
   } catch (e) {
@@ -1003,7 +1063,7 @@ function addResult(data) {
 // ── History ───────────────────────────────────────────────────────────────────
 async function loadHistory() {
   const tbody = document.getElementById('history-tbody');
-  tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:32px">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:32px">Loading…</td></tr>';
   const res = await fetch('/history');
   history = await res.json();
   renderHistory();
@@ -1026,7 +1086,7 @@ function renderHistory() {
   if (q) rows = rows.filter(r => (r.sku||'').toLowerCase().includes(q) || (r.title||'').toLowerCase().includes(q));
 
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:32px">No matching uploads</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:32px">No matching uploads</td></tr>';
     return;
   }
   tbody.innerHTML = rows.map((r) => {
@@ -1037,6 +1097,7 @@ function renderHistory() {
       <td><strong>${r.sku}</strong></td>
       <td>${r.title || '—'}</td>
       <td style="color:var(--muted)">${r.image_count || 1}</td>
+      <td style="color:var(--muted)">${r.variant_count || 1}</td>
       <td>₹${r.cost_price}</td>
       <td style="color:var(--green)">₹${r.selling_price}</td>
       <td style="color:var(--muted)">${r.hs_code || '—'}</td>
@@ -1070,12 +1131,14 @@ async function saveSettings() {
     default_weight_g: document.getElementById('s-weight').value.trim(),
     default_country_of_origin: document.getElementById('s-origin').value.trim(),
     default_inventory_qty: document.getElementById('s-qty').value.trim(),
+    default_bangle_sizes: document.getElementById('s-bangle-sizes').value.trim(),
   };
   await fetch('/save_settings', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
   const msg = document.getElementById('save-msg');
   msg.style.display = 'inline';
   if (payload.groq_api_key)   document.getElementById('dot-groq').className    = 'dot ok';
   if (payload.shopify_store)  document.getElementById('dot-shopify').className = 'dot ok';
+  if (payload.default_bangle_sizes) DEFAULT_BANGLE_SIZES = payload.default_bangle_sizes;
   toast('Settings saved', 'success');
   setTimeout(() => msg.style.display = 'none', 2500);
 }
@@ -1134,6 +1197,8 @@ async function loadSettingsForm() {
     document.getElementById('s-weight').value = data.default_weight_g || 1;
     document.getElementById('s-origin').value = data.default_country_of_origin || 'IN';
     document.getElementById('s-qty').value = data.default_inventory_qty || 10;
+    document.getElementById('s-bangle-sizes').value = data.default_bangle_sizes || '2.4,2.6,2.8';
+    DEFAULT_BANGLE_SIZES = data.default_bangle_sizes || '2.4,2.6,2.8';
     if (data.groq_api_key) document.getElementById('dot-groq').className = 'dot ok';
     if (data.shopify_store) document.getElementById('dot-shopify').className = 'dot ok';
   } catch(e) {}
