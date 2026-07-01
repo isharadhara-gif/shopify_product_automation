@@ -515,21 +515,23 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid, manual
 
     if colors and sizes:
         options = [{'name': 'Color', 'values': colors}, {'name': 'Size', 'values': sizes}]
+        idx = 1
         for c in colors:
             for s in sizes:
                 variants.append({
                     **base_variant_fields,
                     'option1': c, 'option2': s,
-                    'sku': f'{sku}-{slugify(c).upper()}-{s}',
+                    'sku': f'{sku}.{idx}',
                 })
+                idx += 1
     elif colors:
         options = [{'name': 'Color', 'values': colors}]
-        for c in colors:
-            variants.append({**base_variant_fields, 'option1': c, 'sku': f'{sku}-{slugify(c).upper()}'})
+        for idx, c in enumerate(colors, start=1):
+            variants.append({**base_variant_fields, 'option1': c, 'sku': f'{sku}.{idx}'})
     elif sizes:
         options = [{'name': 'Size', 'values': sizes}]
-        for s in sizes:
-            variants.append({**base_variant_fields, 'option1': s, 'sku': f'{sku}-{s}'})
+        for idx, s in enumerate(sizes, start=1):
+            variants.append({**base_variant_fields, 'option1': s, 'sku': f'{sku}.{idx}'})
     else:
         variants = [{**base_variant_fields, 'sku': sku}]
 
@@ -744,6 +746,10 @@ def handle_start_upload(data):
     inventory_qty = data.get('inventory_qty')
     colors = data.get('colors') or []
     sizes = data.get('sizes') or []
+    if isinstance(colors, str):
+        colors = [c.strip() for c in colors.split(',') if c.strip()]
+    if isinstance(sizes, str):
+        sizes = [s.strip() for s in sizes.split(',') if s.strip()]
     selling_price = calc_sp(cost_price, markup)
     compare_at_price = int(round(selling_price * 2))
     image_paths = [UPLOAD_DIR / fn for fn in filenames]
