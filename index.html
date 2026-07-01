@@ -1013,8 +1013,8 @@ async function uploadOne(item) {
       weight_g: item.weight || null,
       hs_code: item.hscode,
       country_of_origin: item.origin,
-      colors: item.colors,
-      sizes: item.sizes
+      colors: (item.colors || '').split(',').map(s => s.trim()).filter(Boolean),
+      sizes: (item.sizes || '').split(',').map(s => s.trim()).filter(Boolean)
     });
     await waitForCompletion(item);
   } catch (e) {
