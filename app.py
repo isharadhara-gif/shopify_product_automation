@@ -13,6 +13,8 @@ DEFAULT_COUNTRY_OF_ORIGIN = 'IN'
 # Inventory Tracker=shopify, Inventory Policy=deny, Fulfillment Service=manual,
 # Requires Shipping=true, Taxable=true, Inventory Qty=10, Status=active.
 DEFAULT_INVENTORY_QTY = 10
+# Default bangle size run, used by the "Bangle sizes" quick-fill in the UI
+DEFAULT_BANGLE_SIZES = ['2.4', '2.6', '2.8']
 
 # Target product photo canvas — portrait 3:4, Shopify-friendly
 TARGET_W, TARGET_H = 1080, 1440
@@ -254,6 +256,53 @@ def calc_sp(cp: float, markup: float = 4.0) -> int:
     remainder = base % 1000
     return base - remainder + 999 if remainder < 999 else base + 999
 
+# ── Groq rate limiting / retry ────────────────────────────────────────────────
+# Groq's free tier rate-limits aggressively, and with several products
+# uploading concurrently we were firing multiple vision requests at once and
+# getting 429s. This serializes Groq calls with a minimum gap between them,
+# and retries on 429 with exponential backoff (respecting Retry-After).
+GROQ_CALL_LOCK = threading.Lock()
+GROQ_LAST_CALL_AT = [0.0]
+GROQ_MIN_INTERVAL = 2.2  # seconds between Groq requests, store-wide
+GROQ_MAX_RETRIES = 4
+
+def call_groq_with_backoff(payload, headers, sid):
+    """Serializes + throttles + retries a Groq chat completion call."""
+    last_exc = None
+    for attempt in range(GROQ_MAX_RETRIES):
+        # Throttle: never let two Groq calls (even from different threads)
+        # start less than GROQ_MIN_INTERVAL seconds apart.
+        with GROQ_CALL_LOCK:
+            wait = GROQ_MIN_INTERVAL - (time.time() - GROQ_LAST_CALL_AT[0])
+            if wait > 0:
+                time.sleep(wait)
+            GROQ_LAST_CALL_AT[0] = time.time()
+
+        try:
+            resp = requests.post('https://api.groq.com/openai/v1/chat/completions',
+                                  headers=headers, json=payload, timeout=30)
+            if resp.status_code == 429:
+                retry_after = resp.headers.get('Retry-After')
+                if retry_after:
+                    try:
+                        delay = float(retry_after)
+                    except ValueError:
+                        delay = 2 ** (attempt + 1)
+                else:
+                    delay = 2 ** (attempt + 1)
+                log(sid, f'⏳ Groq rate limit hit — retrying in {delay:.0f}s (attempt {attempt+1}/{GROQ_MAX_RETRIES})', 'muted')
+                time.sleep(delay)
+                last_exc = requests.exceptions.HTTPError(f'429 Too Many Requests')
+                continue
+            resp.raise_for_status()
+            return resp
+        except requests.exceptions.RequestException as e:
+            last_exc = e
+            if attempt < GROQ_MAX_RETRIES - 1:
+                time.sleep(2 ** attempt)
+            continue
+    raise last_exc or RuntimeError('Groq request failed after retries')
+
 # ── Groq: generate ALL product fields ────────────────────────────────────────
 def generate_product_details(image_paths, sku, sid):
     settings = load_settings()
@@ -289,19 +338,16 @@ Respond ONLY with a valid JSON object (no markdown, no extra text):
   "tags": "comma separated relevant tags"
 }}"""
 
-        resp = requests.post(
-            'https://api.groq.com/openai/v1/chat/completions',
-            headers={'Authorization': f'Bearer {groq_key}', 'Content-Type': 'application/json'},
-            json={
-                'model': 'meta-llama/llama-4-scout-17b-16e-instruct',
-                'messages': [{'role': 'user', 'content': [
-                    {'type': 'image_url', 'image_url': {'url': f'data:{mime};base64,{b64}'}},
-                    {'type': 'text', 'text': prompt}
-                ]}],
-                'max_tokens': 500,
-            }, timeout=30
-        )
-        resp.raise_for_status()
+        headers = {'Authorization': f'Bearer {groq_key}', 'Content-Type': 'application/json'}
+        payload = {
+            'model': 'meta-llama/llama-4-scout-17b-16e-instruct',
+            'messages': [{'role': 'user', 'content': [
+                {'type': 'image_url', 'image_url': {'url': f'data:{mime};base64,{b64}'}},
+                {'type': 'text', 'text': prompt}
+            ]}],
+            'max_tokens': 500,
+        }
+        resp = call_groq_with_backoff(payload, headers, sid)
         content = resp.json()['choices'][0]['message']['content'].strip()
         content = content.replace('```json', '').replace('```', '').strip()
         result = json.loads(content)
@@ -360,10 +406,47 @@ def publish_to_all_channels(base_url, headers, product_id, sid):
     except Exception as e:
         log(sid, f'⚠️ Could not publish to all sales channels: {e}', 'error')
 
-# ── Shopify: create product with MULTIPLE images ─────────────────────────────
+def set_inventory_item_details(base_url, headers, inventory_item_id, hs_code_clean, country_of_origin,
+                                cost_price, sid, label=''):
+    """Set HS code / country of origin / cost on one variant's inventory item,
+    with a confirm-and-retry loop (some stores don't persist it on the first try)."""
+    cost_payload = {}
+    if cost_price not in (None, '', 0):
+        cost_payload['cost'] = str(cost_price)
+    for attempt in range(2):
+        try:
+            resp = requests.put(
+                f'{base_url}/inventory_items/{inventory_item_id}.json',
+                headers=headers,
+                json={'inventory_item': {
+                    'id': inventory_item_id,
+                    'harmonized_system_code': hs_code_clean,
+                    'country_code_of_origin': country_of_origin,
+                    **cost_payload,
+                }},
+                timeout=30
+            )
+            if resp.ok:
+                saved = resp.json().get('inventory_item', {})
+                ok = (saved.get('harmonized_system_code') == hs_code_clean and
+                      saved.get('country_code_of_origin') == country_of_origin)
+                if cost_payload:
+                    ok = ok and saved.get('cost') is not None
+                if ok:
+                    log(sid, f'✅ {label}HS {hs_code_clean} · Origin {country_of_origin} confirmed', 'success')
+                    return
+                log(sid, f'⚠️ {label}HS/origin saved but mismatched, retrying…', 'error')
+            else:
+                log(sid, f'⚠️ {label}HS/origin update failed (HTTP {resp.status_code}): {resp.text[:200]}', 'error')
+        except Exception as e:
+            log(sid, f'⚠️ {label}Could not set HS/origin: {e}', 'error')
+        time.sleep(1)
+
+# ── Shopify: create product with MULTIPLE images + optional variants ─────────
 def create_shopify_product(image_paths, sku, selling_price, details, sid, manual_title=None,
                             category=None, manual_tags=None, weight_g=None, hs_code=None,
-                            country_of_origin=None, inventory_qty=None, cost_price=None):
+                            country_of_origin=None, inventory_qty=None, cost_price=None,
+                            colors=None, sizes=None):
     settings = load_settings()
     store = (settings.get('shopify_store') or os.environ.get('SHOPIFY_STORE', '')).replace('https://', '').replace('http://', '').rstrip('/')
     token = settings.get('shopify_token') or os.environ.get('SHOPIFY_TOKEN', '')
@@ -393,8 +476,6 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid, manual
         weight_g = DEFAULT_WEIGHT_G
 
     hs_code_raw = (hs_code or '').strip() or settings.get('default_hs_code', DEFAULT_HS_CODE)
-    # Shopify's harmonized_system_code field rejects punctuation (e.g. "7117.90") —
-    # it must be digits only. Strip everything else before sending.
     hs_code_clean = re.sub(r'[^0-9]', '', hs_code_raw) or re.sub(r'[^0-9]', '', DEFAULT_HS_CODE)
 
     country_of_origin = (country_of_origin or '').strip().upper() or \
@@ -411,9 +492,53 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid, manual
     base_image_name = f'ishhaara-{title_slug}-{random_digits(10)}'
     alt_text = details.get('alt_text') or f'Ishhaara {title}'
 
+    colors = [c.strip() for c in (colors or []) if c.strip()]
+    sizes = [s.strip() for s in (sizes or []) if s.strip()]
+
     log(sid, f'📦 Creating Shopify product: {title}…')
 
-    payload = {'product': {
+    base_variant_fields = {
+        'price': str(selling_price),
+        'compare_at_price': str(compare_at_price),
+        'inventory_management': 'shopify',
+        'inventory_policy': 'deny',
+        'fulfillment_service': 'manual',
+        'requires_shipping': True,
+        'taxable': True,
+        'weight': weight_g,
+        'weight_unit': 'g',
+        'inventory_quantity': inventory_qty,
+        'inventory_item': {
+            'harmonized_system_code': hs_code_clean,
+            'country_code_of_origin': country_of_origin,
+            **({'cost': str(cost_price)} if cost_price not in (None, '', 0) else {}),
+        },
+    }
+
+    options = []
+    variants = []
+
+    if colors and sizes:
+        options = [{'name': 'Color', 'values': colors}, {'name': 'Size', 'values': sizes}]
+        for c in colors:
+            for s in sizes:
+                variants.append({
+                    **base_variant_fields,
+                    'option1': c, 'option2': s,
+                    'sku': f'{sku}-{slugify(c).upper()}-{s}',
+                })
+    elif colors:
+        options = [{'name': 'Color', 'values': colors}]
+        for c in colors:
+            variants.append({**base_variant_fields, 'option1': c, 'sku': f'{sku}-{slugify(c).upper()}'})
+    elif sizes:
+        options = [{'name': 'Size', 'values': sizes}]
+        for s in sizes:
+            variants.append({**base_variant_fields, 'option1': s, 'sku': f'{sku}-{s}'})
+    else:
+        variants = [{**base_variant_fields, 'sku': sku}]
+
+    product_payload = {
         'title': title,
         'body_html': description,
         'vendor': vendor,
@@ -422,83 +547,29 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid, manual
         'tags': tags,
         'metafields_global_title_tag': seo_title,
         'metafields_global_description_tag': seo_desc,
-        'variants': [{
-            'sku': sku,
-            'price': str(selling_price),
-            'compare_at_price': str(compare_at_price),
-            'inventory_management': 'shopify',
-            'inventory_policy': 'deny',
-            'fulfillment_service': 'manual',
-            'requires_shipping': True,
-            'taxable': True,
-            'weight': weight_g,
-            'weight_unit': 'g',
-            'inventory_quantity': inventory_qty,
-            # Setting HS code / country of origin / cost inline at creation
-            # time, in addition to the follow-up PUT below — some store API
-            # versions only persist this when it's sent on creation.
-            'inventory_item': {
-                'harmonized_system_code': hs_code_clean,
-                'country_code_of_origin': country_of_origin,
-                **({'cost': str(cost_price)} if cost_price not in (None, '', 0) else {}),
-            },
-        }],
+        'variants': variants,
         'status': 'active',
         'published': True,
         'gift_card': False,
-    }}
+    }
+    if options:
+        product_payload['options'] = options
 
-    resp = requests.post(f'{base_url}/products.json', headers=headers, json=payload, timeout=30)
+    resp = requests.post(f'{base_url}/products.json', headers=headers, json={'product': product_payload}, timeout=30)
     resp.raise_for_status()
     product = resp.json()['product']
     product_id = product['id']
-    log(sid, f'✅ Product created — ID {product_id} | MRP ₹{compare_at_price} → SP ₹{selling_price} | Qty {inventory_qty}', 'success')
+    variant_note = f' | {len(product["variants"])} variants ({", ".join(o["name"] for o in options)})' if options else ''
+    log(sid, f'✅ Product created — ID {product_id} | MRP ₹{compare_at_price} → SP ₹{selling_price} | Qty {inventory_qty}{variant_note}', 'success')
 
-    # Confirm / set HS code + country of origin on the inventory item.
-    # Always re-PUT explicitly and verify with a GET, since the inline
-    # creation field above is not honoured by every store/API version.
-    try:
-        inventory_item_id = product['variants'][0]['inventory_item_id']
-        cost_payload = {}
-        if cost_price not in (None, '', 0):
-            cost_payload['cost'] = str(cost_price)
-        for attempt in range(2):
-            hs_resp = requests.put(
-                f'{base_url}/inventory_items/{inventory_item_id}.json',
-                headers=headers,
-                json={'inventory_item': {
-                    'id': inventory_item_id,
-                    'harmonized_system_code': hs_code_clean,
-                    'country_code_of_origin': country_of_origin,
-                    **cost_payload,
-                }},
-                timeout=30
-            )
-            if hs_resp.ok:
-                saved = hs_resp.json().get('inventory_item', {})
-                saved_hs = saved.get('harmonized_system_code')
-                saved_origin = saved.get('country_code_of_origin')
-                saved_cost = saved.get('cost')
-                ok = saved_hs == hs_code_clean and saved_origin == country_of_origin
-                if cost_payload:
-                    ok = ok and saved_cost is not None
-                if ok:
-                    cost_note = f' · Cost ₹{saved_cost}' if cost_payload else ''
-                    log(sid, f'✅ HS code {hs_code_clean} · Origin {country_of_origin}{cost_note} confirmed', 'success')
-                    break
-                else:
-                    log(sid, f'⚠️ HS/origin/cost saved but mismatched (got hs={saved_hs}, origin={saved_origin}, cost={saved_cost}), retrying…', 'error')
-            else:
-                log(sid, f'⚠️ HS code/origin/cost update failed (HTTP {hs_resp.status_code}): {hs_resp.text[:300]}', 'error')
-            time.sleep(1)
-    except Exception as e:
-        log(sid, f'⚠️ Could not set HS code/origin/cost: {e}', 'error')
+    # Confirm / set HS code + country of origin + cost on EVERY variant's inventory item.
+    for v in product['variants']:
+        label = f'[{v.get("title", v.get("sku", ""))}] ' if options else ''
+        set_inventory_item_details(base_url, headers, v['inventory_item_id'], hs_code_clean,
+                                    country_of_origin, cost_price, sid, label=label)
 
-    # Publish to every sales channel the store has enabled (Online Store,
-    # POS, Shop app, Google & YouTube, Facebook & Instagram, etc.)
     publish_to_all_channels(base_url, headers, product_id, sid)
 
-    # Upload ALL images, in order, first one becomes the featured image
     total = len(image_paths)
     for i, img_path in enumerate(image_paths, start=1):
         log(sid, f'🖼️ Uploading image {i}/{total}…')
@@ -520,7 +591,8 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid, manual
     shopify_url = f'https://{store}/admin/products/{product_id}'
     return {'product_id': product_id, 'shopify_url': shopify_url, 'handle': handle,
             'title': title, 'compare_at_price': compare_at_price,
-            'hs_code': hs_code_clean, 'country_of_origin': country_of_origin}
+            'hs_code': hs_code_clean, 'country_of_origin': country_of_origin,
+            'variant_count': len(variants)}
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.route('/')
@@ -576,11 +648,12 @@ def history_csv():
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(['Timestamp', 'SKU', 'Title', 'Cost Price', 'Selling Price', 'Compare At (MRP)',
-                      'HS Code', 'Country of Origin', 'Status', 'Shopify URL', 'Error'])
+                      'HS Code', 'Country of Origin', 'Variants', 'Status', 'Shopify URL', 'Error'])
     for r in rows:
         writer.writerow([r.get('timestamp'), r.get('sku'), r.get('title'), r.get('cost_price'),
                           r.get('selling_price'), r.get('compare_at_price'), r.get('hs_code'),
-                          r.get('country_of_origin'), r.get('status'), r.get('shopify_url'), r.get('error')])
+                          r.get('country_of_origin'), r.get('variant_count', 1), r.get('status'),
+                          r.get('shopify_url'), r.get('error')])
     return Response(buf.getvalue(), mimetype='text/csv',
                      headers={'Content-Disposition': 'attachment; filename=upload_history.csv'})
 
@@ -598,6 +671,7 @@ def get_settings_route():
         'default_weight_g': settings.get('default_weight_g', DEFAULT_WEIGHT_G),
         'default_country_of_origin': settings.get('default_country_of_origin', DEFAULT_COUNTRY_OF_ORIGIN),
         'default_inventory_qty': settings.get('default_inventory_qty', DEFAULT_INVENTORY_QTY),
+        'default_bangle_sizes': settings.get('default_bangle_sizes', DEFAULT_BANGLE_SIZES),
     }
     return jsonify(out)
 
@@ -667,6 +741,8 @@ def handle_start_upload(data):
     hs_code = (data.get('hs_code') or '').strip() or None
     country_of_origin = (data.get('country_of_origin') or '').strip() or None
     inventory_qty = data.get('inventory_qty')
+    colors = data.get('colors') or []
+    sizes = data.get('sizes') or []
     selling_price = calc_sp(cost_price, markup)
     compare_at_price = int(round(selling_price * 2))
     image_paths = [UPLOAD_DIR / fn for fn in filenames]
@@ -687,12 +763,14 @@ def handle_start_upload(data):
                                                  weight_g=weight_g, hs_code=hs_code,
                                                  country_of_origin=country_of_origin,
                                                  inventory_qty=inventory_qty,
-                                                 cost_price=cost_price)
+                                                 cost_price=cost_price,
+                                                 colors=colors, sizes=sizes)
 
                 row = {'timestamp': timestamp, 'sku': sku, 'title': result.get('title'),
                        'handle': result.get('handle'), 'cost_price': cost_price,
                        'selling_price': selling_price, 'compare_at_price': result.get('compare_at_price'),
                        'hs_code': result.get('hs_code'), 'country_of_origin': result.get('country_of_origin'),
+                       'variant_count': result.get('variant_count', 1),
                        'status': 'success', 'shopify_url': result['shopify_url'], 'error': None,
                        'image_count': len(filenames)}
                 append_history(row)
