@@ -507,12 +507,6 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid, manual
         'taxable': True,
         'weight': weight_g,
         'weight_unit': 'g',
-        'inventory_quantity': inventory_qty,
-        'inventory_item': {
-            'harmonized_system_code': hs_code_clean,
-            'country_code_of_origin': country_of_origin,
-            **({'cost': str(cost_price)} if cost_price not in (None, '', 0) else {}),
-        },
     }
 
     options = []
@@ -562,11 +556,38 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid, manual
     variant_note = f' | {len(product["variants"])} variants ({", ".join(o["name"] for o in options)})' if options else ''
     log(sid, f'✅ Product created — ID {product_id} | MRP ₹{compare_at_price} → SP ₹{selling_price} | Qty {inventory_qty}{variant_note}', 'success')
 
-    # Confirm / set HS code + country of origin + cost on EVERY variant's inventory item.
+    # NEW: Fetch the primary location ID to set inventory levels
+    location_id = None
+    try:
+        loc_resp = requests.get(f'{base_url}/locations.json', headers=headers, timeout=15)
+        if loc_resp.ok and loc_resp.json().get('locations'):
+            location_id = loc_resp.json()['locations'][0]['id']
+    except Exception as e:
+        log(sid, f'⚠️ Could not fetch locations: {e}', 'error')
+
+    # Confirm / set HS code + country of origin + cost + quantity on EVERY variant's inventory item.
     for v in product['variants']:
         label = f'[{v.get("title", v.get("sku", ""))}] ' if options else ''
+        
+        # 1. Set HS code, origin, and cost via your existing function
         set_inventory_item_details(base_url, headers, v['inventory_item_id'], hs_code_clean,
                                     country_of_origin, cost_price, sid, label=label)
+        
+        # 2. Set Inventory Quantity via the InventoryLevel API
+        if location_id:
+            try:
+                requests.post(
+                    f'{base_url}/inventory_levels/set.json',
+                    headers=headers,
+                    json={
+                        'location_id': location_id,
+                        'inventory_item_id': v['inventory_item_id'],
+                        'available': inventory_qty
+                    },
+                    timeout=30
+                )
+            except Exception as e:
+                log(sid, f'⚠️ {label}Could not set inventory quantity: {e}', 'error')
 
     publish_to_all_channels(base_url, headers, product_id, sid)
 
