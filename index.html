@@ -259,7 +259,6 @@
   .cp-trigger:hover{border-color:var(--border-hi)}
   .cp-trigger.open,.cp-trigger:focus-visible{border-color:var(--gold);outline:none}
   .cp-trigger.has-sel{border-color:var(--gold-line)}
-  .cp-trigger.compact{min-width:150px;max-width:190px}
   .cp-preview{display:flex;gap:3px;align-items:center;flex-shrink:0}
   .cp-dot-mini{width:11px;height:11px;border-radius:50%;border:1px solid rgba(255,255,255,.18);flex-shrink:0}
   .cp-lbl{flex:1;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
@@ -270,15 +269,21 @@
   /* Dropdown renders in a portal at bottom of body so z-index always wins */
   #cp-portal{position:fixed;z-index:9999;display:none}
   #cp-portal.visible{display:block}
-  .cp-dd{background:var(--surface);border:1px solid var(--border-hi);border-radius:12px;padding:12px;width:310px;box-shadow:0 16px 48px rgba(0,0,0,.7)}
+  .cp-dd{background:var(--surface);border:1px solid var(--border-hi);border-radius:12px;padding:12px;width:352px;box-shadow:0 16px 48px rgba(0,0,0,.7)}
   .cp-search-box{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:12px;margin-bottom:10px}
   .cp-search-box:focus{outline:none;border-color:var(--gold)}
-  .cp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;max-height:248px;overflow-y:auto;padding-right:2px}
-  .cp-chip{display:flex;align-items:center;gap:6px;padding:5px 7px;border-radius:6px;cursor:pointer;border:1px solid transparent;font-size:11px;background:var(--surface2);transition:background .1s,border-color .1s;-webkit-tap-highlight-color:transparent}
-  .cp-chip:hover{background:var(--surface3);border-color:var(--border-hi)}
-  .cp-chip.sel{background:var(--gold-soft);border-color:var(--gold-line);color:var(--gold)}
-  .cp-chip-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;border:1px solid rgba(255,255,255,.18)}
-  .cp-chip-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* Card-style chips: a full-width color swatch on top + name below, laid out
+     with auto-fill so the grid always stretches to use the dropdown's full
+     width instead of leaving a ragged empty column on the right. */
+  .cp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px;max-height:308px;overflow-y:auto;padding-right:2px}
+  .cp-chip{display:flex;flex-direction:column;align-items:stretch;gap:0;padding:0;border-radius:8px;cursor:pointer;border:1px solid var(--border);font-size:11px;background:var(--surface2);overflow:hidden;transition:border-color .12s,transform .12s;-webkit-tap-highlight-color:transparent}
+  .cp-chip:hover{border-color:var(--border-hi);transform:translateY(-1px)}
+  .cp-chip.sel{border-color:var(--gold)}
+  .cp-chip-dot{width:100%;height:38px;flex-shrink:0;position:relative;border-bottom:1px solid rgba(255,255,255,.1)}
+  .cp-chip-dot::after{content:'';position:absolute;inset:0;box-shadow:inset 0 -10px 14px -8px rgba(0,0,0,.35)}
+  .cp-chip.sel .cp-chip-dot::before{content:'✓';position:absolute;top:3px;right:5px;width:16px;height:16px;border-radius:50%;background:var(--gold);color:#191509;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.5);z-index:1}
+  .cp-chip-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:5px 7px;color:var(--muted);transition:color .12s}
+  .cp-chip.sel .cp-chip-name{color:var(--gold);font-weight:700;background:var(--gold-soft)}
   .cp-foot{display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
   .cp-count{font-size:11px;color:var(--muted)}
   .cp-clear-btn{font-size:11px;color:var(--red);background:none;border:none;cursor:pointer;padding:0}
@@ -405,7 +410,26 @@
         <input id="bulk-hs" type="text" class="item-input mono-in narrow" placeholder="HS code">
         <input id="bulk-origin" type="text" class="item-input mono-in narrow" placeholder="Origin">
         <input id="bulk-qty" type="number" class="item-input mono-in narrow" placeholder="Qty">
-        <div id="bulk-color-wrap"></div>
+        <select id="bulk-color" class="item-input" style="width:145px">
+          <option value="">Color…</option>
+          <option>Red</option><option>Orange</option><option>Yellow</option><option>Green</option>
+          <option>Blue</option><option>Purple</option><option>Pink</option><option>Brown</option>
+          <option>Black</option><option>White</option><option>Grey</option><option>Magenta</option>
+          <option>Maroon</option><option>Indigo</option><option>Turquoise</option><option>Beige</option>
+          <option>Teal</option><option>Violet</option><option>Gold</option><option>Silver</option>
+          <option>Rose Gold</option><option>Dark Red</option><option>Dark Orange</option>
+          <option>Dark Yellow</option><option>Dark Green</option><option>Dark Blue</option>
+          <option>Dark Purple</option><option>Dark Pink</option><option>Dark Brown</option>
+          <option>Dark Grey</option><option>Dark Magenta</option><option>Dark Maroon</option>
+          <option>Dark Indigo</option><option>Dark Turquoise</option><option>Dark Beige</option>
+          <option>Dark Teal</option><option>Dark Violet</option><option>Light Red</option>
+          <option>Light Orange</option><option>Light Yellow</option><option>Light Green</option>
+          <option>Light Blue</option><option>Light Purple</option><option>Light Pink</option>
+          <option>Light Brown</option><option>Off White</option><option>Light Grey</option>
+          <option>Light Magenta</option><option>Light Maroon</option><option>Light Indigo</option>
+          <option>Light Turquoise</option><option>Light Beige</option><option>Light Teal</option>
+          <option>Light Violet</option><option>Multicolor</option>
+        </select>
         <input id="bulk-sizes" type="text" class="item-input mono-in variant-input" placeholder="Sizes 2.4,2.6,2.8">
         <button class="btn btn-ghost btn-sm" onclick="bulkApply()">Apply</button>
         <div class="divider"></div>
@@ -570,13 +594,11 @@ const _cpSearch  = document.getElementById('cp-search');
 const _cpCount   = document.getElementById('cp-count');
 const _cpClearBtn = document.getElementById('cp-clear-btn');
 
-// Build the chip grid once
+// Build the chip grid once — each chip is a full color-preview card so people
+// can recognize a shade at a glance instead of hunting for a tiny dot.
 _cpGrid.innerHTML = BRAND_COLORS.map(c => {
-  const dotStyle = c.h.startsWith('linear')
-    ? `background:${c.h};border-radius:3px;width:16px;height:12px;border:none`
-    : `background:${c.h}`;
   return `<div class="cp-chip" data-color="${c.n}" onclick="cpChipClick('${c.n}')">
-    <span class="cp-chip-dot" style="${dotStyle}"></span>
+    <span class="cp-chip-dot" style="background:${c.h}"></span>
     <span class="cp-chip-name">${c.n}</span>
   </div>`;
 }).join('');
@@ -591,12 +613,12 @@ _cpSearch.addEventListener('input', () => {
 _cpClearBtn.addEventListener('click', e => {
   e.stopPropagation();
   if (!_cpActiveId) return;
-  const target = _cpGetTarget(_cpActiveId);
-  if (target) target.set('');
+  const item = queue.find(q => q.id == _cpActiveId);
+  if (item) item.colors = '';
   _cpSyncChips([]);
   _cpUpdateCount(0);
   _cpRefreshTrigger(_cpActiveId);
-  if (_cpActiveId !== 'bulk') updateStats();
+  updateStats();
 });
 
 // FIX: position is now purely viewport-relative (portal is position:fixed),
@@ -615,8 +637,8 @@ function cpOpen(itemId, triggerEl) {
   triggerEl.classList.add('open');
 
   // Sync selected state in grid
-  const target = _cpGetTarget(itemId);
-  const sel = target ? _parseColors(target.get()) : [];
+  const item = queue.find(q => q.id == itemId);
+  const sel = item ? _parseColors(item.colors) : [];
   _cpSyncChips(sel);
   _cpUpdateCount(sel.length);
   _cpSearch.value = '';
@@ -658,13 +680,13 @@ function cpClose() {
 
 function cpChipClick(colorName) {
   if (!_cpActiveId) return;
-  const target = _cpGetTarget(_cpActiveId);
-  if (!target) return;
+  const item = queue.find(q => q.id == _cpActiveId);
+  if (!item) return;
 
-  let sel = _parseColors(target.get());
+  let sel = _parseColors(item.colors);
   const idx = sel.indexOf(colorName);
   if (idx >= 0) sel.splice(idx, 1); else sel.push(colorName);
-  target.set(sel.join(', '));
+  item.colors = sel.join(', ');
 
   // Update just the chip + trigger — no renderQueue()
   const chip = _cpGrid.querySelector(`[data-color="${CSS.escape(colorName)}"]`);
@@ -672,16 +694,10 @@ function cpChipClick(colorName) {
   _cpUpdateCount(sel.length);
   _cpRefreshTrigger(_cpActiveId);
 
-  // Refresh variant count pill + stats — only applicable to real queue items,
-  // the bulk toolbar trigger has no pill and doesn't change queue totals
-  if (_cpActiveId !== 'bulk') {
-    const item = queue.find(q => q.id == _cpActiveId);
-    if (item) {
-      const nameEl = document.getElementById('iname-' + _cpActiveId);
-      if (nameEl) nameEl.innerHTML = _variantPillHtml(item);
-    }
-    updateStats();
-  }
+  // Refresh variant count pill only
+  const nameEl = document.getElementById('iname-' + _cpActiveId);
+  if (nameEl) nameEl.innerHTML = _variantPillHtml(item);
+  updateStats();
 }
 
 function _cpSyncChips(sel) {
@@ -714,18 +730,6 @@ function _cpRefreshTrigger(itemId) {
 
 function _parseColors(str) {
   return (str || '').split(',').map(s => s.trim()).filter(Boolean);
-}
-
-// Resolves a picker "target" — either a queue item's .colors field, or the
-// bulk-toolbar's standalone bulkColors variable — behind a get/set pair so
-// cpOpen/cpChipClick/etc. don't need to branch on which one they're editing.
-function _cpGetTarget(id) {
-  if (id === 'bulk') {
-    return { get: () => bulkColors, set: v => { bulkColors = v; } };
-  }
-  const item = queue.find(q => q.id == id);
-  if (!item) return null;
-  return { get: () => item.colors, set: v => { item.colors = v; } };
 }
 
 // Close portal on outside click, scroll, or window resize (re-open on resize
@@ -771,7 +775,6 @@ let historyFilter = 'all';
 let queueFilter = 'all';
 let logLines = [];
 let DEFAULT_BANGLE_SIZES = '2.4,2.6,2.8';
-let bulkColors = ''; // comma-separated colors picked in the bulk toolbar
 const logBox = document.getElementById('log-box');
 let firstLog = true;
 
