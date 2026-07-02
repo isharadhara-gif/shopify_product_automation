@@ -4,25 +4,175 @@ from pathlib import Path
 from flask import Flask, request, jsonify, Response
 from flask_socketio import SocketIO
 from PIL import Image, ImageOps
+import numpy as np
 
 # ── Default catalog values ────────────────────────────────────────────────────
 DEFAULT_HS_CODE = '7117.90'
 DEFAULT_WEIGHT_G = 1
 DEFAULT_COUNTRY_OF_ORIGIN = 'IN'
-# Matches the consistent pattern seen across the existing Shopify catalog export:
-# Inventory Tracker=shopify, Inventory Policy=deny, Fulfillment Service=manual,
-# Requires Shipping=true, Taxable=true, Inventory Qty=10, Status=active.
 DEFAULT_INVENTORY_QTY = 10
-# Default bangle size run, used by the "Bangle sizes" quick-fill in the UI
 DEFAULT_BANGLE_SIZES = ['2.4', '2.6', '2.8']
 
-# Target product photo canvas — portrait 3:4, Shopify-friendly
 TARGET_W, TARGET_H = 1080, 1440
 
+# ── Brand color palette (54 colors) ──────────────────────────────────────────
+# Each entry: (display_name, (R, G, B))
+# Order matters only for tie-breaking; no entry is skipped.
+BRAND_COLORS = [
+    ("Red",              (220,  50,  50)),
+    ("Orange",           (230, 120,  40)),
+    ("Yellow",           (230, 200,  50)),
+    ("Green",            ( 50, 160,  70)),
+    ("Blue",             ( 50,  90, 200)),
+    ("Purple",           (130,  50, 180)),
+    ("Pink",             (230, 120, 160)),
+    ("Brown",            (130,  80,  40)),
+    ("Black",            ( 30,  30,  30)),
+    ("White",            (245, 245, 245)),
+    ("Grey",             (150, 150, 150)),
+    ("Magenta",          (200,  50, 160)),
+    ("Maroon",           (120,  20,  30)),
+    ("Indigo",           ( 60,  50, 160)),
+    ("Turquoise",        ( 50, 185, 175)),
+    ("Beige",            (220, 200, 165)),
+    ("Teal",             ( 30, 130, 130)),
+    ("Violet",           (150,  80, 220)),
+    ("Gold",             (210, 165,  50)),
+    ("Silver",           (185, 190, 200)),
+    ("Rose Gold",        (210, 145, 130)),
+    ("Dark Red",         (140,  20,  20)),
+    ("Dark Orange",      (180,  85,  15)),
+    ("Dark Yellow",      (180, 150,  20)),
+    ("Dark Green",       ( 25, 100,  35)),
+    ("Dark Blue",        ( 20,  40, 140)),
+    ("Dark Purple",      ( 85,  20, 130)),
+    ("Dark Pink",        (185,  70, 110)),
+    ("Dark Brown",       ( 80,  45,  15)),
+    ("Dark Grey",        ( 80,  80,  80)),
+    ("Dark Magenta",     (150,  20, 115)),
+    ("Dark Maroon",      ( 75,  10,  15)),
+    ("Dark Indigo",      ( 35,  25, 110)),
+    ("Dark Turquoise",   ( 20, 130, 120)),
+    ("Dark Beige",       (175, 155, 115)),
+    ("Dark Teal",        ( 15,  85,  85)),
+    ("Dark Violet",      (105,  45, 170)),
+    ("Light Red",        (255, 120, 120)),
+    ("Light Orange",     (255, 185, 120)),
+    ("Light Yellow",     (255, 240, 140)),
+    ("Light Green",      (140, 225, 140)),
+    ("Light Blue",       (130, 175, 255)),
+    ("Light Purple",     (195, 150, 240)),
+    ("Light Pink",       (255, 185, 210)),
+    ("Light Brown",      (190, 145, 100)),
+    ("Off White",        (235, 230, 215)),
+    ("Light Grey",       (210, 210, 210)),
+    ("Light Magenta",    (255, 150, 230)),
+    ("Light Maroon",     (185,  90, 100)),
+    ("Light Indigo",     (130, 125, 220)),
+    ("Light Turquoise",  (140, 230, 225)),
+    ("Light Beige",      (240, 225, 200)),
+    ("Light Teal",       (100, 200, 195)),
+    ("Light Violet",     (210, 165, 255)),
+    ("Multicolor",       (128, 128, 128)),  # kept as last-resort fallback only
+]
+
+# Pre-build a numpy array of reference RGBs for vectorised distance computation.
+_COLOR_REFS = np.array([c[1] for c in BRAND_COLORS[:-1]], dtype=np.float32)  # skip Multicolor
+_COLOR_NAMES = [c[0] for c in BRAND_COLORS[:-1]]
+
+def _dominant_rgb_from_image(img: Image.Image, n_clusters: int = 5) -> tuple[int,int,int]:
+    """Return the single most-representative (R,G,B) of the *subject* pixels.
+
+    Strategy:
+      1. Resize to a tiny thumbnail so the algorithm is fast.
+      2. Exclude near-white pixels (typical photo backgrounds).
+      3. If too few foreground pixels survive, fall back to the full image median.
+      4. Use simple k-means (5 iterations, 5 clusters) to find the dominant cluster
+         and return its centroid.  k-means handles multi-coloured products gracefully
+         — the largest cluster wins, which is what Multicolor detection below uses.
+    """
+    thumb = img.convert('RGB').resize((120, 120), Image.LANCZOS)
+    px = np.array(thumb, dtype=np.float32).reshape(-1, 3)
+
+    # Exclude very light (background) pixels: luma > 230 roughly = near-white
+    luma = 0.299 * px[:,0] + 0.587 * px[:,1] + 0.114 * px[:,2]
+    fg = px[luma < 230]
+    if len(fg) < 50:          # too few foreground pixels — use everything
+        fg = px
+
+    # Simple k-means, 5 iterations
+    rng = np.random.default_rng(42)
+    centers = fg[rng.choice(len(fg), n_clusters, replace=False)]
+    for _ in range(5):
+        dists  = np.linalg.norm(fg[:, None, :] - centers[None, :, :], axis=2)
+        labels = np.argmin(dists, axis=1)
+        for k in range(n_clusters):
+            members = fg[labels == k]
+            if len(members):
+                centers[k] = members.mean(axis=0)
+
+    # Pick the largest cluster's centroid
+    counts   = np.bincount(labels, minlength=n_clusters)
+    dominant = centers[np.argmax(counts)]
+    return int(dominant[0]), int(dominant[1]), int(dominant[2])
+
+
+def _is_multicolor(img: Image.Image, threshold: float = 0.22) -> bool:
+    """Return True when no single cluster accounts for ≥ (1-threshold) of foreground
+    pixels — i.e. the product has several distinct colours.
+
+    A threshold of 0.22 means: if the largest cluster holds < 78 % of foreground
+    pixels, call it Multicolor.  Adjust lower → more items labelled Multicolor.
+    """
+    thumb = img.convert('RGB').resize((120, 120), Image.LANCZOS)
+    px = np.array(thumb, dtype=np.float32).reshape(-1, 3)
+    luma = 0.299 * px[:,0] + 0.587 * px[:,1] + 0.114 * px[:,2]
+    fg = px[luma < 230]
+    if len(fg) < 50:
+        fg = px
+
+    n_clusters = 5
+    rng = np.random.default_rng(42)
+    centers = fg[rng.choice(len(fg), n_clusters, replace=False)]
+    for _ in range(5):
+        dists  = np.linalg.norm(fg[:, None, :] - centers[None, :, :], axis=2)
+        labels = np.argmin(dists, axis=1)
+        for k in range(n_clusters):
+            members = fg[labels == k]
+            if len(members):
+                centers[k] = members.mean(axis=0)
+
+    counts = np.bincount(labels, minlength=n_clusters)
+    dominant_share = counts.max() / counts.sum()
+    return dominant_share < (1.0 - threshold)
+
+
+def detect_color_from_image(image_path: Path) -> str:
+    """Open *image_path*, analyse its dominant colour, and return the closest
+    name from BRAND_COLORS (including "Multicolor" when the image has several
+    distinct hues).
+
+    Falls back to "Multicolor" on any error so the pipeline never crashes.
+    """
+    try:
+        img = Image.open(image_path)
+        img = ImageOps.exif_transpose(img).convert('RGB')
+
+        if _is_multicolor(img):
+            return "Multicolor"
+
+        r, g, b = _dominant_rgb_from_image(img)
+
+        # Vectorised nearest-neighbour in RGB space
+        dists = np.sum((_COLOR_REFS - np.array([r, g, b], dtype=np.float32)) ** 2, axis=1)
+        return _COLOR_NAMES[int(np.argmin(dists))]
+
+    except Exception:
+        return "Multicolor"
+
+
 def process_image(path: Path) -> Path:
-    """Crop-to-fit (never stretch/squeeze) to TARGET_W x TARGET_H, then save as a
-    high-quality compressed JPEG. Returns the path of the processed file
-    (always .jpg — original is replaced)."""
+    """Crop-to-fit to TARGET_W × TARGET_H, save as high-quality JPEG."""
     try:
         img = Image.open(path)
         img = ImageOps.exif_transpose(img)
@@ -61,7 +211,7 @@ def process_image(path: Path) -> Path:
     except Exception:
         return path
 
-# ── Category description templates ────────────────────────────────────────────
+# ── Category description templates ───────────────────────────────────────────
 CATEGORY_DESCRIPTIONS = {
     'Necklace': """Hello lovely souls! Don\u2019t you agree that your look is never complete without a breathtaking necklace? A necklace set isn\u2019t just an accessory. It is the star of the show, ensuring you make a lasting impression every time you step out of your house.
 Ishhaara's necklaces for women whether it be a gold choker necklace set, pearl necklace, silver necklace set, or long necklace offer a phenomenal look. Pair these necklace sets and instantly make a wonderful appeal wherever you go. So, grab this chance and quickly check out the standout features of Ishhaara's necklace.
@@ -163,16 +313,11 @@ Care Label
 4. Clean your hair accessories after every use with a soft brush.""",
 }
 
-# Section headers that should render as bold standalone lines
 _SECTION_HEADERS = {'Product Specification', 'Key Highlights', 'Styling Inspiration', 'Care Label'}
-# Lines like "Material: Skin Friendly" — bold the label before the colon
 _LABEL_LINE_RE = re.compile(r'^([A-Za-z][A-Za-z \u2019\']{1,30}):\s*(.*)$')
-# Numbered list lines like "1. Premium Materials: blah blah" — bold "1. Premium Materials:"
 _NUMBERED_RE = re.compile(r'^(\d+\.\s*[^:]+:)\s*(.*)$')
 
 def template_description_html(category):
-    """Convert a plain-text category template into HTML for body_html, with
-    section headers and the lead-in of each bullet/spec line bolded."""
     text = CATEGORY_DESCRIPTIONS.get(category)
     if not text:
         return None
@@ -180,16 +325,13 @@ def template_description_html(category):
     html_parts = []
     for p in paragraphs:
         if p in _SECTION_HEADERS:
-            html_parts.append(f'<p><strong>{p}</strong></p>')
-            continue
+            html_parts.append(f'<p><strong>{p}</strong></p>'); continue
         m = _NUMBERED_RE.match(p)
         if m:
-            html_parts.append(f'<p><strong>{m.group(1)}</strong> {m.group(2)}</p>')
-            continue
+            html_parts.append(f'<p><strong>{m.group(1)}</strong> {m.group(2)}'); continue
         m = _LABEL_LINE_RE.match(p)
         if m:
-            html_parts.append(f'<p><strong>{m.group(1)}:</strong> {m.group(2)}</p>')
-            continue
+            html_parts.append(f'<p><strong>{m.group(1)}:</strong> {m.group(2)}</p>'); continue
         html_parts.append(f'<p>{p}</p>')
     return ''.join(html_parts)
 
@@ -214,18 +356,14 @@ import requests
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def load_settings():
     if SETTINGS_FILE.exists():
-        try:
-            return json.loads(SETTINGS_FILE.read_text())
-        except Exception:
-            return {}
+        try: return json.loads(SETTINGS_FILE.read_text())
+        except Exception: return {}
     return {}
 
 def load_history():
     if HISTORY_FILE.exists():
-        try:
-            return json.loads(HISTORY_FILE.read_text())
-        except Exception:
-            return []
+        try: return json.loads(HISTORY_FILE.read_text())
+        except Exception: return []
     return []
 
 def append_history(row):
@@ -257,43 +395,28 @@ def calc_sp(cp: float, markup: float = 4.0) -> int:
     return base - remainder + 999 if remainder < 999 else base + 999
 
 # ── Groq rate limiting / retry ────────────────────────────────────────────────
-# Groq's free tier rate-limits aggressively, and with several products
-# uploading concurrently we were firing multiple vision requests at once and
-# getting 429s. This serializes Groq calls with a minimum gap between them,
-# and retries on 429 with exponential backoff (respecting Retry-After).
 GROQ_CALL_LOCK = threading.Lock()
 GROQ_LAST_CALL_AT = [0.0]
-GROQ_MIN_INTERVAL = 2.2  # seconds between Groq requests, store-wide
+GROQ_MIN_INTERVAL = 2.2
 GROQ_MAX_RETRIES = 4
 
 def call_groq_with_backoff(payload, headers, sid):
-    """Serializes + throttles + retries a Groq chat completion call."""
     last_exc = None
     for attempt in range(GROQ_MAX_RETRIES):
-        # Throttle: never let two Groq calls (even from different threads)
-        # start less than GROQ_MIN_INTERVAL seconds apart.
         with GROQ_CALL_LOCK:
             wait = GROQ_MIN_INTERVAL - (time.time() - GROQ_LAST_CALL_AT[0])
             if wait > 0:
                 time.sleep(wait)
             GROQ_LAST_CALL_AT[0] = time.time()
-
         try:
             resp = requests.post('https://api.groq.com/openai/v1/chat/completions',
                                   headers=headers, json=payload, timeout=30)
             if resp.status_code == 429:
                 retry_after = resp.headers.get('Retry-After')
-                if retry_after:
-                    try:
-                        delay = float(retry_after)
-                    except ValueError:
-                        delay = 2 ** (attempt + 1)
-                else:
-                    delay = 2 ** (attempt + 1)
-                log(sid, f'⏳ Groq rate limit hit — retrying in {delay:.0f}s (attempt {attempt+1}/{GROQ_MAX_RETRIES})', 'muted')
-                time.sleep(delay)
-                last_exc = requests.exceptions.HTTPError(f'429 Too Many Requests')
-                continue
+                try:    delay = float(retry_after) if retry_after else 2 ** (attempt + 1)
+                except: delay = 2 ** (attempt + 1)
+                log(sid, f'⏳ Groq rate limit — retrying in {delay:.0f}s (attempt {attempt+1}/{GROQ_MAX_RETRIES})', 'muted')
+                time.sleep(delay); last_exc = requests.exceptions.HTTPError('429'); continue
             resp.raise_for_status()
             return resp
         except requests.exceptions.RequestException as e:
@@ -303,7 +426,7 @@ def call_groq_with_backoff(payload, headers, sid):
             continue
     raise last_exc or RuntimeError('Groq request failed after retries')
 
-# ── Groq: generate ALL product fields ────────────────────────────────────────
+# ── Groq: generate product fields ─────────────────────────────────────────────
 def generate_product_details(image_paths, sku, sid):
     settings = load_settings()
     groq_key = settings.get('groq_api_key') or os.environ.get('GROQ_API_KEY', '')
@@ -320,8 +443,7 @@ def generate_product_details(image_paths, sku, sid):
         img_bytes = image_path.read_bytes()
         b64 = base64.b64encode(img_bytes).decode()
         ext = image_path.suffix.lower().lstrip('.')
-        mime = {'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'webp': 'image/webp'}.get(ext, 'image/jpeg')
-
+        mime = {'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png','webp':'image/webp'}.get(ext,'image/jpeg')
         vendor = settings.get('product_vendor') or os.environ.get('PRODUCT_VENDOR', 'the brand')
 
         prompt = f"""You are a Shopify product copywriter for a brand called {vendor}.
@@ -349,7 +471,7 @@ Respond ONLY with a valid JSON object (no markdown, no extra text):
         }
         resp = call_groq_with_backoff(payload, headers, sid)
         content = resp.json()['choices'][0]['message']['content'].strip()
-        content = content.replace('```json', '').replace('```', '').strip()
+        content = content.replace('```json','').replace('```','').strip()
         result = json.loads(content)
         result['handle'] = slugify(result.get('handle', result.get('title', sku)))
         log(sid, f'✅ Title: {result.get("title")}', 'success')
@@ -360,31 +482,22 @@ Respond ONLY with a valid JSON object (no markdown, no extra text):
         return {'title': sku, 'description': '', 'handle': slug,
                 'seo_title': sku, 'seo_description': '', 'alt_text': sku, 'tags': ''}
 
-# ── Shopify: publish a product to every active sales channel ─────────────────
+# ── Shopify: publish to all sales channels ────────────────────────────────────
 def publish_to_all_channels(base_url, headers, product_id, sid):
-    """Uses the GraphQL Admin API to publish the product onto every channel
-    the store has available (Online Store, POS, Shop, Google, Facebook, etc).
-    REST product creation only auto-publishes to the Online Store channel, so
-    this is required if the product should be sellable everywhere."""
-    graphql_url = base_url.replace('/admin/api/', '/admin/api/') .rsplit('/admin/api/', 1)
-    store_host = graphql_url[0].replace('https://', '')
-    api_version = graphql_url[1]
+    store_host = base_url.split('/admin/api/')[0].replace('https://','')
+    api_version = base_url.split('/admin/api/')[1]
     gql_url = f'https://{store_host}/admin/api/{api_version}/graphql.json'
     gql_headers = {k: v for k, v in headers.items()}
-
     try:
         pub_query = '{ publications(first: 25) { edges { node { id name } } } }'
         r = requests.post(gql_url, headers=gql_headers, json={'query': pub_query}, timeout=30)
         r.raise_for_status()
         data = r.json()
         if 'errors' in data:
-            log(sid, f'⚠️ Could not list sales channels: {data["errors"]}', 'error')
-            return
+            log(sid, f'⚠️ Could not list sales channels: {data["errors"]}', 'error'); return
         pubs = data.get('data', {}).get('publications', {}).get('edges', [])
         if not pubs:
-            log(sid, 'ℹ️ No sales channels found to publish to', 'muted')
-            return
-
+            log(sid, 'ℹ️ No sales channels found', 'muted'); return
         gid = f'gid://shopify/Product/{product_id}'
         mutation = """
         mutation publishablePublish($id: ID!, $input: [PublicationInput!]!) {
@@ -397,19 +510,16 @@ def publish_to_all_channels(base_url, headers, product_id, sid):
                             json={'query': mutation, 'variables': variables}, timeout=30)
         r2.raise_for_status()
         result = r2.json()
-        errs = result.get('data', {}).get('publishablePublish', {}).get('userErrors', [])
-        if errs:
-            log(sid, f'⚠️ Sales channel publish reported errors: {errs}', 'error')
+        errs = result.get('data',{}).get('publishablePublish',{}).get('userErrors',[])
+        if errs: log(sid, f'⚠️ Channel publish errors: {errs}', 'error')
         else:
             names = ', '.join(p['node']['name'] for p in pubs)
             log(sid, f'✅ Published to all sales channels ({names})', 'success')
     except Exception as e:
         log(sid, f'⚠️ Could not publish to all sales channels: {e}', 'error')
 
-def set_inventory_item_details(base_url, headers, inventory_item_id, hs_code_clean, country_of_origin,
-                                cost_price, sid, label=''):
-    """Set HS code / country of origin / cost on one variant's inventory item,
-    with a confirm-and-retry loop (some stores don't persist it on the first try)."""
+def set_inventory_item_details(base_url, headers, inventory_item_id, hs_code_clean,
+                                country_of_origin, cost_price, sid, label=''):
     cost_payload = {}
     if cost_price not in (None, '', 0):
         cost_payload['cost'] = str(cost_price)
@@ -423,9 +533,7 @@ def set_inventory_item_details(base_url, headers, inventory_item_id, hs_code_cle
                     'harmonized_system_code': hs_code_clean,
                     'country_code_of_origin': country_of_origin,
                     **cost_payload,
-                }},
-                timeout=30
-            )
+                }}, timeout=30)
             if resp.ok:
                 saved = resp.json().get('inventory_item', {})
                 ok = (saved.get('harmonized_system_code') == hs_code_clean and
@@ -442,62 +550,64 @@ def set_inventory_item_details(base_url, headers, inventory_item_id, hs_code_cle
             log(sid, f'⚠️ {label}Could not set HS/origin: {e}', 'error')
         time.sleep(1)
 
-# ── Shopify: create product with MULTIPLE images + optional variants ─────────
-def create_shopify_product(image_paths, sku, selling_price, details, sid, manual_title=None,
-                            category=None, manual_tags=None, weight_g=None, hs_code=None,
-                            country_of_origin=None, inventory_qty=None, cost_price=None,
+# ── Shopify: create product ───────────────────────────────────────────────────
+def create_shopify_product(image_paths, sku, selling_price, details, sid,
+                            manual_title=None, category=None, manual_tags=None,
+                            weight_g=None, hs_code=None, country_of_origin=None,
+                            inventory_qty=None, cost_price=None,
                             colors=None, sizes=None):
     settings = load_settings()
-    store = (settings.get('shopify_store') or os.environ.get('SHOPIFY_STORE', '')).replace('https://', '').replace('http://', '').rstrip('/')
-    token = settings.get('shopify_token') or os.environ.get('SHOPIFY_TOKEN', '')
-    vendor = settings.get('product_vendor') or os.environ.get('PRODUCT_VENDOR', '')
-    p_type = settings.get('product_type') or os.environ.get('PRODUCT_TYPE', '')
+    store = (settings.get('shopify_store') or os.environ.get('SHOPIFY_STORE','')).replace('https://','').replace('http://','').rstrip('/')
+    token = settings.get('shopify_token') or os.environ.get('SHOPIFY_TOKEN','')
+    vendor = settings.get('product_vendor') or os.environ.get('PRODUCT_VENDOR','')
+    p_type = settings.get('product_type') or os.environ.get('PRODUCT_TYPE','')
 
     if not store or not token:
         raise ValueError('Shopify store or token not configured')
 
     base_url = f'https://{store}/admin/api/2024-01'
-    headers = {'X-Shopify-Access-Token': token, 'Content-Type': 'application/json'}
+    headers  = {'X-Shopify-Access-Token': token, 'Content-Type': 'application/json'}
 
-    title = manual_title or details.get('title', sku)
-
+    title        = manual_title or details.get('title', sku)
     template_desc = template_description_html(category)
-    description = template_desc if template_desc else details.get('description', '')
+    description  = template_desc if template_desc else details.get('description', '')
+    handle       = details.get('handle', slugify(title))
+    seo_title    = details.get('seo_title', f'Buy {title} Online - {vendor}')
+    seo_desc     = details.get('seo_description', '')
+    tags         = (manual_tags or '').strip() or details.get('tags', '')
 
-    handle = details.get('handle', slugify(title))
-    seo_title = details.get('seo_title', f'Buy {title} Online - {vendor}')
-    seo_desc = details.get('seo_description', '')
-    tags = (manual_tags or '').strip() or details.get('tags', '')
+    weight_g = weight_g if weight_g not in (None,'',0) else settings.get('default_weight_g', DEFAULT_WEIGHT_G)
+    try:    weight_g = float(weight_g)
+    except: weight_g = DEFAULT_WEIGHT_G
 
-    weight_g = weight_g if weight_g not in (None, '', 0) else settings.get('default_weight_g', DEFAULT_WEIGHT_G)
-    try:
-        weight_g = float(weight_g)
-    except (TypeError, ValueError):
-        weight_g = DEFAULT_WEIGHT_G
-
-    hs_code_raw = (hs_code or '').strip() or settings.get('default_hs_code', DEFAULT_HS_CODE)
-    hs_code_clean = re.sub(r'[^0-9]', '', hs_code_raw) or re.sub(r'[^0-9]', '', DEFAULT_HS_CODE)
+    hs_code_raw   = (hs_code or '').strip() or settings.get('default_hs_code', DEFAULT_HS_CODE)
+    hs_code_clean = re.sub(r'[^0-9]','',hs_code_raw) or re.sub(r'[^0-9]','',DEFAULT_HS_CODE)
 
     country_of_origin = (country_of_origin or '').strip().upper() or \
         (settings.get('default_country_of_origin') or DEFAULT_COUNTRY_OF_ORIGIN).upper()
 
-    inventory_qty = inventory_qty if inventory_qty not in (None, '') else settings.get('default_inventory_qty', DEFAULT_INVENTORY_QTY)
-    try:
-        inventory_qty = int(inventory_qty)
-    except (TypeError, ValueError):
-        inventory_qty = DEFAULT_INVENTORY_QTY
-    compare_at_price = int(round(selling_price * 2))
+    inventory_qty = inventory_qty if inventory_qty not in (None,'') else settings.get('default_inventory_qty', DEFAULT_INVENTORY_QTY)
+    try:    inventory_qty = int(inventory_qty)
+    except: inventory_qty = DEFAULT_INVENTORY_QTY
 
-    title_slug = slugify(title)
-    base_image_name = f'ishhaara-{title_slug}-{random_digits(10)}'
-    alt_text = details.get('alt_text') or f'Ishhaara {title}'
+    compare_at_price = int(round(selling_price * 2))
+    title_slug       = slugify(title)
+    base_image_name  = f'ishhaara-{title_slug}-{random_digits(10)}'
+    alt_text         = details.get('alt_text') or f'Ishhaara {title}'
 
     colors = [c.strip() for c in (colors or []) if c.strip()]
-    sizes = [s.strip() for s in (sizes or []) if s.strip()]
+    sizes  = [s.strip() for s in (sizes  or []) if s.strip()]
+
+    # ── Auto-detect color from cover image when no colors provided ──────────
+    if not colors:
+        log(sid, '🎨 Auto-detecting color from cover image…')
+        detected = detect_color_from_image(image_paths[0])
+        colors = [detected]
+        log(sid, f'🎨 Detected color: {detected}', 'success')
 
     log(sid, f'📦 Creating Shopify product: {title}…')
 
-    base_variant_fields = {
+    base_variant = {
         'price': str(selling_price),
         'compare_at_price': str(compare_at_price),
         'inventory_management': 'shopify',
@@ -514,120 +624,102 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid, manual
     variants = []
 
     if colors and sizes:
-        options = [{'name': 'Color', 'values': colors}, {'name': 'Size', 'values': sizes}]
+        options = [{'name':'Color','values':colors},{'name':'Size','values':sizes}]
         idx = 1
         for c in colors:
             for s in sizes:
-                variants.append({
-                    **base_variant_fields,
-                    'option1': c, 'option2': s,
-                    'sku': f'{sku}.{idx}',
-                })
-                idx += 1
+                variants.append({**base_variant,'option1':c,'option2':s,'sku':f'{sku}.{idx}'}); idx+=1
     elif colors:
-        options = [{'name': 'Color', 'values': colors}]
-        for idx, c in enumerate(colors, start=1):
-            variants.append({**base_variant_fields, 'option1': c, 'sku': f'{sku}.{idx}'})
+        options = [{'name':'Color','values':colors}]
+        for idx, c in enumerate(colors, 1):
+            variants.append({**base_variant,'option1':c,'sku':f'{sku}.{idx}'})
     elif sizes:
-        options = [{'name': 'Size', 'values': sizes}]
-        for idx, s in enumerate(sizes, start=1):
-            variants.append({**base_variant_fields, 'option1': s, 'sku': f'{sku}.{idx}'})
+        options = [{'name':'Size','values':sizes}]
+        for idx, s in enumerate(sizes, 1):
+            variants.append({**base_variant,'option1':s,'sku':f'{sku}.{idx}'})
     else:
-        variants = [{**base_variant_fields, 'sku': sku}]
+        variants = [{**base_variant,'sku':sku}]
 
     product_payload = {
-        'title': title,
-        'body_html': description,
-        'vendor': vendor,
-        'product_type': p_type,
-        'handle': handle,
-        'tags': tags,
+        'title': title, 'body_html': description, 'vendor': vendor,
+        'product_type': p_type, 'handle': handle, 'tags': tags,
         'metafields_global_title_tag': seo_title,
         'metafields_global_description_tag': seo_desc,
-        'variants': variants,
-        'status': 'active',
-        'published': True,
-        'gift_card': False,
+        'variants': variants, 'status': 'active', 'published': True, 'gift_card': False,
     }
     if options:
         product_payload['options'] = options
 
-    resp = requests.post(f'{base_url}/products.json', headers=headers, json={'product': product_payload}, timeout=30)
+    resp = requests.post(f'{base_url}/products.json', headers=headers,
+                          json={'product': product_payload}, timeout=30)
     if not resp.ok:
-        try:
-            shopify_errors = resp.json().get('errors')
-        except ValueError:
-            shopify_errors = resp.text[:500]
-        log(sid, f'❌ Shopify rejected product create (HTTP {resp.status_code}): {shopify_errors}', 'error')
+        try:    shopify_errors = resp.json().get('errors')
+        except: shopify_errors = resp.text[:500]
+        log(sid, f'❌ Shopify rejected product (HTTP {resp.status_code}): {shopify_errors}', 'error')
         raise ValueError(f'Shopify {resp.status_code}: {shopify_errors}')
-    product = resp.json()['product']
+
+    product    = resp.json()['product']
     product_id = product['id']
     variant_note = f' | {len(product["variants"])} variants ({", ".join(o["name"] for o in options)})' if options else ''
     log(sid, f'✅ Product created — ID {product_id} | MRP ₹{compare_at_price} → SP ₹{selling_price} | Qty {inventory_qty}{variant_note}', 'success')
 
-    # Confirm / set HS code + country of origin + cost on EVERY variant's inventory item.
     for v in product['variants']:
-        label = f'[{v.get("title", v.get("sku", ""))}] ' if options else ''
-        set_inventory_item_details(base_url, headers, v['inventory_item_id'], hs_code_clean,
-                                    country_of_origin, cost_price, sid, label=label)
+        label = f'[{v.get("title",v.get("sku",""))}] ' if options else ''
+        set_inventory_item_details(base_url, headers, v['inventory_item_id'],
+                                    hs_code_clean, country_of_origin, cost_price, sid, label=label)
 
     publish_to_all_channels(base_url, headers, product_id, sid)
 
     total = len(image_paths)
-    for i, img_path in enumerate(image_paths, start=1):
+    for i, img_path in enumerate(image_paths, 1):
         log(sid, f'🖼️ Uploading image {i}/{total}…')
         img_b64 = base64.b64encode(img_path.read_bytes()).decode()
         ext = img_path.suffix.lower() or '.jpg'
-        img_filename = f'{base_image_name}{("-" + str(i)) if total > 1 else ""}{ext}'
-        img_alt = alt_text if i == 1 else f'{alt_text} - view {i}'
+        img_filename = f'{base_image_name}{("-"+str(i)) if total>1 else ""}{ext}'
+        img_alt = alt_text if i==1 else f'{alt_text} - view {i}'
         img_resp = requests.post(
-            f'{base_url}/products/{product_id}/images.json',
-            headers=headers,
-            json={'image': {'attachment': img_b64, 'filename': img_filename, 'alt': img_alt}},
-            timeout=60
-        )
-        if img_resp.ok:
-            log(sid, f'✅ Image {i}/{total} uploaded ({img_filename})', 'success')
-        else:
-            log(sid, f'⚠️ Image {i}/{total} failed: {img_resp.text}', 'error')
+            f'{base_url}/products/{product_id}/images.json', headers=headers,
+            json={'image':{'attachment':img_b64,'filename':img_filename,'alt':img_alt}}, timeout=60)
+        if img_resp.ok: log(sid, f'✅ Image {i}/{total} uploaded', 'success')
+        else:           log(sid, f'⚠️ Image {i}/{total} failed: {img_resp.text}', 'error')
 
     shopify_url = f'https://{store}/admin/products/{product_id}'
-    return {'product_id': product_id, 'shopify_url': shopify_url, 'handle': handle,
-            'title': title, 'compare_at_price': compare_at_price,
-            'hs_code': hs_code_clean, 'country_of_origin': country_of_origin,
-            'variant_count': len(variants)}
+    return {'product_id':product_id,'shopify_url':shopify_url,'handle':handle,
+            'title':title,'compare_at_price':compare_at_price,
+            'hs_code':hs_code_clean,'country_of_origin':country_of_origin,
+            'variant_count':len(variants),'detected_color':colors[0] if colors else None}
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.route('/')
 def index():
     settings = load_settings()
-    has_groq = bool(settings.get('groq_api_key') or os.environ.get('GROQ_API_KEY'))
-    has_shopify = bool(settings.get('shopify_store') or os.environ.get('SHOPIFY_STORE'))
-    shopify_store = settings.get('shopify_store') or os.environ.get('SHOPIFY_STORE', '')
-
-    with open('index.html', 'r') as f:
+    has_groq    = bool(settings.get('groq_api_key')    or os.environ.get('GROQ_API_KEY'))
+    has_shopify = bool(settings.get('shopify_store')   or os.environ.get('SHOPIFY_STORE'))
+    shopify_store = settings.get('shopify_store') or os.environ.get('SHOPIFY_STORE','')
+    with open('index.html','r') as f:
         html = f.read()
     html = (html
-            .replace('{% if has_groq %}ok{% else %}warn{% endif %}', 'ok' if has_groq else 'warn')
-            .replace('{% if not has_groq %}— not set{% endif %}', '' if has_groq else '— not set')
-            .replace('{% if has_shopify %}ok{% else %}warn{% endif %}', 'ok' if has_shopify else 'warn')
-            .replace('{% if not has_shopify %}— not set{% endif %}', '' if has_shopify else '— not set')
-            .replace('{{ shopify_store }}', shopify_store)
-            )
+        .replace('{% if has_groq %}ok{% else %}warn{% endif %}',    'ok' if has_groq else 'warn')
+        .replace('{% if not has_groq %}— not set{% endif %}',       '' if has_groq else '— not set')
+        .replace('{% if has_shopify %}ok{% else %}warn{% endif %}', 'ok' if has_shopify else 'warn')
+        .replace('{% if not has_shopify %}— not set{% endif %}',    '' if has_shopify else '— not set')
+        .replace('{{ shopify_store }}', shopify_store))
     return html
+
+# ── NEW: return the full color list so the frontend can show it ───────────────
+@app.route('/colors')
+def get_colors():
+    return jsonify([c[0] for c in BRAND_COLORS])
 
 @app.route('/upload', methods=['POST'])
 def upload():
     files = request.files.getlist('images')
     if not files:
-        if 'image' in request.files:
-            files = [request.files['image']]
-        else:
-            return jsonify({'error': 'No image file(s)'}), 400
+        if 'image' in request.files: files = [request.files['image']]
+        else: return jsonify({'error':'No image file(s)'}), 400
 
-    sku = request.form.get('sku', '').strip().upper()
-    if not sku:
-        return jsonify({'error': 'SKU required'}), 400
+    sku = request.form.get('sku','').strip().upper()
+    if not sku: return jsonify({'error':'SKU required'}), 400
 
     saved = []
     ts = int(time.time() * 1000)
@@ -639,7 +731,22 @@ def upload():
         processed_path = process_image(save_path)
         saved.append(processed_path.name)
 
-    return jsonify({'filenames': saved, 'sku': sku})
+    return jsonify({'filenames':saved,'sku':sku})
+
+# ── NEW: detect color from an already-uploaded image ─────────────────────────
+@app.route('/detect_color', methods=['POST'])
+def detect_color_route():
+    """Frontend can pre-flight a color detection so it shows the result
+    in the UI before the user hits Upload All."""
+    data = request.get_json()
+    filename = (data or {}).get('filename','')
+    if not filename:
+        return jsonify({'error':'filename required'}), 400
+    path = UPLOAD_DIR / filename
+    if not path.exists():
+        return jsonify({'error':'file not found'}), 404
+    color = detect_color_from_image(path)
+    return jsonify({'color': color})
 
 @app.route('/history')
 def history():
@@ -650,31 +757,31 @@ def history_csv():
     rows = load_history()
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow(['Timestamp', 'SKU', 'Title', 'Cost Price', 'Selling Price', 'Compare At (MRP)',
-                      'HS Code', 'Country of Origin', 'Variants', 'Status', 'Shopify URL', 'Error'])
+    writer.writerow(['Timestamp','SKU','Title','Images','Variants','Cost Price','Selling Price',
+                      'Compare At (MRP)','HS Code','Country of Origin','Detected Color','Status','Shopify URL','Error'])
     for r in rows:
-        writer.writerow([r.get('timestamp'), r.get('sku'), r.get('title'), r.get('cost_price'),
-                          r.get('selling_price'), r.get('compare_at_price'), r.get('hs_code'),
-                          r.get('country_of_origin'), r.get('variant_count', 1), r.get('status'),
-                          r.get('shopify_url'), r.get('error')])
+        writer.writerow([r.get('timestamp'),r.get('sku'),r.get('title'),r.get('image_count',1),
+                          r.get('variant_count',1),r.get('cost_price'),r.get('selling_price'),
+                          r.get('compare_at_price'),r.get('hs_code'),r.get('country_of_origin'),
+                          r.get('detected_color',''),r.get('status'),r.get('shopify_url'),r.get('error')])
     return Response(buf.getvalue(), mimetype='text/csv',
-                     headers={'Content-Disposition': 'attachment; filename=upload_history.csv'})
+                     headers={'Content-Disposition':'attachment; filename=upload_history.csv'})
 
 @app.route('/get_settings')
 def get_settings_route():
     settings = load_settings()
     out = {
-        'shopify_store': settings.get('shopify_store') or os.environ.get('SHOPIFY_STORE', ''),
-        'shopify_token': settings.get('shopify_token') or os.environ.get('SHOPIFY_TOKEN', ''),
-        'groq_api_key': settings.get('groq_api_key') or os.environ.get('GROQ_API_KEY', ''),
-        'product_vendor': settings.get('product_vendor') or os.environ.get('PRODUCT_VENDOR', ''),
-        'product_type': settings.get('product_type') or os.environ.get('PRODUCT_TYPE', ''),
+        'shopify_store':  settings.get('shopify_store')  or os.environ.get('SHOPIFY_STORE',''),
+        'shopify_token':  settings.get('shopify_token')  or os.environ.get('SHOPIFY_TOKEN',''),
+        'groq_api_key':   settings.get('groq_api_key')   or os.environ.get('GROQ_API_KEY',''),
+        'product_vendor': settings.get('product_vendor') or os.environ.get('PRODUCT_VENDOR',''),
+        'product_type':   settings.get('product_type')   or os.environ.get('PRODUCT_TYPE',''),
         'default_markup': settings.get('default_markup', 4),
-        'default_hs_code': settings.get('default_hs_code', DEFAULT_HS_CODE),
+        'default_hs_code':  settings.get('default_hs_code', DEFAULT_HS_CODE),
         'default_weight_g': settings.get('default_weight_g', DEFAULT_WEIGHT_G),
         'default_country_of_origin': settings.get('default_country_of_origin', DEFAULT_COUNTRY_OF_ORIGIN),
-        'default_inventory_qty': settings.get('default_inventory_qty', DEFAULT_INVENTORY_QTY),
-        'default_bangle_sizes': settings.get('default_bangle_sizes', DEFAULT_BANGLE_SIZES),
+        'default_inventory_qty':  settings.get('default_inventory_qty', DEFAULT_INVENTORY_QTY),
+        'default_bangle_sizes':   settings.get('default_bangle_sizes', DEFAULT_BANGLE_SIZES),
     }
     return jsonify(out)
 
@@ -683,42 +790,40 @@ def save_settings_route():
     data = request.get_json()
     current = load_settings(); current.update(data)
     SETTINGS_FILE.write_text(json.dumps(current, indent=2))
-    return jsonify({'ok': True})
+    return jsonify({'ok':True})
 
 @app.route('/test_shopify', methods=['POST'])
 def test_shopify():
     settings = load_settings()
-    store = (settings.get('shopify_store') or '').replace('https://', '').replace('http://', '').rstrip('/')
+    store = (settings.get('shopify_store') or '').replace('https://','').replace('http://','').rstrip('/')
     token = settings.get('shopify_token') or ''
     if not store or not token:
-        return jsonify({'ok': False, 'error': 'Store URL and token both required'}), 400
+        return jsonify({'ok':False,'error':'Store URL and token both required'}), 400
     try:
         r = requests.get(f'https://{store}/admin/api/2024-01/shop.json',
-                          headers={'X-Shopify-Access-Token': token}, timeout=15)
+                          headers={'X-Shopify-Access-Token':token}, timeout=15)
         if r.ok:
-            shop = r.json().get('shop', {})
-            return jsonify({'ok': True, 'shop_name': shop.get('name'), 'domain': shop.get('myshopify_domain')})
-        return jsonify({'ok': False, 'error': f'HTTP {r.status_code}: {r.text[:200]}'}), 400
+            shop = r.json().get('shop',{})
+            return jsonify({'ok':True,'shop_name':shop.get('name'),'domain':shop.get('myshopify_domain')})
+        return jsonify({'ok':False,'error':f'HTTP {r.status_code}: {r.text[:200]}'}), 400
     except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 400
+        return jsonify({'ok':False,'error':str(e)}), 400
 
 @app.route('/test_groq', methods=['POST'])
 def test_groq():
     settings = load_settings()
     key = settings.get('groq_api_key') or ''
-    if not key:
-        return jsonify({'ok': False, 'error': 'Groq key required'}), 400
+    if not key: return jsonify({'ok':False,'error':'Groq key required'}), 400
     try:
         r = requests.post('https://api.groq.com/openai/v1/chat/completions',
-                           headers={'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'},
-                           json={'model': 'meta-llama/llama-4-scout-17b-16e-instruct',
-                                 'messages': [{'role': 'user', 'content': 'Say OK'}], 'max_tokens': 5},
+                           headers={'Authorization':f'Bearer {key}','Content-Type':'application/json'},
+                           json={'model':'meta-llama/llama-4-scout-17b-16e-instruct',
+                                 'messages':[{'role':'user','content':'Say OK'}],'max_tokens':5},
                            timeout=20)
-        if r.ok:
-            return jsonify({'ok': True})
-        return jsonify({'ok': False, 'error': f'HTTP {r.status_code}: {r.text[:200]}'}), 400
+        if r.ok: return jsonify({'ok':True})
+        return jsonify({'ok':False,'error':f'HTTP {r.status_code}: {r.text[:200]}'}), 400
     except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 400
+        return jsonify({'ok':False,'error':str(e)}), 400
 
 @app.route('/history/<int:idx>', methods=['DELETE'])
 def delete_history_row(idx):
@@ -726,34 +831,33 @@ def delete_history_row(idx):
     if 0 <= idx < len(rows):
         rows.pop(idx)
         HISTORY_FILE.write_text(json.dumps(rows, indent=2))
-        return jsonify({'ok': True})
-    return jsonify({'ok': False}), 404
+        return jsonify({'ok':True})
+    return jsonify({'ok':False}), 404
 
 # ── Socket.IO pipeline ────────────────────────────────────────────────────────
 @socketio.on('start_upload')
 def handle_start_upload(data):
     sid = request.sid
-    filenames = data.get('filenames') or ([data['filename']] if data.get('filename') else [])
-    sku = (data.get('sku') or '').upper()
-    cost_price = float(data.get('cost_price', 0) or 0)
-    markup = float(data.get('markup', 4) or 4)
-    manual_title = (data.get('title') or '').strip() or None
-    category = (data.get('category') or '').strip() or None
-    manual_tags = (data.get('tags') or '').strip() or None
-    weight_g = data.get('weight_g')
-    hs_code = (data.get('hs_code') or '').strip() or None
+    filenames       = data.get('filenames') or ([data['filename']] if data.get('filename') else [])
+    sku             = (data.get('sku') or '').upper()
+    cost_price      = float(data.get('cost_price', 0) or 0)
+    markup          = float(data.get('markup', 4) or 4)
+    manual_title    = (data.get('title') or '').strip() or None
+    category        = (data.get('category') or '').strip() or None
+    manual_tags     = (data.get('tags') or '').strip() or None
+    weight_g        = data.get('weight_g')
+    hs_code         = (data.get('hs_code') or '').strip() or None
     country_of_origin = (data.get('country_of_origin') or '').strip() or None
-    inventory_qty = data.get('inventory_qty')
-    colors = data.get('colors') or []
-    sizes = data.get('sizes') or []
-    if isinstance(colors, str):
-        colors = [c.strip() for c in colors.split(',') if c.strip()]
-    if isinstance(sizes, str):
-        sizes = [s.strip() for s in sizes.split(',') if s.strip()]
-    selling_price = calc_sp(cost_price, markup)
+    inventory_qty   = data.get('inventory_qty')
+    colors          = data.get('colors') or []
+    sizes           = data.get('sizes') or []
+    if isinstance(colors, str): colors = [c.strip() for c in colors.split(',') if c.strip()]
+    if isinstance(sizes,  str): sizes  = [s.strip() for s in sizes.split(',')  if s.strip()]
+
+    selling_price    = calc_sp(cost_price, markup)
     compare_at_price = int(round(selling_price * 2))
-    image_paths = [UPLOAD_DIR / fn for fn in filenames]
-    timestamp = datetime.now().isoformat()
+    image_paths      = [UPLOAD_DIR / fn for fn in filenames]
+    timestamp        = datetime.now().isoformat()
 
     log(sid, f'▶ {sku} | {len(filenames)} image(s) | CP: ₹{cost_price} → SP: ₹{selling_price} (MRP ₹{compare_at_price})')
 
@@ -765,43 +869,41 @@ def handle_start_upload(data):
                     raise FileNotFoundError(f'Image(s) not found: {[p.name for p in missing]}')
 
                 details = generate_product_details(image_paths, sku, sid)
-                result = create_shopify_product(image_paths, sku, selling_price, details, sid, manual_title,
-                                                 category=category, manual_tags=manual_tags,
-                                                 weight_g=weight_g, hs_code=hs_code,
-                                                 country_of_origin=country_of_origin,
-                                                 inventory_qty=inventory_qty,
-                                                 cost_price=cost_price,
-                                                 colors=colors, sizes=sizes)
+                result  = create_shopify_product(
+                    image_paths, sku, selling_price, details, sid,
+                    manual_title=manual_title, category=category,
+                    manual_tags=manual_tags, weight_g=weight_g, hs_code=hs_code,
+                    country_of_origin=country_of_origin, inventory_qty=inventory_qty,
+                    cost_price=cost_price, colors=colors, sizes=sizes)
 
-                row = {'timestamp': timestamp, 'sku': sku, 'title': result.get('title'),
-                       'handle': result.get('handle'), 'cost_price': cost_price,
-                       'selling_price': selling_price, 'compare_at_price': result.get('compare_at_price'),
-                       'hs_code': result.get('hs_code'), 'country_of_origin': result.get('country_of_origin'),
-                       'variant_count': result.get('variant_count', 1),
-                       'status': 'success', 'shopify_url': result['shopify_url'], 'error': None,
-                       'image_count': len(filenames)}
+                row = {'timestamp':timestamp,'sku':sku,'title':result.get('title'),
+                       'handle':result.get('handle'),'cost_price':cost_price,
+                       'selling_price':selling_price,'compare_at_price':result.get('compare_at_price'),
+                       'hs_code':result.get('hs_code'),'country_of_origin':result.get('country_of_origin'),
+                       'detected_color':result.get('detected_color'),
+                       'variant_count':result.get('variant_count',1),
+                       'status':'success','shopify_url':result['shopify_url'],'error':None,
+                       'image_count':len(filenames)}
                 append_history(row)
                 log(sid, f'🎉 Done! {result["shopify_url"]}', 'success')
                 socketio.emit('product_done', {
-                    'sku': sku, 'title': result.get('title'),
-                    'selling_price': selling_price, 'compare_at_price': result.get('compare_at_price'),
-                    'shopify_url': result['shopify_url'],
-                    'status': 'success'
+                    'sku':sku,'title':result.get('title'),
+                    'selling_price':selling_price,'compare_at_price':result.get('compare_at_price'),
+                    'shopify_url':result['shopify_url'],'detected_color':result.get('detected_color'),
+                    'status':'success'
                 }, to=sid)
             except Exception as e:
                 log(sid, f'❌ Failed for {sku}: {e}', 'error')
-                append_history({'timestamp': timestamp, 'sku': sku, 'title': manual_title,
-                                'cost_price': cost_price, 'selling_price': selling_price,
-                                'compare_at_price': compare_at_price,
-                                'status': 'failed', 'shopify_url': None, 'error': str(e),
-                                'image_count': len(filenames)})
-                socketio.emit('product_done', {'sku': sku, 'status': 'failed', 'error': str(e)}, to=sid)
+                append_history({'timestamp':timestamp,'sku':sku,'title':manual_title,
+                                'cost_price':cost_price,'selling_price':selling_price,
+                                'compare_at_price':compare_at_price,
+                                'status':'failed','shopify_url':None,'error':str(e),
+                                'image_count':len(filenames)})
+                socketio.emit('product_done',{'sku':sku,'status':'failed','error':str(e)}, to=sid)
             finally:
                 for p in image_paths:
-                    try:
-                        p.unlink()
-                    except Exception:
-                        pass
+                    try: p.unlink()
+                    except Exception: pass
 
     threading.Thread(target=run, daemon=True).start()
 
