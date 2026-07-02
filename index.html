@@ -259,6 +259,7 @@
   .cp-trigger:hover{border-color:var(--border-hi)}
   .cp-trigger.open,.cp-trigger:focus-visible{border-color:var(--gold);outline:none}
   .cp-trigger.has-sel{border-color:var(--gold-line)}
+  .cp-trigger.compact{min-width:150px;max-width:190px}
   .cp-preview{display:flex;gap:3px;align-items:center;flex-shrink:0}
   .cp-dot-mini{width:11px;height:11px;border-radius:50%;border:1px solid rgba(255,255,255,.18);flex-shrink:0}
   .cp-lbl{flex:1;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
@@ -404,26 +405,7 @@
         <input id="bulk-hs" type="text" class="item-input mono-in narrow" placeholder="HS code">
         <input id="bulk-origin" type="text" class="item-input mono-in narrow" placeholder="Origin">
         <input id="bulk-qty" type="number" class="item-input mono-in narrow" placeholder="Qty">
-        <select id="bulk-color" class="item-input" style="width:145px">
-          <option value="">Color…</option>
-          <option>Red</option><option>Orange</option><option>Yellow</option><option>Green</option>
-          <option>Blue</option><option>Purple</option><option>Pink</option><option>Brown</option>
-          <option>Black</option><option>White</option><option>Grey</option><option>Magenta</option>
-          <option>Maroon</option><option>Indigo</option><option>Turquoise</option><option>Beige</option>
-          <option>Teal</option><option>Violet</option><option>Gold</option><option>Silver</option>
-          <option>Rose Gold</option><option>Dark Red</option><option>Dark Orange</option>
-          <option>Dark Yellow</option><option>Dark Green</option><option>Dark Blue</option>
-          <option>Dark Purple</option><option>Dark Pink</option><option>Dark Brown</option>
-          <option>Dark Grey</option><option>Dark Magenta</option><option>Dark Maroon</option>
-          <option>Dark Indigo</option><option>Dark Turquoise</option><option>Dark Beige</option>
-          <option>Dark Teal</option><option>Dark Violet</option><option>Light Red</option>
-          <option>Light Orange</option><option>Light Yellow</option><option>Light Green</option>
-          <option>Light Blue</option><option>Light Purple</option><option>Light Pink</option>
-          <option>Light Brown</option><option>Off White</option><option>Light Grey</option>
-          <option>Light Magenta</option><option>Light Maroon</option><option>Light Indigo</option>
-          <option>Light Turquoise</option><option>Light Beige</option><option>Light Teal</option>
-          <option>Light Violet</option><option>Multicolor</option>
-        </select>
+        <div id="bulk-color-wrap"></div>
         <input id="bulk-sizes" type="text" class="item-input mono-in variant-input" placeholder="Sizes 2.4,2.6,2.8">
         <button class="btn btn-ghost btn-sm" onclick="bulkApply()">Apply</button>
         <div class="divider"></div>
@@ -609,12 +591,12 @@ _cpSearch.addEventListener('input', () => {
 _cpClearBtn.addEventListener('click', e => {
   e.stopPropagation();
   if (!_cpActiveId) return;
-  const item = queue.find(q => q.id == _cpActiveId);
-  if (item) item.colors = '';
+  const target = _cpGetTarget(_cpActiveId);
+  if (target) target.set('');
   _cpSyncChips([]);
   _cpUpdateCount(0);
   _cpRefreshTrigger(_cpActiveId);
-  updateStats();
+  if (_cpActiveId !== 'bulk') updateStats();
 });
 
 // FIX: position is now purely viewport-relative (portal is position:fixed),
@@ -633,8 +615,8 @@ function cpOpen(itemId, triggerEl) {
   triggerEl.classList.add('open');
 
   // Sync selected state in grid
-  const item = queue.find(q => q.id == itemId);
-  const sel = item ? _parseColors(item.colors) : [];
+  const target = _cpGetTarget(itemId);
+  const sel = target ? _parseColors(target.get()) : [];
   _cpSyncChips(sel);
   _cpUpdateCount(sel.length);
   _cpSearch.value = '';
@@ -676,13 +658,13 @@ function cpClose() {
 
 function cpChipClick(colorName) {
   if (!_cpActiveId) return;
-  const item = queue.find(q => q.id == _cpActiveId);
-  if (!item) return;
+  const target = _cpGetTarget(_cpActiveId);
+  if (!target) return;
 
-  let sel = _parseColors(item.colors);
+  let sel = _parseColors(target.get());
   const idx = sel.indexOf(colorName);
   if (idx >= 0) sel.splice(idx, 1); else sel.push(colorName);
-  item.colors = sel.join(', ');
+  target.set(sel.join(', '));
 
   // Update just the chip + trigger — no renderQueue()
   const chip = _cpGrid.querySelector(`[data-color="${CSS.escape(colorName)}"]`);
@@ -690,10 +672,16 @@ function cpChipClick(colorName) {
   _cpUpdateCount(sel.length);
   _cpRefreshTrigger(_cpActiveId);
 
-  // Refresh variant count pill only
-  const nameEl = document.getElementById('iname-' + _cpActiveId);
-  if (nameEl) nameEl.innerHTML = _variantPillHtml(item);
-  updateStats();
+  // Refresh variant count pill + stats — only applicable to real queue items,
+  // the bulk toolbar trigger has no pill and doesn't change queue totals
+  if (_cpActiveId !== 'bulk') {
+    const item = queue.find(q => q.id == _cpActiveId);
+    if (item) {
+      const nameEl = document.getElementById('iname-' + _cpActiveId);
+      if (nameEl) nameEl.innerHTML = _variantPillHtml(item);
+    }
+    updateStats();
+  }
 }
 
 function _cpSyncChips(sel) {
@@ -726,6 +714,18 @@ function _cpRefreshTrigger(itemId) {
 
 function _parseColors(str) {
   return (str || '').split(',').map(s => s.trim()).filter(Boolean);
+}
+
+// Resolves a picker "target" — either a queue item's .colors field, or the
+// bulk-toolbar's standalone bulkColors variable — behind a get/set pair so
+// cpOpen/cpChipClick/etc. don't need to branch on which one they're editing.
+function _cpGetTarget(id) {
+  if (id === 'bulk') {
+    return { get: () => bulkColors, set: v => { bulkColors = v; } };
+  }
+  const item = queue.find(q => q.id == id);
+  if (!item) return null;
+  return { get: () => item.colors, set: v => { item.colors = v; } };
 }
 
 // Close portal on outside click, scroll, or window resize (re-open on resize
@@ -771,6 +771,7 @@ let historyFilter = 'all';
 let queueFilter = 'all';
 let logLines = [];
 let DEFAULT_BANGLE_SIZES = '2.4,2.6,2.8';
+let bulkColors = ''; // comma-separated colors picked in the bulk toolbar
 const logBox = document.getElementById('log-box');
 let firstLog = true;
 
