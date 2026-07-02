@@ -3,242 +3,360 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ShopifyPipeline</title>
+<title>Ishhaara · Listing Studio</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
+  /* ── Velvet & Hallmark ─ a jeweler's workbench, not a SaaS dashboard ──
+     bg: deep green-black velvet · accent: brass-gold hallmark
+     display: Fraunces · UI: Inter · data (SKU/₹/HS/log): JetBrains Mono   */
   :root {
-    /* ── Professional dashboard theme: deep navy-violet base, violet→pink accent ── */
-    --bg: #0b0a16;
-    --surface: #15131f;
-    --surface2: #1c1929;
-    --surface3: #242038;
-    --border: #2b2740;
-    --accent: #8b5cf6;
-    --accent2: #ec4899;
-    --accent-glow: rgba(139,92,246,.35);
-    --green: #34d399;
-    --red: #fb7185;
-    --yellow: #fbbf24;
-    --text: #f4f2fb;
-    --muted: #8b85a8;
-    --radius: 20px;
-    --radius-sm: 12px;
+    --bg:        #101310;
+    --surface:   #161a17;
+    --surface2:  #1d221e;
+    --surface3:  #242a25;
+    --border:    #2b312b;
+    --border-hi: #3a423a;
+    --gold:      #d9a94e;
+    --gold-soft: rgba(217,169,78,.14);
+    --gold-line: rgba(217,169,78,.45);
+    --green:     #6fc593;
+    --red:       #e57a76;
+    --yellow:    #e3b75c;
+    --text:      #f1eee4;
+    --muted:     #99a094;
+    --faint:     #6d746a;
+    --r:  14px;
+    --r-sm: 9px;
+    --font-ui:   'Inter', system-ui, sans-serif;
+    --font-disp: 'Fraunces', Georgia, serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scrollbar-color: var(--border-hi) transparent; }
   body {
     background:
-      radial-gradient(1100px 600px at 8% -10%, rgba(139,92,246,.16), transparent),
-      radial-gradient(900px 600px at 100% 0%, rgba(236,72,153,.10), transparent),
+      radial-gradient(900px 500px at 90% -10%, rgba(217,169,78,.05), transparent 60%),
       var(--bg);
-    color: var(--text); font-family: 'Inter', system-ui, -apple-system, sans-serif; min-height: 100vh;
+    color: var(--text); font-family: var(--font-ui); font-size: 14px;
+    min-height: 100vh; -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--gold-soft); }
+  button { font-family: inherit; }
+  input, select { font-family: inherit; }
+  :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 4px; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
   }
 
-  /* Layout */
-  .app { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
-  .sidebar { background: linear-gradient(180deg, rgba(28,25,41,.85), rgba(21,19,31,.85)); backdrop-filter: blur(14px); border-right: 1px solid var(--border); padding: 24px 18px; display: flex; flex-direction: column; gap: 22px; position: sticky; top: 0; height: 100vh; box-shadow: 4px 0 24px rgba(0,0,0,.25); }
-  .main { padding: 30px 36px; overflow-y: auto; max-width: 1180px; width: 100%; }
+  .mono { font-family: var(--font-mono); }
 
-  /* Logo */
-  .logo { display: flex; align-items: center; gap: 11px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
-  .logo-icon { width: 38px; height: 38px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 4px 18px var(--accent-glow); }
-  .logo-text { font-size: 15px; font-weight: 800; letter-spacing: -0.3px; }
-  .logo-sub { font-size: 11px; color: var(--muted); }
+  /* ── Layout ─────────────────────────────────────────────────────────── */
+  .app { display: grid; grid-template-columns: 252px 1fr; min-height: 100vh; }
+  .sidebar {
+    border-right: 1px solid var(--border);
+    background: linear-gradient(180deg, #141814, #111411);
+    padding: 22px 16px; display: flex; flex-direction: column; gap: 20px;
+    position: sticky; top: 0; height: 100vh;
+  }
+  .main { padding: 0 34px 60px; max-width: 1200px; width: 100%; }
 
-  /* Status badges */
-  .status-bar { display: flex; flex-direction: column; gap: 9px; }
-  .status-item { display: flex; align-items: center; gap: 8px; font-size: 12px; cursor: default; }
-  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
-  .dot.ok { background: var(--green); box-shadow: 0 0 7px var(--green); }
-  .dot.warn { background: var(--yellow); box-shadow: 0 0 7px var(--yellow); }
+  /* ── Hallmark logo ──────────────────────────────────────────────────── */
+  .logo { display: flex; align-items: center; gap: 12px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+  .hallmark {
+    width: 40px; height: 40px; flex-shrink: 0;
+    border: 1.5px solid var(--gold); border-radius: 8px;
+    display: grid; place-items: center;
+    font-family: var(--font-disp); font-size: 19px; color: var(--gold);
+    background: radial-gradient(circle at 30% 25%, rgba(217,169,78,.18), transparent 65%);
+    letter-spacing: .5px;
+  }
+  .logo-text { font-family: var(--font-disp); font-size: 16px; letter-spacing: .2px; }
+  .logo-sub { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 1.4px; margin-top: 2px; }
 
-  /* Mini stats in sidebar */
+  /* ── Connection status ──────────────────────────────────────────────── */
+  .status-bar { display: flex; flex-direction: column; gap: 8px; }
+  .status-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex-shrink: 0; }
+  .dot.ok { background: var(--green); box-shadow: 0 0 6px rgba(111,197,147,.7); }
+  .dot.warn { background: var(--yellow); box-shadow: 0 0 6px rgba(227,183,92,.7); }
+
   .mini-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .mini-stat { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px; }
-  .mini-stat-val { font-size: 17px; font-weight: 800; }
-  .mini-stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; margin-top: 2px; }
+  .mini-stat { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 10px 11px; }
+  .mini-stat-val { font-family: var(--font-mono); font-size: 17px; font-weight: 700; }
+  .mini-stat-label { font-size: 9.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; margin-top: 3px; }
 
-  /* Nav */
-  .nav { display: flex; flex-direction: column; gap: 4px; }
-  .nav-btn { background: none; border: none; color: var(--muted); font-size: 13px; font-weight: 600; padding: 10px 12px; border-radius: var(--radius-sm); text-align: left; cursor: pointer; display: flex; align-items: center; gap: 9px; transition: all .15s; }
+  /* ── Nav ────────────────────────────────────────────────────────────── */
+  .nav { display: flex; flex-direction: column; gap: 3px; }
+  .nav-btn {
+    background: none; border: none; color: var(--muted); font-size: 13px; font-weight: 600;
+    padding: 10px 12px; border-radius: var(--r-sm); text-align: left; cursor: pointer;
+    display: flex; align-items: center; gap: 10px; transition: background .15s, color .15s;
+    border-left: 2px solid transparent;
+  }
   .nav-btn:hover { background: var(--surface2); color: var(--text); }
-  .nav-btn.active { background: linear-gradient(135deg, rgba(139,92,246,.18), rgba(236,72,153,.10)); color: var(--accent); box-shadow: inset 0 0 0 1px rgba(139,92,246,.3); }
+  .nav-btn.active { background: var(--gold-soft); color: var(--gold); border-left-color: var(--gold); }
+  .nav-kbd { margin-left: auto; font-family: var(--font-mono); font-size: 10px; color: var(--faint); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
 
-  /* Panels */
+  .side-guide { margin-top: auto; font-size: 11.5px; color: var(--muted); line-height: 1.75; border-top: 1px solid var(--border); padding-top: 16px; }
+  .side-guide strong { color: var(--text); font-weight: 600; display: block; margin-bottom: 2px; }
+  .side-guide .g-block { margin-bottom: 12px; }
+  .side-guide code { font-family: var(--font-mono); font-size: 10.5px; color: var(--gold); }
+
+  /* ── Command bar (sticky) ───────────────────────────────────────────── */
+  .command-bar {
+    position: sticky; top: 0; z-index: 40;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 16px 0 14px; margin-bottom: 22px;
+    background: linear-gradient(180deg, var(--bg) 82%, transparent);
+    border-bottom: 1px solid var(--border);
+  }
+  .page-title { font-family: var(--font-disp); font-size: 24px; font-weight: 600; letter-spacing: .2px; }
+  .page-sub { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+  .cb-spacer { flex: 1; }
+  .cb-status { display: flex; align-items: center; gap: 14px; font-size: 12px; color: var(--muted); }
+  .cb-chip { display: inline-flex; align-items: center; gap: 6px; }
+  .cb-chip .n { font-family: var(--font-mono); font-weight: 700; color: var(--text); }
+  .cb-chip.ready .n { color: var(--gold); }
+  .cb-chip.fail .n { color: var(--red); }
+  .cb-chip.done .n { color: var(--green); }
+
+  /* ── Buttons ────────────────────────────────────────────────────────── */
+  .btn {
+    padding: 9px 16px; border-radius: var(--r-sm); border: 1px solid transparent;
+    font-size: 12.5px; font-weight: 700; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 7px; transition: all .15s;
+  }
+  .btn-primary { background: var(--gold); color: #191509; }
+  .btn-primary:hover { background: #e6bb66; }
+  .btn-primary:disabled { opacity: .35; cursor: not-allowed; }
+  .btn-ghost { background: transparent; color: var(--muted); border-color: var(--border); }
+  .btn-ghost:hover { color: var(--text); border-color: var(--border-hi); background: var(--surface2); }
+  .btn-sm { padding: 6px 11px; font-size: 11.5px; }
+  .kbd-hint { font-family: var(--font-mono); font-size: 10px; opacity: .65; font-weight: 600; }
+
+  /* ── Panels ─────────────────────────────────────────────────────────── */
   .panel { display: none; }
-  .panel.active { display: block; animation: fadein .2s ease; }
-  @keyframes fadein { from { opacity:0; transform: translateY(4px);} to {opacity:1; transform:none;} }
+  .panel.active { display: block; animation: fadein .18s ease; }
+  @keyframes fadein { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 
-  /* Header */
-  .page-header { display:flex; justify-content:space-between; align-items:flex-end; gap:16px; margin-bottom: 22px; flex-wrap: wrap; }
-  .page-title { font-size: 23px; font-weight: 800; letter-spacing: -0.5px; }
-  .page-sub { font-size: 13px; color: var(--muted); margin-top: 4px; }
-
-  /* Stats dashboard row */
-  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
-  .stat-card { background: linear-gradient(165deg, var(--surface2), var(--surface)); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; transition: border-color .15s, transform .15s; box-shadow: 0 10px 28px rgba(0,0,0,.22); }
-  .stat-card:hover { border-color: var(--accent); transform: translateY(-2px); }
-  .stat-card .stat-top { display:flex; justify-content:space-between; align-items:center; }
-  .stat-icon { font-size: 16px; width: 32px; height: 32px; border-radius: 10px; display:flex; align-items:center; justify-content:center; background: rgba(139,92,246,.16); }
-  .stat-card.green .stat-icon { background: rgba(52,211,153,.16); }
-  .stat-card.red .stat-icon { background: rgba(251,113,133,.16); }
-  .stat-card.accent .stat-icon { background: linear-gradient(135deg, rgba(139,92,246,.22), rgba(236,72,153,.18)); }
-  .stat-val { font-size: 25px; font-weight: 800; margin-top: 10px; letter-spacing: -0.5px; }
-  .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 3px; }
+  /* ── Stats strip ────────────────────────────────────────────────────── */
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 15px 17px; }
+  .stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+  .stat-val { font-family: var(--font-mono); font-size: 23px; font-weight: 700; margin-top: 7px; letter-spacing: -.5px; }
   .stat-card.green .stat-val { color: var(--green); }
-  .stat-card.red .stat-val { color: var(--red); }
-  .stat-card.accent .stat-val { color: var(--accent); }
+  .stat-card.red   .stat-val { color: var(--red); }
+  .stat-card.gold  .stat-val { color: var(--gold); }
 
-  /* Upload zone */
-  .upload-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 40px 24px; text-align: center; cursor: pointer; transition: all .2s; background: linear-gradient(165deg, var(--surface2), var(--surface)); position: relative; box-shadow: 0 10px 28px rgba(0,0,0,.18); }
-  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: rgba(139,92,246,.06); }
-  .upload-icon { font-size: 34px; margin-bottom: 10px; }
-  .upload-text { font-size: 15px; font-weight: 700; }
-  .upload-hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  /* ── Drop zone ──────────────────────────────────────────────────────── */
+  .upload-zone {
+    border: 1.5px dashed var(--border-hi); border-radius: var(--r);
+    padding: 32px 24px; text-align: center; cursor: pointer;
+    transition: border-color .2s, background .2s; background: var(--surface);
+  }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--gold); background: var(--gold-soft); }
+  .upload-text { font-family: var(--font-disp); font-size: 17px; }
+  .upload-hint { font-size: 12px; color: var(--muted); margin-top: 7px; line-height: 1.6; }
+  .upload-hint code { font-family: var(--font-mono); font-size: 11px; color: var(--gold); }
+  .zone-btns { display: flex; gap: 10px; justify-content: center; margin-top: 14px; flex-wrap: wrap; }
 
-  .toolbar { margin-top: 16px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding: 14px 18px; background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); box-shadow: 0 6px 18px rgba(0,0,0,.16); }
-  .toolbar-label { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
-  .toolbar .divider { width:1px; height:20px; background: var(--border); }
-  .chip-radio { display:flex; align-items:center; gap:5px; font-size:12px; cursor:pointer; padding:5px 10px; border-radius:99px; background: var(--surface2); border:1px solid transparent; }
-  .chip-radio input { accent-color: var(--accent); }
-  .chip-radio:has(input:checked) { border-color: var(--accent); color: var(--accent); background: rgba(139,92,246,.12); }
+  /* ── Toolbar (bulk tools) ───────────────────────────────────────────── */
+  .toolbar {
+    margin-top: 14px; padding: 13px 16px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r);
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  .toolbar-label { font-size: 10px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .8px; }
+  .toolbar .divider { width: 1px; height: 20px; background: var(--border); }
+  .chip-radio { display: flex; align-items: center; gap: 5px; font-size: 12px; cursor: pointer; padding: 4px 10px; border-radius: 99px; background: var(--surface2); border: 1px solid transparent; color: var(--muted); }
+  .chip-radio input { accent-color: var(--gold); }
+  .chip-radio:has(input:checked) { border-color: var(--gold-line); color: var(--gold); background: var(--gold-soft); }
 
-  /* Buttons */
-  .btn { padding: 10px 18px; border-radius: var(--radius-sm); border: none; font-size: 13px; font-weight: 700; cursor: pointer; transition: all .15s; display:inline-flex; align-items:center; gap:6px; }
-  .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; box-shadow: 0 6px 18px var(--accent-glow); }
-  .btn-primary:hover { filter: brightness(1.08); transform: translateY(-1px); }
-  .btn-primary:disabled { opacity: .4; cursor: not-allowed; transform:none; box-shadow:none; }
-  .btn-sm { padding: 7px 12px; font-size: 11.5px; border-radius: 9px; }
-  .btn-ghost { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
-  .btn-ghost:hover { color: var(--text); border-color: var(--accent); }
-  .btn-danger-ghost { background: rgba(251,113,133,.08); color: var(--red); border:1px solid rgba(251,113,133,.25); }
-  .btn-danger-ghost:hover { background: rgba(251,113,133,.16); }
+  .item-input {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 7px;
+    padding: 6px 9px; color: var(--text); font-size: 12px; width: 110px; transition: border-color .12s;
+  }
+  .item-input:focus { outline: none; border-color: var(--gold); }
+  .item-input::placeholder { color: var(--faint); }
+  .item-input.title-input { width: 225px; }
+  .item-input.tags-input { width: 195px; }
+  .item-input.variant-input { width: 165px; }
+  .item-input.narrow { width: 86px; }
+  select.item-input { width: 150px; cursor: pointer; }
+  .item-input.mono-in { font-family: var(--font-mono); font-size: 11.5px; }
+  .item-input.invalid { border-color: var(--red); }
 
-  /* Overall progress bar */
-  .progress-wrap { margin-top: 14px; background: var(--surface2); border-radius: 99px; height: 8px; overflow: hidden; display:none; }
-  .progress-bar { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); width:0%; transition: width .3s ease; }
-  .progress-label { font-size: 11px; color: var(--muted); margin-top: 6px; display:none; }
+  /* ── Queue ──────────────────────────────────────────────────────────── */
+  .queue-header { display: flex; align-items: center; margin: 24px 0 12px; flex-wrap: wrap; gap: 10px; }
+  .queue-title { font-family: var(--font-disp); font-size: 17px; }
+  .queue-filters { display: flex; gap: 5px; margin-left: 8px; }
+  .qf {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    font-size: 11px; font-weight: 600; padding: 4px 11px; border-radius: 99px; cursor: pointer;
+  }
+  .qf:hover { color: var(--text); border-color: var(--border-hi); }
+  .qf.active { background: var(--gold-soft); color: var(--gold); border-color: var(--gold-line); }
+  .qf .c { font-family: var(--font-mono); font-size: 10px; margin-left: 3px; }
 
-  /* Queue */
-  .queue-header { display: flex; justify-content: space-between; align-items: center; margin: 24px 0 12px; flex-wrap: wrap; gap: 10px; }
-  .queue-title { font-size: 14px; font-weight: 700; }
-
-  /* Queue items (product cards) */
   .queue-list { display: flex; flex-direction: column; gap: 10px; }
-  .queue-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: flex-start; transition: border-color .2s, transform .15s; box-shadow: 0 6px 18px rgba(0,0,0,.16); }
-  .queue-item.uploading { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
-  .queue-item.success { border-color: var(--green); opacity: .75; }
-  .queue-item.failed { border-color: var(--red); }
+  .queue-item {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r);
+    padding: 15px 17px; display: grid; grid-template-columns: auto 1fr auto; gap: 14px;
+    align-items: flex-start; position: relative; overflow: hidden;
+    transition: border-color .2s;
+  }
+  /* Hallmark seam — lights gold when the item is ready to list */
+  .queue-item::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: var(--border); transition: background .25s;
+  }
+  .queue-item.ready::before { background: var(--gold); }
+  .queue-item.uploading { border-color: var(--gold-line); }
+  .queue-item.uploading::before { background: var(--gold); animation: seam 1.1s ease-in-out infinite alternate; }
+  @keyframes seam { from { opacity: .35; } to { opacity: 1; } }
+  .queue-item.success { border-color: rgba(111,197,147,.4); opacity: .72; }
+  .queue-item.success::before { background: var(--green); }
+  .queue-item.failed { border-color: rgba(229,122,118,.5); }
+  .queue-item.failed::before { background: var(--red); }
 
-  .thumb-stack { display:flex; gap:6px; flex-wrap:wrap; max-width: 130px; }
-  .thumb-wrap { position:relative; width: 54px; height: 54px; flex-shrink:0; }
-  .thumb { width: 54px; height: 54px; object-fit: cover; border-radius: 9px; background: var(--surface2); border:1px solid var(--border); }
-  .thumb-remove { position:absolute; top:-5px; right:-5px; width:16px; height:16px; border-radius:50%; background: var(--red); color:#fff; font-size:10px; line-height:16px; text-align:center; cursor:pointer; border:none; }
-  .thumb-add { width:54px; height:54px; border-radius:9px; border:1.5px dashed var(--border); display:flex; align-items:center; justify-content:center; font-size:18px; color:var(--muted); cursor:pointer; flex-shrink:0; background:var(--surface2); }
-  .thumb-add:hover { border-color: var(--accent); color: var(--accent); }
-  .img-count-badge { font-size: 10px; color: var(--muted); margin-top: 5px; text-align:center; }
+  .thumb-stack { display: flex; gap: 6px; flex-wrap: wrap; max-width: 132px; }
+  .thumb-wrap { position: relative; width: 54px; height: 54px; flex-shrink: 0; }
+  .thumb { width: 54px; height: 54px; object-fit: cover; border-radius: 8px; background: var(--surface2); border: 1px solid var(--border); display: block; }
+  .thumb-wrap.cover .thumb { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
+  .cover-tag { position: absolute; left: 3px; bottom: 3px; font-size: 8px; font-weight: 800; letter-spacing: .5px; background: var(--gold); color: #191509; padding: 1px 4px; border-radius: 3px; }
+  .thumb-remove, .thumb-cover {
+    position: absolute; width: 16px; height: 16px; border-radius: 50%;
+    font-size: 10px; line-height: 15px; text-align: center; cursor: pointer; border: none;
+    opacity: 0; transition: opacity .12s;
+  }
+  .thumb-wrap:hover .thumb-remove, .thumb-wrap:hover .thumb-cover,
+  .thumb-remove:focus-visible, .thumb-cover:focus-visible { opacity: 1; }
+  .thumb-remove { top: -5px; right: -5px; background: var(--red); color: #fff; }
+  .thumb-cover { top: -5px; left: -5px; background: var(--gold); color: #191509; }
+  .thumb-add {
+    width: 54px; height: 54px; border-radius: 8px; border: 1.5px dashed var(--border-hi);
+    display: flex; align-items: center; justify-content: center; font-size: 18px;
+    color: var(--muted); cursor: pointer; flex-shrink: 0; background: var(--surface2);
+  }
+  .thumb-add:hover { border-color: var(--gold); color: var(--gold); }
+  .img-count-badge { font-size: 10px; color: var(--muted); margin-top: 5px; text-align: center; }
 
   .item-info { min-width: 0; }
-  .item-name { font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item-name { font-size: 13.5px; font-weight: 700; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .item-name .sku-txt { font-family: var(--font-mono); color: var(--gold); }
+  .item-name .file-txt { color: var(--muted); font-weight: 500; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
   .item-inputs { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; align-items: center; }
-  .item-input { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 9px; color: var(--text); font-size: 12px; width: 110px; }
-  .item-input:focus { outline: none; border-color: var(--accent); }
-  .item-input::placeholder { color: #56627a; }
-  .item-input.title-input { width: 220px; }
-  .item-input.tags-input { width: 200px; }
-  .item-input.variant-input { width: 170px; }
-  select.item-input { width: 150px; cursor: pointer; }
-  .item-input.narrow { width: 90px; }
-  .item-meta { font-size: 11.5px; color: var(--muted); margin-top: 7px; display: flex; gap: 12px; flex-wrap: wrap; align-items:center; }
+  .item-meta { font-size: 11.5px; color: var(--muted); margin-top: 8px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; font-family: var(--font-mono); }
   .item-price { color: var(--green); font-weight: 700; }
+  .item-mrp { color: var(--faint); text-decoration: line-through; }
   .item-error-msg { font-size: 11px; color: var(--red); margin-top: 6px; }
-  .variant-pill { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 99px; background: rgba(139,92,246,.15); color: var(--accent); }
+  .variant-pill { font-family: var(--font-ui); font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 99px; background: var(--gold-soft); color: var(--gold); border: 1px solid var(--gold-line); }
+  .dup-pill { font-family: var(--font-ui); font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 99px; background: rgba(227,183,92,.14); color: var(--yellow); border: 1px solid rgba(227,183,92,.4); }
   .preset-btn { font-size: 10.5px; padding: 5px 9px; border-radius: 7px; background: var(--surface3); color: var(--muted); border: 1px solid var(--border); cursor: pointer; }
-  .preset-btn:hover { color: var(--accent); border-color: var(--accent); }
+  .preset-btn:hover { color: var(--gold); border-color: var(--gold-line); }
 
   .item-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
-  .badge { font-size: 10px; font-weight: 800; padding: 4px 9px; border-radius: 99px; white-space:nowrap; }
-  .badge-pending { background: rgba(251,191,36,.15); color: var(--yellow); }
-  .badge-running { background: rgba(139,92,246,.18); color: var(--accent); }
-  .badge-success { background: rgba(74,222,128,.15); color: var(--green); }
-  .badge-failed { background: rgba(251,113,133,.15); color: var(--red); }
+  .badge { font-size: 10px; font-weight: 800; padding: 4px 10px; border-radius: 99px; white-space: nowrap; letter-spacing: .3px; }
+  .badge-pending  { background: var(--surface3); color: var(--muted); }
+  .badge-ready    { background: var(--gold-soft); color: var(--gold); }
+  .badge-running  { background: var(--gold-soft); color: var(--gold); }
+  .badge-success  { background: rgba(111,197,147,.14); color: var(--green); }
+  .badge-failed   { background: rgba(229,122,118,.14); color: var(--red); }
   .remove-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 17px; line-height: 1; padding: 2px 4px; }
   .remove-btn:hover { color: var(--red); }
 
-  /* Log panel */
-  .log-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; font-family: 'SF Mono', 'Courier New', monospace; font-size: 12px; height: 260px; overflow-y: auto; line-height: 1.7; box-shadow: 0 8px 24px rgba(0,0,0,.2) inset; }
-  .log-info { color: var(--text); }
-  .log-success { color: var(--green); }
-  .log-error { color: var(--red); }
-  .log-muted { color: var(--muted); }
+  /* ── Progress ───────────────────────────────────────────────────────── */
+  .progress-wrap { margin: 4px 0 12px; background: var(--surface2); border-radius: 99px; height: 6px; overflow: hidden; display: none; }
+  .progress-bar { height: 100%; background: var(--gold); width: 0%; transition: width .3s ease; }
+  .progress-label { font-size: 11px; color: var(--muted); margin-bottom: 10px; display: none; font-family: var(--font-mono); }
 
-  /* Results table */
-  .results-grid { display: flex; flex-direction: column; gap: 10px; }
-  .result-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px; box-shadow: 0 6px 18px rgba(0,0,0,.16); }
-  .result-card.success { border-left: 3px solid var(--green); }
-  .result-card.failed { border-left: 3px solid var(--red); }
+  /* ── Log ────────────────────────────────────────────────────────────── */
+  .log-head { display: flex; align-items: center; gap: 10px; margin: 26px 0 10px; }
+  .log-title { font-family: var(--font-disp); font-size: 17px; }
+  .log-box {
+    background: #0c0f0c; border: 1px solid var(--border); border-radius: var(--r);
+    padding: 15px 17px; font-family: var(--font-mono); font-size: 11.5px;
+    height: 250px; overflow-y: auto; line-height: 1.8;
+  }
+  .log-info { color: var(--text); } .log-success { color: var(--green); }
+  .log-error { color: var(--red); } .log-muted { color: var(--faint); }
+  .log-time { color: var(--faint); margin-right: 7px; }
+
+  /* ── Results ────────────────────────────────────────────────────────── */
+  .results-grid { display: flex; flex-direction: column; gap: 8px; }
+  .result-card { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--green); border-radius: var(--r); padding: 13px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
   .result-title { font-size: 13px; font-weight: 700; }
-  .result-meta { font-size: 11px; color: var(--muted); margin-top: 3px; }
-  .result-link { font-size: 11.5px; color: var(--accent); text-decoration: none; font-weight:600; }
+  .result-meta { font-size: 11px; color: var(--muted); margin-top: 3px; font-family: var(--font-mono); }
+  .result-link { font-size: 11.5px; color: var(--gold); text-decoration: none; font-weight: 600; white-space: nowrap; }
   .result-link:hover { text-decoration: underline; }
 
-  /* Settings form */
-  .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 680px; }
-  .field { display: flex; flex-direction: column; gap: 6px; }
-  .field.full { grid-column: 1 / -1; }
-  label { font-size: 11.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
-  .field-row { display:flex; gap:8px; align-items:center; }
-  input[type=text], input[type=password], input[type=number] { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 13px; width: 100%; }
-  input:focus { outline: none; border-color: var(--accent); }
-  .save-row { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; margin-top: 4px; flex-wrap:wrap; }
-  .save-msg { font-size: 12px; color: var(--green); display: none; }
-  .test-result { font-size: 12px; margin-left: 4px; }
-
-  /* History */
-  .table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+  /* ── History ────────────────────────────────────────────────────────── */
+  .history-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 10px; flex-wrap: wrap; }
+  .search-input { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 9px 14px; color: var(--text); font-size: 13px; width: 270px; }
+  .search-input:focus { outline: none; border-color: var(--gold); }
+  .table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); }
   table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-  th { text-align: left; padding: 12px 14px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .5px; font-size: 10.5px; border-bottom: 1px solid var(--border); }
-  td { padding: 11px 14px; border-bottom: 1px solid var(--border); }
+  th { text-align: left; padding: 11px 14px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .6px; font-size: 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  td.mono { font-size: 11.5px; }
   tr:last-child td { border-bottom: none; }
   tr:hover td { background: var(--surface2); }
-  .status-ok { color: var(--green); font-weight:600; }
-  .status-fail { color: var(--red); font-weight:600; }
-  .history-toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; gap:10px; flex-wrap:wrap; }
-  .search-input { background: var(--surface); border:1px solid var(--border); border-radius: var(--radius-sm); padding:9px 14px; color:var(--text); font-size:13px; width: 260px; }
-  .search-input:focus { outline:none; border-color: var(--accent); }
-  .row-del { background:none; border:none; color: var(--muted); cursor:pointer; font-size:14px; }
+  .status-ok { color: var(--green); font-weight: 600; }
+  .status-fail { color: var(--red); font-weight: 600; }
+  .row-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; }
   .row-del:hover { color: var(--red); }
 
-  /* Pill for "all channels" hint */
-  .channel-pill { display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:700; padding:3px 9px; border-radius:99px; background: rgba(236,72,153,.15); color: var(--accent2); }
+  /* ── Settings ───────────────────────────────────────────────────────── */
+  .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 700px; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field.full { grid-column: 1 / -1; }
+  label { font-size: 10.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; }
+  .field-row { display: flex; gap: 8px; align-items: center; }
+  input[type=text], input[type=password], input[type=number] {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; color: var(--text); font-size: 13px; width: 100%;
+  }
+  input:focus { outline: none; border-color: var(--gold); }
+  .save-row { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; margin-top: 4px; flex-wrap: wrap; }
+  .save-msg { font-size: 12px; color: var(--green); display: none; }
+  .test-result { font-size: 12px; }
+  .field-note { font-size: 11px; color: var(--muted); line-height: 1.5; }
+  .field-note code { font-family: var(--font-mono); font-size: 10.5px; color: var(--gold); }
+  .quickstart { margin-top: 30px; padding: 18px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); max-width: 560px; }
+  .quickstart .qs-title { font-family: var(--font-disp); font-size: 15px; margin-bottom: 10px; }
+  .quickstart div:not(.qs-title) { font-size: 12px; color: var(--muted); line-height: 2; }
+  .quickstart a { color: var(--gold); }
+  .quickstart code { font-family: var(--font-mono); font-size: 11px; color: var(--text); }
 
-  /* Spinner */
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .spinner { width: 13px; height: 13px; border: 2px solid rgba(139,92,246,.3); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; display: inline-block; vertical-align: middle; }
-
-  /* Toasts */
+  /* ── Toasts ─────────────────────────────────────────────────────────── */
   .toast-stack { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 999; }
-  .toast { background: var(--surface3); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 11px 16px; font-size: 12.5px; box-shadow: 0 8px 24px rgba(0,0,0,.4); animation: toastin .2s ease; max-width: 320px; }
+  .toast { background: var(--surface3); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 11px 16px; font-size: 12.5px; box-shadow: 0 8px 24px rgba(0,0,0,.45); animation: toastin .2s ease; max-width: 330px; }
   .toast.success { border-left: 3px solid var(--green); }
   .toast.error { border-left: 3px solid var(--red); }
-  @keyframes toastin { from { opacity:0; transform: translateX(20px);} to {opacity:1; transform:none;} }
+  @keyframes toastin { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
 
-  /* Empty state */
-  .empty { text-align: center; padding: 48px 24px; color: var(--muted); }
-  .empty-icon { font-size: 38px; margin-bottom: 12px; }
-  .empty-text { font-size: 14px; }
+  .empty { text-align: center; padding: 44px 24px; color: var(--muted); }
+  .empty-title { font-family: var(--font-disp); font-size: 16px; color: var(--text); margin-bottom: 6px; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner { width: 13px; height: 13px; border: 2px solid rgba(25,21,9,.35); border-top-color: #191509; border-radius: 50%; animation: spin .7s linear infinite; display: inline-block; vertical-align: middle; }
 
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+  ::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 99px; }
 
-  @media (max-width: 900px) {
-    .stats-row { grid-template-columns: 1fr 1fr; }
-  }
+  @media (max-width: 960px) { .stats-row { grid-template-columns: 1fr 1fr; } }
   @media (max-width: 768px) {
     .app { grid-template-columns: 1fr; }
-    .sidebar { position: static; height:auto; border-right: none; border-bottom: 1px solid var(--border); }
+    .sidebar { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+    .side-guide { display: none; }
+    .main { padding: 0 16px 50px; }
     .settings-grid { grid-template-columns: 1fr; }
     .queue-item { grid-template-columns: 1fr; }
+    .item-actions { flex-direction: row; align-items: center; }
   }
 </style>
 </head>
@@ -247,13 +365,13 @@
 <div class="toast-stack" id="toast-stack"></div>
 
 <div class="app">
-  <!-- Sidebar -->
+  <!-- ── Sidebar ─────────────────────────────────────────────────────── -->
   <aside class="sidebar">
     <div class="logo">
-      <div class="logo-icon">🛍️</div>
+      <div class="hallmark">Ish</div>
       <div>
-        <div class="logo-text">ShopifyPipeline</div>
-        <div class="logo-sub">Auto upload tool</div>
+        <div class="logo-text">Listing Studio</div>
+        <div class="logo-sub">Shopify pipeline</div>
       </div>
     </div>
 
@@ -268,80 +386,66 @@
       </div>
     </div>
 
-    <div class="mini-stats" id="sidebar-stats">
+    <div class="mini-stats">
       <div class="mini-stat"><div class="mini-stat-val" id="ms-total">0</div><div class="mini-stat-label">Listed</div></div>
       <div class="mini-stat"><div class="mini-stat-val" id="ms-rate">—</div><div class="mini-stat-label">Success</div></div>
     </div>
 
     <nav class="nav">
-      <button class="nav-btn active" onclick="showPanel('upload', event)">📤 Upload</button>
-      <button class="nav-btn" onclick="showPanel('history', event)">📋 History</button>
-      <button class="nav-btn" onclick="showPanel('settings', event)">⚙️ Settings</button>
+      <button class="nav-btn active" data-panel="upload" onclick="showPanel('upload', event)">📤 Upload <span class="nav-kbd">1</span></button>
+      <button class="nav-btn" data-panel="history" onclick="showPanel('history', event)">📋 History <span class="nav-kbd">2</span></button>
+      <button class="nav-btn" data-panel="settings" onclick="showPanel('settings', event)">⚙️ Settings <span class="nav-kbd">3</span></button>
     </nav>
 
-    <div style="margin-top:auto; font-size:11px; color:var(--muted); line-height:1.7;">
-      <strong style="color:var(--text)">Naming format</strong><br>
-      SKU_CostPrice.jpg<br>
-      e.g. SHIRT001_250.jpg<br><br>
-      <strong style="color:var(--text)">Multi-image tip</strong><br>
-      Use "Select Folder" — every image inside one folder groups into a single product. Name the folder SKU_CostPrice (e.g. SHIRT001_250) to pre-fill SKU + cost.<br><br>
-      <strong style="color:var(--text)">Color / Size variants</strong><br>
-      Fill Colors and/or Sizes on a product card to generate real Shopify variants (e.g. Red/2.4, Red/2.6...). Leave both blank for a single-variant product.<br><br>
-      <strong style="color:var(--text)">Sales channels</strong><br>
-      Every product is auto-published to <em>all</em> active sales channels (Online Store, POS, Shop, Google, Facebook/Instagram, etc.) — no manual step needed.
+    <div class="side-guide">
+      <div class="g-block"><strong>Naming</strong>Files: <code>SKU_Cost.jpg</code> · Folders: <code>SKU_Cost/</code> — every image in one folder becomes one product.</div>
+      <div class="g-block"><strong>Variants</strong>Fill Colors and/or Sizes to create real Shopify variants. Blank = single variant.</div>
+      <div class="g-block"><strong>Shortcuts</strong><code>⌘/Ctrl+Enter</code> upload all · <code>V</code> paste screenshots straight into the queue · <code>1 2 3</code> switch tabs.</div>
+      <div class="g-block"><strong>Channels</strong>Every product publishes to all active sales channels automatically.</div>
     </div>
   </aside>
 
-  <!-- Main -->
+  <!-- ── Main ────────────────────────────────────────────────────────── -->
   <main class="main">
 
-    <!-- Upload Panel -->
+    <!-- Upload panel -->
     <div id="panel-upload" class="panel active">
-      <div class="page-header">
+      <div class="command-bar">
         <div>
-          <div class="page-title">Upload Products</div>
-          <div class="page-sub">Drop images — group multiple shots per product — set price &amp; variants — hit Upload All</div>
+          <div class="page-title">Upload products</div>
+          <div class="page-sub">Drop images, price them, list everywhere in one click</div>
         </div>
-        <span class="channel-pill">🌐 Publishes to all sales channels</span>
+        <div class="cb-spacer"></div>
+        <div class="cb-status">
+          <span class="cb-chip ready"><span class="n" id="cb-ready">0</span> ready</span>
+          <span class="cb-chip"><span class="n" id="cb-incomplete">0</span> need info</span>
+          <span class="cb-chip fail"><span class="n" id="cb-failed">0</span> failed</span>
+          <span class="cb-chip done"><span class="n" id="cb-done">0</span> done</span>
+        </div>
+        <button class="btn btn-primary" id="upload-all-btn" onclick="uploadAll()">⬆ Upload all <span class="kbd-hint">⌘↵</span></button>
       </div>
 
       <!-- Stats -->
       <div class="stats-row">
-        <div class="stat-card">
-          <div class="stat-top"><span class="stat-icon">📦</span></div>
-          <div class="stat-val" id="stat-queued">0</div>
-          <div class="stat-label">In Queue</div>
-        </div>
-        <div class="stat-card green">
-          <div class="stat-top"><span class="stat-icon">✅</span></div>
-          <div class="stat-val" id="stat-success">0</div>
-          <div class="stat-label">Uploaded</div>
-        </div>
-        <div class="stat-card red">
-          <div class="stat-top"><span class="stat-icon">❌</span></div>
-          <div class="stat-val" id="stat-failed">0</div>
-          <div class="stat-label">Failed</div>
-        </div>
-        <div class="stat-card accent">
-          <div class="stat-top"><span class="stat-icon">💰</span></div>
-          <div class="stat-val" id="stat-value">₹0</div>
-          <div class="stat-label">Potential Value</div>
-        </div>
+        <div class="stat-card"><div class="stat-label">In queue</div><div class="stat-val" id="stat-queued">0</div></div>
+        <div class="stat-card green"><div class="stat-label">Uploaded</div><div class="stat-val" id="stat-success">0</div></div>
+        <div class="stat-card red"><div class="stat-label">Failed</div><div class="stat-val" id="stat-failed">0</div></div>
+        <div class="stat-card gold"><div class="stat-label">Catalog value</div><div class="stat-val" id="stat-value">₹0</div></div>
       </div>
 
       <!-- Drop zone -->
       <div class="upload-zone" id="dropzone">
         <input type="file" id="file-input" accept="image/*" multiple style="display:none">
         <input type="file" id="folder-input" accept="image/*" webkitdirectory multiple style="display:none">
-        <div class="upload-icon">📁</div>
-        <div class="upload-text">Drop images here</div>
-        <div style="display:flex;gap:10px;justify-content:center;margin-top:14px;">
-          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();document.getElementById('file-input').click()">🖼️ Select Images</button>
-          <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();document.getElementById('folder-input').click()">📂 Select Folder</button>
+        <div class="upload-text">Drop images or folders here</div>
+        <div class="zone-btns">
+          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();document.getElementById('file-input').click()">🖼️ Select images</button>
+          <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();document.getElementById('folder-input').click()">📂 Select folder</button>
         </div>
-        <div class="upload-hint" style="margin-top:8px;">or drag &amp; drop a folder · JPG, PNG, WEBP · auto-cropped to 1080×1440 &amp; compressed · all images in the same folder group into one product</div>
+        <div class="upload-hint">You can also paste screenshots (<code>⌘/Ctrl+V</code>) · JPG, PNG, WEBP · auto-cropped to 1080×1440 and compressed · each folder groups into one product</div>
       </div>
 
+      <!-- Bulk toolbar -->
       <div class="toolbar">
         <span class="toolbar-label">Markup</span>
         <label class="chip-radio"><input type="radio" name="markup" value="2"> 2×</label>
@@ -350,21 +454,22 @@
         <label class="chip-radio"><input type="radio" name="markup" value="4" checked> 4×</label>
         <label class="chip-radio"><input type="radio" name="markup" value="5"> 5×</label>
         <div class="divider"></div>
-        <span class="toolbar-label">Bulk Cost</span>
-        <input id="bulk-cp" type="number" class="item-input" placeholder="₹ cost price" style="width:110px;">
-        <button class="btn btn-ghost btn-sm" onclick="bulkSetPrice()">Apply to All Pending</button>
+        <span class="toolbar-label">Apply to all pending</span>
+        <input id="bulk-cp" type="number" class="item-input mono-in narrow" placeholder="Cost ₹">
+        <select id="bulk-category" class="item-input" style="width:135px">
+          <option value="">Category…</option>
+          <option>Necklace</option><option>Earrings</option><option>Hand accessories</option>
+          <option>Rings</option><option>Hair accessories</option>
+        </select>
+        <input id="bulk-tags" type="text" class="item-input tags-input" placeholder="Tags">
+        <input id="bulk-hs" type="text" class="item-input mono-in narrow" placeholder="HS code">
+        <input id="bulk-origin" type="text" class="item-input mono-in narrow" placeholder="Origin">
+        <input id="bulk-qty" type="number" class="item-input mono-in narrow" placeholder="Qty">
+        <input id="bulk-sizes" type="text" class="item-input mono-in variant-input" placeholder="Sizes 2.4,2.6,2.8">
+        <button class="btn btn-ghost btn-sm" onclick="bulkApply()">Apply</button>
         <div class="divider"></div>
-        <span class="toolbar-label">Bulk HS / Origin</span>
-        <input id="bulk-hs" type="text" class="item-input narrow" placeholder="HS code">
-        <input id="bulk-origin" type="text" class="item-input narrow" placeholder="Origin">
-        <button class="btn btn-ghost btn-sm" onclick="bulkSetHsOrigin()">Apply</button>
-        <div class="divider"></div>
-        <span class="toolbar-label">Bulk Sizes</span>
-        <input id="bulk-sizes" type="text" class="item-input variant-input" placeholder="e.g. 2.4,2.6,2.8">
-        <button class="btn btn-ghost btn-sm" onclick="bulkSetSizes()">Apply</button>
-        <div class="divider"></div>
-        <span class="toolbar-label">Upload Speed</span>
-        <select id="concurrency" class="item-input" style="width:140px;" title="How many products to send to Shopify at once">
+        <span class="toolbar-label">Speed</span>
+        <select id="concurrency" class="item-input" style="width:120px" title="Products sent to Shopify at once">
           <option value="1">1 at a time</option>
           <option value="2">2 at a time</option>
           <option value="3" selected>3 at a time</option>
@@ -375,12 +480,17 @@
       <!-- Queue -->
       <div id="queue-section" style="display:none">
         <div class="queue-header">
-          <span class="queue-title">Queue (<span id="queue-count">0</span>)</span>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-ghost btn-sm" onclick="retryFailed()">↻ Retry Failed</button>
-            <button class="btn btn-ghost btn-sm" onclick="clearDone()">Clear Done</button>
-            <button class="btn btn-primary" id="upload-all-btn" onclick="uploadAll()">⬆ Upload All</button>
+          <span class="queue-title">Queue · <span class="mono" id="queue-count">0</span></span>
+          <div class="queue-filters" id="queue-filters">
+            <button class="qf active" data-qf="all" onclick="setQueueFilter('all')">All</button>
+            <button class="qf" data-qf="ready" onclick="setQueueFilter('ready')">Ready<span class="c" id="qfc-ready"></span></button>
+            <button class="qf" data-qf="incomplete" onclick="setQueueFilter('incomplete')">Needs info<span class="c" id="qfc-incomplete"></span></button>
+            <button class="qf" data-qf="failed" onclick="setQueueFilter('failed')">Failed<span class="c" id="qfc-failed"></span></button>
+            <button class="qf" data-qf="success" onclick="setQueueFilter('success')">Done<span class="c" id="qfc-success"></span></button>
           </div>
+          <div class="cb-spacer"></div>
+          <button class="btn btn-ghost btn-sm" onclick="retryFailed()">↻ Retry failed</button>
+          <button class="btn btn-ghost btn-sm" onclick="clearDone()">Clear done</button>
         </div>
         <div class="progress-wrap" id="progress-wrap"><div class="progress-bar" id="progress-bar"></div></div>
         <div class="progress-label" id="progress-label"></div>
@@ -388,35 +498,35 @@
       </div>
 
       <!-- Live log -->
-      <div style="margin-top:24px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-          <span style="font-size:14px;font-weight:700">Live Log</span>
-          <button class="btn btn-ghost btn-sm" onclick="clearLog()">Clear</button>
-        </div>
-        <div class="log-box" id="log-box">
-          <span class="log-muted">Waiting for uploads...</span>
-        </div>
+      <div class="log-head">
+        <span class="log-title">Live log</span>
+        <div class="cb-spacer"></div>
+        <label class="chip-radio" style="font-size:11px"><input type="checkbox" id="log-errors-only" onchange="renderLog()"> Errors only</label>
+        <button class="btn btn-ghost btn-sm" onclick="copyLog()">Copy</button>
+        <button class="btn btn-ghost btn-sm" onclick="clearLog()">Clear</button>
       </div>
+      <div class="log-box" id="log-box"><span class="log-muted">Waiting for uploads…</span></div>
 
       <!-- Results -->
-      <div id="results-section" style="display:none;margin-top:24px">
-        <div style="font-size:14px;font-weight:700;margin-bottom:12px">Completed</div>
+      <div id="results-section" style="display:none;margin-top:26px">
+        <div class="log-title" style="margin-bottom:12px">Completed this session</div>
         <div class="results-grid" id="results-list"></div>
       </div>
     </div>
 
-    <!-- History Panel -->
+    <!-- History panel -->
     <div id="panel-history" class="panel">
-      <div class="page-header">
+      <div class="command-bar">
         <div>
-          <div class="page-title">Upload History</div>
-          <div class="page-sub">All uploads from this session</div>
+          <div class="page-title">Upload history</div>
+          <div class="page-sub">Everything this tool has listed, newest first</div>
         </div>
+        <div class="cb-spacer"></div>
         <button class="btn btn-ghost btn-sm" onclick="exportCsv()">⬇ Export CSV</button>
       </div>
       <div class="history-toolbar">
-        <input class="search-input" id="history-search" placeholder="Search by SKU or title…" oninput="renderHistory()">
-        <div style="display:flex;gap:8px">
+        <input class="search-input" id="history-search" placeholder="Search by SKU or title… ( / )" oninput="renderHistory()">
+        <div style="display:flex;gap:6px">
           <button class="btn btn-ghost btn-sm" onclick="setHistoryFilter('all')" id="hf-all">All</button>
           <button class="btn btn-ghost btn-sm" onclick="setHistoryFilter('success')" id="hf-success">Success</button>
           <button class="btn btn-ghost btn-sm" onclick="setHistoryFilter('failed')" id="hf-failed">Failed</button>
@@ -426,28 +536,28 @@
         <table>
           <thead>
             <tr>
-              <th>Time</th><th>SKU</th><th>Title</th><th>Images</th><th>Variants</th>
-              <th>Cost</th><th>Price</th><th>HS Code</th><th>Origin</th><th>Status</th><th>Link</th><th></th>
+              <th>Time</th><th>SKU</th><th>Title</th><th>Imgs</th><th>Vars</th>
+              <th>Cost</th><th>Price</th><th>HS</th><th>Origin</th><th>Status</th><th>Link</th><th></th>
             </tr>
           </thead>
           <tbody id="history-tbody">
-            <tr><td colspan="12" style="text-align:center;color:var(--muted);padding:32px">Loading...</td></tr>
+            <tr><td colspan="12" style="text-align:center;color:var(--muted);padding:32px">Loading…</td></tr>
           </tbody>
         </table>
       </div>
     </div>
 
-    <!-- Settings Panel -->
+    <!-- Settings panel -->
     <div id="panel-settings" class="panel">
-      <div class="page-header">
+      <div class="command-bar">
         <div>
           <div class="page-title">Settings</div>
-          <div class="page-sub">Your credentials are saved to .env / settings.json on the server</div>
+          <div class="page-sub">Credentials and catalog defaults, saved on the server</div>
         </div>
       </div>
       <div class="settings-grid">
         <div class="field full">
-          <label>Shopify Store URL</label>
+          <label>Shopify store URL</label>
           <div class="field-row">
             <input type="text" id="s-store" placeholder="yourstore.myshopify.com" value="{{ shopify_store }}">
             <button class="btn btn-ghost btn-sm" onclick="testShopify()">Test</button>
@@ -455,62 +565,41 @@
           <span class="test-result" id="test-shopify-result"></span>
         </div>
         <div class="field full">
-          <label>Shopify Admin Token</label>
+          <label>Shopify admin token</label>
           <input type="password" id="s-token" placeholder="shpat_xxxxxxxxxxxx">
-          <span style="font-size:11px;color:var(--muted)">Needs scopes: write_products, read_products, write_inventory, read_inventory, write_publications</span>
+          <span class="field-note">Needs scopes: <code>write_products</code>, <code>read_products</code>, <code>write_inventory</code>, <code>read_inventory</code>, <code>write_publications</code></span>
         </div>
         <div class="field full">
-          <label>Groq API Key <a href="https://console.groq.com" target="_blank" style="color:var(--accent);font-size:11px;font-weight:400;text-decoration:none">Get free key →</a></label>
+          <label>Groq API key <a href="https://console.groq.com" target="_blank" style="color:var(--gold);font-weight:400;text-transform:none;letter-spacing:0">Get free key →</a></label>
           <div class="field-row">
             <input type="password" id="s-groq" placeholder="gsk_xxxxxxxxxxxx">
             <button class="btn btn-ghost btn-sm" onclick="testGroq()">Test</button>
           </div>
           <span class="test-result" id="test-groq-result"></span>
-          <span style="font-size:11px;color:var(--muted)">Free tier is rate-limited — the pipeline auto-retries on 429s, but very fast/large batches may still hit limits occasionally.</span>
+          <span class="field-note">The free tier is rate-limited — the pipeline auto-retries on 429s, but very large batches may still slow down occasionally.</span>
         </div>
-        <div class="field">
-          <label>Product Vendor</label>
-          <input type="text" id="s-vendor" placeholder="My Brand">
-        </div>
-        <div class="field">
-          <label>Product Type</label>
-          <input type="text" id="s-type" placeholder="Apparel">
-        </div>
-        <div class="field">
-          <label>Default HS Code</label>
-          <input type="text" id="s-hscode" placeholder="7117.90">
-        </div>
-        <div class="field">
-          <label>Default Weight (grams)</label>
-          <input type="number" id="s-weight" placeholder="1">
-        </div>
-        <div class="field">
-          <label>Default Country of Origin</label>
-          <input type="text" id="s-origin" placeholder="IN">
-        </div>
-        <div class="field">
-          <label>Default Inventory Qty</label>
-          <input type="number" id="s-qty" placeholder="10">
-        </div>
-        <div class="field full">
-          <label>Default Bangle Sizes (for quick-fill preset)</label>
-          <input type="text" id="s-bangle-sizes" placeholder="2.4,2.6,2.8">
-        </div>
+        <div class="field"><label>Product vendor</label><input type="text" id="s-vendor" placeholder="Ishhaara"></div>
+        <div class="field"><label>Product type</label><input type="text" id="s-type" placeholder="Jewellery"></div>
+        <div class="field"><label>Default HS code</label><input type="text" id="s-hscode" placeholder="7117.90"></div>
+        <div class="field"><label>Default weight (g)</label><input type="number" id="s-weight" placeholder="1"></div>
+        <div class="field"><label>Default country of origin</label><input type="text" id="s-origin" placeholder="IN"></div>
+        <div class="field"><label>Default inventory qty</label><input type="number" id="s-qty" placeholder="10"></div>
+        <div class="field full"><label>Default bangle sizes (quick-fill preset)</label><input type="text" id="s-bangle-sizes" placeholder="2.4,2.6,2.8"></div>
         <div class="save-row">
-          <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
-          <span class="save-msg" id="save-msg">✅ Saved!</span>
+          <button class="btn btn-primary" onclick="saveSettings()">Save settings</button>
+          <span class="save-msg" id="save-msg">✅ Saved</span>
         </div>
       </div>
 
-      <div style="margin-top:32px;padding:16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);max-width:560px">
-        <div style="font-size:13px;font-weight:700;margin-bottom:10px">💡 Quick Start</div>
-        <div style="font-size:12px;color:var(--muted);line-height:2">
-          1. Get free Groq key → <a href="https://console.groq.com" target="_blank" style="color:var(--accent)">console.groq.com</a><br>
-          2. Get Shopify token → Admin → Settings → Apps → Develop apps<br>
-          3. Scopes needed: <code style="color:var(--text)">write_products</code>, <code style="color:var(--text)">write_inventory</code>, <code style="color:var(--text)">write_publications</code><br>
-          4. Drop images, set prices + HS code/origin, optionally add Colors/Sizes for variants, click Upload All<br>
-          5. Products are auto-published to every connected sales channel — Online Store, POS, Shop app, Google, Facebook/Instagram, etc.<br>
-          6. Use "Test" buttons above to confirm credentials before a big batch
+      <div class="quickstart">
+        <div class="qs-title">Quick start</div>
+        <div>
+          1. Get a free Groq key → <a href="https://console.groq.com" target="_blank">console.groq.com</a><br>
+          2. Get a Shopify token → Admin → Settings → Apps → Develop apps<br>
+          3. Scopes: <code>write_products</code>, <code>write_inventory</code>, <code>write_publications</code><br>
+          4. Drop images, price them, add Colors/Sizes for variants, upload all<br>
+          5. Products publish to every connected sales channel automatically<br>
+          6. Use the Test buttons above before a big batch
         </div>
       </div>
     </div>
@@ -521,22 +610,22 @@
 <script>
 const socket = io();
 
-// Each queue item = one PRODUCT, can hold multiple images.
-// { id, sku, costPrice, title, colors, sizes, images: [{file, thumb, name}], status, error }
+// One queue item = one product; can hold multiple images (first = cover).
 let queue = [];
 let history = [];
 let historyFilter = 'all';
-let logBox = document.getElementById('log-box');
-let firstLog = true;
+let queueFilter = 'all';
+let logLines = [];              // {time, msg, level}
 let DEFAULT_BANGLE_SIZES = '2.4,2.6,2.8';
+const logBox = document.getElementById('log-box');
+let firstLog = true;
 
 // ── Toasts ────────────────────────────────────────────────────────────────────
 function toast(msg, type='success') {
-  const stack = document.getElementById('toast-stack');
   const el = document.createElement('div');
   el.className = `toast ${type}`;
   el.textContent = msg;
-  stack.appendChild(el);
+  document.getElementById('toast-stack').appendChild(el);
   setTimeout(() => el.remove(), 4000);
 }
 
@@ -545,11 +634,7 @@ socket.on('log', ({msg, level}) => addLog(msg, level));
 
 socket.on('product_done', (data) => {
   const item = queue.find(q => q.sku === data.sku && q.status === 'uploading');
-  if (item) {
-    item.status = data.status;
-    item.error = data.error || null;
-    renderQueue();
-  }
+  if (item) { item.status = data.status; item.error = data.error || null; renderQueue(); }
   if (data.status === 'success') {
     addResult(data);
     toast(`${data.sku} listed on Shopify`, 'success');
@@ -565,14 +650,16 @@ function showPanel(name, evt) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('panel-' + name).classList.add('active');
-  if (evt) evt.currentTarget.classList.add('active');
+  const btn = evt ? evt.currentTarget : document.querySelector(`.nav-btn[data-panel="${name}"]`);
+  if (btn) btn.classList.add('active');
   if (name === 'history') loadHistory();
 }
 
-// ── File drop & pick ──────────────────────────────────────────────────────────
+// ── File intake: drop, pick, folder, paste ────────────────────────────────────
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('file-input');
 
+dropzone.addEventListener('click', () => fileInput.click());
 dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
 dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
 dropzone.addEventListener('drop', async e => {
@@ -596,8 +683,17 @@ document.getElementById('folder-input').addEventListener('change', function() {
   this.value = '';
 });
 
-// Recursively walk a dropped folder's DataTransferItem entry tree, returning
-// a flat list of { file, relativePath } so every image keeps its folder path.
+// Paste screenshots/images anywhere — each paste becomes one product.
+document.addEventListener('paste', e => {
+  if (document.activeElement && ['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) return;
+  const files = [...(e.clipboardData?.files || [])].filter(f => f.type.startsWith('image/'));
+  if (!files.length) return;
+  const key = `paste:${Date.now()}`;
+  files.forEach(file => addToQueue({ file, relativePath: file.name }, key));
+  toast(`Pasted ${files.length} image${files.length>1?'s':''} into the queue`, 'success');
+  showPanel('upload');
+});
+
 function traverseFileTree(entry, path = '') {
   return new Promise(resolve => {
     if (!entry) return resolve([]);
@@ -611,21 +707,15 @@ function traverseFileTree(entry, path = '') {
           if (!batch.length) {
             const nested = await Promise.all(collected.map(e => traverseFileTree(e, path + entry.name + '/')));
             resolve(nested.flat());
-          } else {
-            collected = collected.concat(batch);
-            readBatch();
-          }
+          } else { collected = collected.concat(batch); readBatch(); }
         }, () => resolve([]));
       };
       readBatch();
-    } else {
-      resolve([]);
-    }
+    } else resolve([]);
   });
 }
 
-// Parse "SKU_COST.ext" or "SKU_COST_2.ext" style names — used ONLY as a
-// fallback for flat (non-folder) selections with no directory structure.
+// "SKU_COST.ext" fallback for flat files with no folder structure.
 function parseFilename(filename) {
   const stem = filename.replace(/\.[^.]+$/, '');
   let m = stem.match(/^(.+?)_(\d+(?:\.\d+)?)_(\d+)$/);
@@ -637,10 +727,7 @@ function parseFilename(filename) {
   return { sku, cost: '', groupKey: sku };
 }
 
-// Decide how to group a given { file, relativePath } entry into a product:
-// if it came from a folder, EVERY image in that folder is one product,
-// regardless of individual filenames. Folder name "SKU_COST" still pre-fills
-// SKU + cost if it matches that pattern; otherwise just the SKU is filled in.
+// Folder = one product; folder named "SKU_COST" pre-fills both fields.
 function groupKeyFor({ file, relativePath }) {
   const parts = relativePath.split('/');
   if (parts.length > 1) {
@@ -657,11 +744,12 @@ function groupKeyFor({ file, relativePath }) {
 
 function handleEntries(entries) {
   const images = entries.filter(e => e.file.type.startsWith('image/') || /\.(jpe?g|png|webp)$/i.test(e.file.name));
-  images.forEach(addToQueue);
+  images.forEach(en => addToQueue(en));
 }
 
-function addToQueue({ file, relativePath }) {
-  const { sku, cost, groupKey } = groupKeyFor({ file, relativePath });
+function addToQueue({ file, relativePath }, forcedKey = null) {
+  const parsed = groupKeyFor({ file, relativePath });
+  const groupKey = forcedKey || parsed.groupKey;
   const reader = new FileReader();
   reader.onload = e => {
     const thumb = e.target.result;
@@ -671,9 +759,9 @@ function addToQueue({ file, relativePath }) {
     } else {
       item = {
         id: Date.now() + Math.random(),
-        groupKey, sku, costPrice: cost, title: '',
-        category: '', tags: '', weight: '', hscode: '', origin: '', qty: '',
-        colors: '', sizes: '',
+        groupKey, sku: forcedKey ? '' : parsed.sku, costPrice: forcedKey ? '' : parsed.cost,
+        title: '', category: '', tags: '', weight: '', hscode: '', origin: '', qty: '',
+        colors: '', sizes: '', _detectedColor: null,
         images: [{ file, thumb, name: file.name }],
         status: 'pending', error: null
       };
@@ -685,122 +773,169 @@ function addToQueue({ file, relativePath }) {
   reader.readAsDataURL(file);
 }
 
-// ── Render queue (full rebuild — only called on add/remove/status change) ────
+// ── Queue state helpers ───────────────────────────────────────────────────────
+function isReady(item) { return item.status === 'pending' && item.sku && item.costPrice; }
+function bucketOf(item) {
+  if (item.status === 'pending') return isReady(item) ? 'ready' : 'incomplete';
+  return item.status; // uploading | success | failed
+}
+function dupSkus() {
+  const seen = {}, dups = new Set();
+  queue.forEach(q => {
+    const s = (q.sku || '').trim();
+    if (!s) return;
+    if (seen[s]) dups.add(s); seen[s] = true;
+  });
+  return dups;
+}
+function variantCountFor(item) {
+  const colors = (item.colors || '').split(',').map(s => s.trim()).filter(Boolean);
+  const sizes  = (item.sizes  || '').split(',').map(s => s.trim()).filter(Boolean);
+  if (!colors.length && !sizes.length) return 1;
+  return Math.max(colors.length, 1) * Math.max(sizes.length, 1);
+}
+
+function setQueueFilter(f) {
+  queueFilter = f;
+  document.querySelectorAll('.qf').forEach(b => b.classList.toggle('active', b.dataset.qf === f));
+  renderQueue();
+}
+
+// ── Render queue (full rebuild on add/remove/status change) ──────────────────
 function renderQueue() {
   const list = document.getElementById('queue-list');
   const section = document.getElementById('queue-section');
   section.style.display = queue.length ? 'block' : 'none';
   document.getElementById('queue-count').textContent = queue.length;
 
-  list.innerHTML = queue.map(item => buildQueueItemHtml(item)).join('');
+  const dups = dupSkus();
+  const counts = { ready:0, incomplete:0, failed:0, success:0 };
+  queue.forEach(q => { const b = bucketOf(q); if (counts[b] !== undefined) counts[b]++; });
+  ['ready','incomplete','failed','success'].forEach(k => {
+    const el = document.getElementById('qfc-' + k);
+    if (el) el.textContent = counts[k] ? ` ${counts[k]}` : '';
+  });
+
+  const visible = queue.filter(q => queueFilter === 'all' || bucketOf(q) === queueFilter);
+  if (!visible.length) {
+    list.innerHTML = `<div class="empty"><div class="empty-title">Nothing here</div>No items match this filter.</div>`;
+  } else {
+    list.innerHTML = visible.map(item => buildQueueItemHtml(item, dups)).join('');
+  }
 }
 
-function variantCountFor(item) {
-  const colors = (item.colors || '').split(',').map(s => s.trim()).filter(Boolean);
-  const sizes = (item.sizes || '').split(',').map(s => s.trim()).filter(Boolean);
-  if (!colors.length && !sizes.length) return 1;
-  return Math.max(colors.length, 1) * Math.max(sizes.length, 1);
-}
-
-function buildQueueItemHtml(item) {
+function buildQueueItemHtml(item, dups) {
   const sp = item.costPrice ? calcSP(parseFloat(item.costPrice), getMarkup()) : null;
-  const badgeClass = {pending:'badge-pending',uploading:'badge-running',success:'badge-success',failed:'badge-failed'}[item.status];
-  const badgeText  = {pending:'Pending',uploading:'Uploading…',success:'Done ✅',failed:'Failed ❌'}[item.status];
+  const ready = isReady(item);
+  const badge = {
+    pending: ready ? ['badge-ready','Ready'] : ['badge-pending','Needs info'],
+    uploading: ['badge-running','Uploading…'],
+    success: ['badge-success','Done ✅'],
+    failed: ['badge-failed','Failed ❌'],
+  }[item.status];
   const locked = item.status !== 'pending';
   const vCount = variantCountFor(item);
+  const isDup = item.sku && dups.has(item.sku.trim());
 
   const thumbs = item.images.map((img, idx) => `
-      <div class="thumb-wrap">
-        <img class="thumb" src="${img.thumb}" title="${img.name}">
-        ${!locked ? `<button class="thumb-remove" onclick="removeImage('${item.id}', ${idx})">×</button>` : ''}
+      <div class="thumb-wrap ${idx===0?'cover':''}">
+        <img class="thumb" src="${img.thumb}" title="${img.name}" alt="">
+        ${idx===0 ? '<span class="cover-tag">COVER</span>' : ''}
+        ${!locked && idx>0 ? `<button class="thumb-cover" title="Make cover image" onclick="makeCover('${item.id}', ${idx})">★</button>` : ''}
+        ${!locked ? `<button class="thumb-remove" title="Remove image" onclick="removeImage('${item.id}', ${idx})">×</button>` : ''}
       </div>`).join('');
-
-  const addBtn = !locked ? `<div class="thumb-add" onclick="addImagesToItem('${item.id}')">+</div>` : '';
+  const addBtn = !locked ? `<button class="thumb-add" title="Add images" onclick="addImagesToItem('${item.id}')">+</button>` : '';
 
   return `
-    <div class="queue-item ${item.status}" id="qi-${item.id}">
+    <div class="queue-item ${item.status} ${ready?'ready':''}" id="qi-${item.id}">
       <div>
         <div class="thumb-stack">${thumbs}${addBtn}</div>
         <div class="img-count-badge">${item.images.length} image${item.images.length>1?'s':''}</div>
       </div>
       <div class="item-info">
-        <div class="item-name">${item.sku || '(no SKU)'} ${item.images.length>1 ? `· ${item.images[0].name} +${item.images.length-1}` : '· '+item.images[0].name}
-          ${vCount > 1 ? `<span class="variant-pill" id="vpill-${item.id}">${vCount} variants</span>` : ''}
-        </div>
+        <div class="item-name" id="name-${item.id}">${nameHtml(item, vCount, isDup)}</div>
         <div class="item-inputs">
-          <input class="item-input" data-field="sku" placeholder="SKU" value="${item.sku}"
+          <input class="item-input mono-in ${!item.sku?'invalid':''}" placeholder="SKU" value="${item.sku}"
             oninput="onFieldInput('${item.id}','sku',this.value)" ${locked?'disabled':''}>
-          <input class="item-input" data-field="costPrice" placeholder="Cost ₹" value="${item.costPrice}" type="number"
+          <input class="item-input mono-in narrow ${!item.costPrice?'invalid':''}" placeholder="Cost ₹" value="${item.costPrice}" type="number"
             oninput="onFieldInput('${item.id}','costPrice',this.value)" ${locked?'disabled':''}>
-          <input class="item-input title-input" data-field="title" placeholder="Custom title (optional, AI used if blank)" value="${item.title}"
+          <input class="item-input title-input" placeholder="Custom title (blank = AI writes it)" value="${item.title}"
             oninput="onFieldInput('${item.id}','title',this.value)" ${locked?'disabled':''}>
         </div>
         <div class="item-inputs">
-          <select class="item-input" data-field="category" onchange="onFieldInput('${item.id}','category',this.value)" ${locked?'disabled':''}>
+          <select class="item-input" onchange="onFieldInput('${item.id}','category',this.value)" ${locked?'disabled':''}>
             <option value="">No category template</option>
-            <option value="Necklace" ${item.category==='Necklace'?'selected':''}>Necklace</option>
-            <option value="Earrings" ${item.category==='Earrings'?'selected':''}>Earrings</option>
-            <option value="Hand accessories" ${item.category==='Hand accessories'?'selected':''}>Hand accessories</option>
-            <option value="Rings" ${item.category==='Rings'?'selected':''}>Rings</option>
-            <option value="Hair accessories" ${item.category==='Hair accessories'?'selected':''}>Hair accessories</option>
+            ${['Necklace','Earrings','Hand accessories','Rings','Hair accessories'].map(c =>
+              `<option value="${c}" ${item.category===c?'selected':''}>${c}</option>`).join('')}
           </select>
-          <input class="item-input tags-input" data-field="tags" placeholder="Tags (comma separated)" value="${item.tags}"
+          <input class="item-input tags-input" placeholder="Tags (comma separated)" value="${item.tags}"
             oninput="onFieldInput('${item.id}','tags',this.value)" ${locked?'disabled':''}>
-          <input class="item-input narrow" data-field="weight" placeholder="Wt (g) 1" value="${item.weight}" type="number"
+          <input class="item-input mono-in narrow" placeholder="Wt g" value="${item.weight}" type="number" title="Weight in grams"
             oninput="onFieldInput('${item.id}','weight',this.value)" ${locked?'disabled':''}>
-          <input class="item-input narrow" data-field="hscode" placeholder="HS 7117.90" value="${item.hscode}"
+          <input class="item-input mono-in narrow" placeholder="HS code" value="${item.hscode}" title="HS code"
             oninput="onFieldInput('${item.id}','hscode',this.value)" ${locked?'disabled':''}>
-          <input class="item-input narrow" data-field="origin" placeholder="Origin IN" value="${item.origin}"
+          <input class="item-input mono-in narrow" placeholder="Origin" value="${item.origin}" title="Country of origin"
             oninput="onFieldInput('${item.id}','origin',this.value)" ${locked?'disabled':''}>
+          <input class="item-input mono-in narrow" placeholder="Qty" value="${item.qty}" type="number" title="Inventory quantity"
+            oninput="onFieldInput('${item.id}','qty',this.value)" ${locked?'disabled':''}>
         </div>
         <div class="item-inputs">
-          <input class="item-input variant-input" data-field="colors" placeholder="Colors e.g. Red, Gold, Silver" value="${item.colors}"
+          <input class="item-input variant-input" placeholder="Colors e.g. Red, Gold" value="${item.colors}"
             oninput="onFieldInput('${item.id}','colors',this.value)" ${locked?'disabled':''}>
-          <input class="item-input variant-input" data-field="sizes" placeholder="Sizes e.g. 2.4,2.6,2.8" value="${item.sizes}"
+          <input class="item-input mono-in variant-input" placeholder="Sizes e.g. 2.4,2.6,2.8" value="${item.sizes}"
             oninput="onFieldInput('${item.id}','sizes',this.value)" ${locked?'disabled':''}>
           ${!locked ? `<button class="preset-btn" onclick="applyBangleSizes('${item.id}')" title="Fill default bangle sizes">📏 Bangle sizes</button>` : ''}
         </div>
         <div class="item-meta" id="meta-${item.id}">${metaHtml(item, sp)}</div>
+        <div class="item-meta" style="margin-top:4px"><span class="color-detect-badge" style="font-family:var(--font-ui);font-size:11px;color:var(--gold);background:var(--gold-soft);border:1px solid var(--gold-line);padding:2px 8px;border-radius:99px">${item._detectedColor ? '🎨 '+item._detectedColor : item.colors ? '' : '<span style=\'color:var(--faint)\'>Color auto-detected on upload</span>'}</span></div>
         ${item.status==='failed' && item.error ? `<div class="item-error-msg">⚠ ${item.error}</div>` : ''}
       </div>
       <div class="item-actions">
-        <span class="badge ${badgeClass}">${badgeText}</span>
-        ${item.status==='pending' ? `<button class="remove-btn" onclick="removeItem('${item.id}')">×</button>` : ''}
+        <span class="badge ${badge[0]}">${badge[1]}</span>
+        ${item.status==='pending' ? `<button class="remove-btn" title="Remove product" onclick="removeItem('${item.id}')">×</button>` : ''}
         ${item.status==='failed' ? `<button class="btn btn-ghost btn-sm" onclick="retryItem('${item.id}')">↻ Retry</button>` : ''}
       </div>
     </div>`;
 }
 
-function metaHtml(item, sp) {
-  if (!item.costPrice) return `<span style="color:var(--yellow)">Enter cost price</span>`;
-  const mrp = sp * 2;
-  return `<span>CP: ₹${item.costPrice}</span><span style="color:var(--muted);text-decoration:line-through">MRP: ₹${mrp}</span><span class="item-price">SP: ₹${sp}</span>`;
+function nameHtml(item, vCount, isDup) {
+  const extra = item.images.length > 1
+    ? `${item.images[0].name} +${item.images.length-1}` : item.images[0].name;
+  return `<span class="sku-txt">${item.sku || '(no SKU)'}</span>
+          <span class="file-txt">${extra}</span>
+          ${vCount > 1 ? `<span class="variant-pill">${vCount} variants</span>` : ''}
+          ${isDup ? `<span class="dup-pill" title="Another item in the queue has this SKU">duplicate SKU</span>` : ''}`;
 }
 
-// ── Targeted, non-destructive updates ─────────────────────────────────────────
+function metaHtml(item, sp) {
+  if (!item.costPrice) return `<span style="color:var(--yellow);font-family:var(--font-ui)">Enter a cost price to see selling price</span>`;
+  const mrp = sp * 2;
+  return `<span>CP ₹${item.costPrice}</span><span class="item-mrp">MRP ₹${mrp}</span><span class="item-price">SP ₹${sp}</span>`;
+}
+
+// ── Targeted updates (no rebuild → inputs keep focus) ────────────────────────
 function onFieldInput(id, field, val) {
   const item = queue.find(q => q.id == id);
   if (!item) return;
   item[field] = val;
-  if (field === 'sku') {
-    const nameEl = document.querySelector(`#qi-${id} .item-name`);
-    if (nameEl) {
-      const extra = item.images.length>1 ? `· ${item.images[0].name} +${item.images.length-1}` : '· '+item.images[0].name;
-      const vCount = variantCountFor(item);
-      nameEl.innerHTML = `${item.sku || '(no SKU)'} ${extra} ${vCount > 1 ? `<span class="variant-pill">${vCount} variants</span>` : ''}`;
-    }
+
+  if (['sku','colors','sizes'].includes(field)) {
+    const nameEl = document.getElementById(`name-${id}`);
+    if (nameEl) nameEl.innerHTML = nameHtml(item, variantCountFor(item), item.sku && dupSkus().has(item.sku.trim()));
   }
   if (field === 'costPrice' || field === 'sku') {
     const sp = item.costPrice ? calcSP(parseFloat(item.costPrice), getMarkup()) : null;
     const metaEl = document.getElementById(`meta-${id}`);
     if (metaEl) metaEl.innerHTML = metaHtml(item, sp);
-  }
-  if (field === 'colors' || field === 'sizes') {
-    const nameEl = document.querySelector(`#qi-${id} .item-name`);
-    if (nameEl) {
-      const extra = item.images.length>1 ? `· ${item.images[0].name} +${item.images.length-1}` : '· '+item.images[0].name;
-      const vCount = variantCountFor(item);
-      nameEl.innerHTML = `${item.sku || '(no SKU)'} ${extra} ${vCount > 1 ? `<span class="variant-pill">${vCount} variants</span>` : ''}`;
+    // Update ready seam + badge without rebuilding
+    const card = document.getElementById(`qi-${id}`);
+    if (card && item.status === 'pending') {
+      card.classList.toggle('ready', isReady(item));
+      const b = card.querySelector('.badge');
+      if (b) {
+        b.className = 'badge ' + (isReady(item) ? 'badge-ready' : 'badge-pending');
+        b.textContent = isReady(item) ? 'Ready' : 'Needs info';
+      }
     }
   }
   updateStats();
@@ -825,6 +960,15 @@ document.querySelectorAll('input[name="markup"]').forEach(r => {
   });
 });
 
+function makeCover(id, idx) {
+  const item = queue.find(q => q.id == id);
+  if (!item || !item.images[idx]) return;
+  const [img] = item.images.splice(idx, 1);
+  item.images.unshift(img);
+  renderQueue();
+  toast('Cover image updated', 'success');
+}
+
 function addImagesToItem(id) {
   const input = document.createElement('input');
   input.type = 'file'; input.accept = 'image/*'; input.multiple = true;
@@ -847,9 +991,7 @@ function removeImage(id, idx) {
   const item = queue.find(q => q.id == id);
   if (!item) return;
   item.images.splice(idx, 1);
-  if (item.images.length === 0) {
-    queue = queue.filter(q => q.id != id);
-  }
+  if (item.images.length === 0) queue = queue.filter(q => q.id != id);
   renderQueue();
   updateStats();
 }
@@ -881,7 +1023,36 @@ function retryFailed() {
   else toast('No failed items to retry', 'error');
 }
 
-// ── Price calculator: cost×markup, round up to nearest charm-price tier ───────
+// ── Bulk apply (one button, fills whatever you typed) ─────────────────────────
+function bulkApply() {
+  const cp     = document.getElementById('bulk-cp').value.trim();
+  const cat    = document.getElementById('bulk-category').value;
+  const tags   = document.getElementById('bulk-tags').value.trim();
+  const hs     = document.getElementById('bulk-hs').value.trim();
+  const origin = document.getElementById('bulk-origin').value.trim();
+  const qty    = document.getElementById('bulk-qty').value.trim();
+  const sizes  = document.getElementById('bulk-sizes').value.trim();
+  if (!cp && !cat && !tags && !hs && !origin && !qty && !sizes) {
+    toast('Fill at least one bulk field first', 'error'); return;
+  }
+  let n = 0;
+  queue.forEach(q => {
+    if (q.status !== 'pending') return;
+    if (cp)     q.costPrice = cp;
+    if (cat)    q.category = cat;
+    if (tags)   q.tags = tags;
+    if (hs)     q.hscode = hs;
+    if (origin) q.origin = origin;
+    if (qty)    q.qty = qty;
+    if (sizes)  q.sizes = sizes;
+    n++;
+  });
+  renderQueue();
+  updateStats();
+  toast(n ? `Applied to ${n} pending item(s)` : 'No pending items to update', n ? 'success' : 'error');
+}
+
+// ── Price calculator: cost × markup, round up to nearest charm tier ──────────
 function getMarkup() {
   return parseFloat(document.querySelector('input[name="markup"]:checked')?.value || 4);
 }
@@ -893,44 +1064,17 @@ function calcSP(cp, markup) {
                  5999,6999,7999,8999,9999,
                  12999,14999,19999,24999,29999,39999,49999,99999];
   for (const t of tiers) { if (t >= raw) return t; }
-  const b = Math.floor(raw / 1000) * 1000;
-  return b + 999;
-}
-function bulkSetPrice() {
-  const cp = parseFloat(document.getElementById('bulk-cp').value);
-  if (!cp || isNaN(cp)) { toast('Enter a valid bulk cost price', 'error'); return; }
-  queue.forEach(q => { if (q.status === 'pending') q.costPrice = String(cp); });
-  renderQueue();
-  updateStats();
-  toast(`Applied ₹${cp} cost to all pending items`, 'success');
-}
-function bulkSetHsOrigin() {
-  const hs = document.getElementById('bulk-hs').value.trim();
-  const origin = document.getElementById('bulk-origin').value.trim();
-  if (!hs && !origin) { toast('Enter an HS code or origin to apply', 'error'); return; }
-  queue.forEach(q => {
-    if (q.status === 'pending') {
-      if (hs) q.hscode = hs;
-      if (origin) q.origin = origin;
-    }
-  });
-  renderQueue();
-  toast('Applied HS code / origin to all pending items', 'success');
-}
-function bulkSetSizes() {
-  const sizes = document.getElementById('bulk-sizes').value.trim();
-  if (!sizes) { toast('Enter sizes to apply', 'error'); return; }
-  queue.forEach(q => { if (q.status === 'pending') q.sizes = sizes; });
-  renderQueue();
-  toast(`Applied sizes "${sizes}" to all pending items`, 'success');
+  return Math.floor(raw / 1000) * 1000 + 999;
 }
 
-// ── Stats dashboard ───────────────────────────────────────────────────────────
+// ── Stats & command bar ───────────────────────────────────────────────────────
 function updateStats() {
-  const queued  = queue.filter(q => q.status === 'pending' || q.status === 'uploading').length;
-  const success = queue.filter(q => q.status === 'success').length;
-  const failed  = queue.filter(q => q.status === 'failed').length;
-  const value   = queue.reduce((sum, q) => {
+  const ready      = queue.filter(isReady).length;
+  const incomplete = queue.filter(q => q.status === 'pending' && !isReady(q)).length;
+  const queued     = queue.filter(q => q.status === 'pending' || q.status === 'uploading').length;
+  const success    = queue.filter(q => q.status === 'success').length;
+  const failed     = queue.filter(q => q.status === 'failed').length;
+  const value      = queue.reduce((sum, q) => {
     if (!q.costPrice) return sum;
     return sum + calcSP(parseFloat(q.costPrice), getMarkup()) * variantCountFor(q);
   }, 0);
@@ -940,22 +1084,45 @@ function updateStats() {
   document.getElementById('stat-failed').textContent  = failed;
   document.getElementById('stat-value').textContent   = `₹${value.toLocaleString('en-IN')}`;
 
+  document.getElementById('cb-ready').textContent      = ready;
+  document.getElementById('cb-incomplete').textContent = incomplete;
+  document.getElementById('cb-failed').textContent     = failed;
+  document.getElementById('cb-done').textContent       = success;
+
+  const btn = document.getElementById('upload-all-btn');
+  if (!btn.disabled) {
+    btn.innerHTML = ready
+      ? `⬆ Upload ${ready} ready <span class="kbd-hint">⌘↵</span>`
+      : `⬆ Upload all <span class="kbd-hint">⌘↵</span>`;
+  }
+
   document.getElementById('ms-total').textContent = success;
   const total = success + failed;
   document.getElementById('ms-rate').textContent = total ? Math.round((success/total)*100) + '%' : '—';
+
+  // Refresh filter counts even without a full re-render
+  const counts = { ready, incomplete, failed, success };
+  ['ready','incomplete','failed','success'].forEach(k => {
+    const el = document.getElementById('qfc-' + k);
+    if (el) el.textContent = counts[k] ? ` ${counts[k]}` : '';
+  });
 }
 
-// ── Upload all (with concurrency control) ─────────────────────────────────────
+// ── Upload all (client-side concurrency) ─────────────────────────────────────
 async function uploadAll() {
   const pending = queue.filter(q => q.status === 'pending');
   if (!pending.length) { toast('Nothing to upload', 'error'); return; }
 
   const invalid = pending.filter(q => !q.sku || !q.costPrice);
-  if (invalid.length) {
-    invalid.forEach(q => addLog(`⚠️ Skipping ${q.sku || q.images[0].name} — missing SKU or cost price`, 'error'));
-  }
+  invalid.forEach(q => addLog(`⚠️ Skipping ${q.sku || q.images[0].name} — missing SKU or cost price`, 'error'));
   const valid = pending.filter(q => q.sku && q.costPrice);
   if (!valid.length) { toast('All pending items are missing SKU or cost price', 'error'); return; }
+
+  const dups = dupSkus();
+  const dupInBatch = valid.filter(q => dups.has(q.sku.trim()));
+  if (dupInBatch.length) {
+    toast(`Warning: ${dupInBatch.length} item(s) share a SKU with another queue item`, 'error');
+  }
 
   const btn = document.getElementById('upload-all-btn');
   btn.disabled = true;
@@ -968,9 +1135,16 @@ async function uploadAll() {
   progWrap.style.display = 'block'; progLbl.style.display = 'block';
   let done = 0;
   const total = valid.length;
+  const t0 = Date.now();
   const updateProgress = () => {
     progBar.style.width = `${Math.round((done/total)*100)}%`;
-    progLbl.textContent = `${done} / ${total} products processed`;
+    let eta = '';
+    if (done > 0 && done < total) {
+      const per = (Date.now() - t0) / done;
+      const secs = Math.round(per * (total - done) / 1000);
+      eta = ` · ~${secs >= 60 ? Math.round(secs/60)+'m' : secs+'s'} left`;
+    }
+    progLbl.textContent = `${done} / ${total} products processed${eta}`;
   };
   updateProgress();
 
@@ -987,7 +1161,7 @@ async function uploadAll() {
 
   await Promise.all(Array.from({length: Math.min(concurrency, valid.length)}, worker));
 
-  setTimeout(() => { progWrap.style.display = 'none'; progLbl.style.display = 'none'; }, 1200);
+  setTimeout(() => { progWrap.style.display = 'none'; progLbl.style.display = 'none'; }, 1500);
 }
 
 async function uploadOne(item) {
@@ -1002,6 +1176,24 @@ async function uploadOne(item) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Upload failed');
 
+    // Show detected color in card immediately (non-blocking)
+    if (!item.colors && data.filenames && data.filenames[0]) {
+      fetch('/detect_color', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({filename: data.filenames[0]})
+      }).then(r => r.json()).then(d => {
+        if (d.color && !item.colors) {
+          item._detectedColor = d.color;
+          const el = document.getElementById(`qi-${item.id}`);
+          if (el) {
+            const badge = el.querySelector('.color-detect-badge');
+            if (badge) badge.textContent = '🎨 ' + d.color;
+          }
+        }
+      }).catch(() => {});
+    }
+
     socket.emit('start_upload', {
       filenames: data.filenames,
       sku: item.sku,
@@ -1013,8 +1205,9 @@ async function uploadOne(item) {
       weight_g: item.weight || null,
       hs_code: item.hscode,
       country_of_origin: item.origin,
+      inventory_qty: item.qty || null,
       colors: (item.colors || '').split(',').map(s => s.trim()).filter(Boolean),
-      sizes: (item.sizes || '').split(',').map(s => s.trim()).filter(Boolean)
+      sizes:  (item.sizes  || '').split(',').map(s => s.trim()).filter(Boolean)
     });
     await waitForCompletion(item);
   } catch (e) {
@@ -1040,25 +1233,52 @@ function checkAllDone() {
   if (allDone) {
     const btn = document.getElementById('upload-all-btn');
     btn.disabled = false;
-    btn.innerHTML = '⬆ Upload All';
+    updateStats();
   }
 }
 
 // ── Results ───────────────────────────────────────────────────────────────────
 function addResult(data) {
-  const section = document.getElementById('results-section');
-  const list = document.getElementById('results-list');
-  section.style.display = 'block';
+  document.getElementById('results-section').style.display = 'block';
   const card = document.createElement('div');
-  card.className = 'result-card success';
+  card.className = 'result-card';
   card.innerHTML = `
     <div>
       <div class="result-title">${data.title || data.sku}</div>
-      <div class="result-meta">SKU: ${data.sku} · Price: ₹${data.selling_price} · <span class="channel-pill" style="padding:2px 7px">🌐 All channels</span></div>
+      <div class="result-meta">SKU ${data.sku} · ₹${data.selling_price}${data.detected_color ? ' · 🎨 '+data.detected_color : ''} · all sales channels</div>
     </div>
     <a href="${data.shopify_url}" target="_blank" class="result-link">View in Shopify →</a>`;
-  list.prepend(card);
+  document.getElementById('results-list').prepend(card);
 }
+
+// ── Log (buffered, filterable, copyable) ─────────────────────────────────────
+function addLog(msg, level='info') {
+  logLines.push({ time: new Date().toLocaleTimeString(), msg, level });
+  if (logLines.length > 800) logLines.shift();
+  if (firstLog) { logBox.innerHTML = ''; firstLog = false; }
+  if (document.getElementById('log-errors-only').checked && level !== 'error') return;
+  appendLogLine(logLines[logLines.length - 1]);
+}
+function appendLogLine({time, msg, level}) {
+  const line = document.createElement('div');
+  line.className = `log-${level}`;
+  line.innerHTML = `<span class="log-time">${time}</span>`;
+  line.appendChild(document.createTextNode(msg));
+  logBox.appendChild(line);
+  logBox.scrollTop = logBox.scrollHeight;
+}
+function renderLog() {
+  const errorsOnly = document.getElementById('log-errors-only').checked;
+  logBox.innerHTML = '';
+  const lines = logLines.filter(l => !errorsOnly || l.level === 'error');
+  if (!lines.length) { logBox.innerHTML = '<span class="log-muted">No log entries' + (errorsOnly ? ' at error level' : '') + '</span>'; return; }
+  lines.forEach(appendLogLine);
+}
+function copyLog() {
+  const txt = logLines.map(l => `[${l.time}] ${l.msg}`).join('\n');
+  navigator.clipboard.writeText(txt).then(() => toast('Log copied to clipboard', 'success'));
+}
+function clearLog() { logLines = []; logBox.innerHTML = ''; firstLog = true; }
 
 // ── History ───────────────────────────────────────────────────────────────────
 async function loadHistory() {
@@ -1072,8 +1292,10 @@ async function loadHistory() {
 function setHistoryFilter(f) {
   historyFilter = f;
   ['all','success','failed'].forEach(k => {
-    document.getElementById('hf-'+k).style.background = k===f ? 'var(--accent)' : '';
-    document.getElementById('hf-'+k).style.color = k===f ? '#fff' : '';
+    const b = document.getElementById('hf-'+k);
+    b.style.background = k===f ? 'var(--gold)' : '';
+    b.style.color = k===f ? '#191509' : '';
+    b.style.borderColor = k===f ? 'var(--gold)' : '';
   });
   renderHistory();
 }
@@ -1093,15 +1315,15 @@ function renderHistory() {
     const origIdx = history.indexOf(r);
     return `
     <tr>
-      <td style="color:var(--muted)">${r.timestamp?.slice(0,19).replace('T',' ') || '—'}</td>
-      <td><strong>${r.sku}</strong></td>
+      <td class="mono" style="color:var(--muted)">${r.timestamp?.slice(0,19).replace('T',' ') || '—'}</td>
+      <td class="mono" style="color:var(--gold)"><strong>${r.sku}</strong></td>
       <td>${r.title || '—'}</td>
-      <td style="color:var(--muted)">${r.image_count || 1}</td>
-      <td style="color:var(--muted)">${r.variant_count || 1}</td>
-      <td>₹${r.cost_price}</td>
-      <td style="color:var(--green)">₹${r.selling_price}</td>
-      <td style="color:var(--muted)">${r.hs_code || '—'}</td>
-      <td style="color:var(--muted)">${r.country_of_origin || '—'}</td>
+      <td class="mono" style="color:var(--muted)">${r.image_count || 1}</td>
+      <td class="mono" style="color:var(--muted)">${r.variant_count || 1}</td>
+      <td class="mono">₹${r.cost_price}</td>
+      <td class="mono" style="color:var(--green)">₹${r.selling_price}</td>
+      <td class="mono" style="color:var(--muted)">${r.hs_code || '—'}</td>
+      <td class="mono" style="color:var(--muted)">${r.country_of_origin || '—'}</td>
       <td class="${r.status==='success'?'status-ok':'status-fail'}">${r.status}</td>
       <td>${r.shopify_url ? `<a href="${r.shopify_url}" target="_blank" class="result-link">View →</a>` : `<span style="color:var(--red);font-size:11px">${(r.error||'—').slice(0,40)}</span>`}</td>
       <td><button class="row-del" onclick="deleteHistoryRow(${origIdx})" title="Delete row">🗑</button></td>
@@ -1115,9 +1337,7 @@ async function deleteHistoryRow(idx) {
   renderHistory();
 }
 
-function exportCsv() {
-  window.open('/history/csv', '_blank');
-}
+function exportCsv() { window.open('/history/csv', '_blank'); }
 
 // ── Settings ──────────────────────────────────────────────────────────────────
 async function saveSettings() {
@@ -1136,8 +1356,8 @@ async function saveSettings() {
   await fetch('/save_settings', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
   const msg = document.getElementById('save-msg');
   msg.style.display = 'inline';
-  if (payload.groq_api_key)   document.getElementById('dot-groq').className    = 'dot ok';
-  if (payload.shopify_store)  document.getElementById('dot-shopify').className = 'dot ok';
+  if (payload.groq_api_key)  document.getElementById('dot-groq').className    = 'dot ok';
+  if (payload.shopify_store) document.getElementById('dot-shopify').className = 'dot ok';
   if (payload.default_bangle_sizes) DEFAULT_BANGLE_SIZES = payload.default_bangle_sizes;
   toast('Settings saved', 'success');
   setTimeout(() => msg.style.display = 'none', 2500);
@@ -1167,39 +1387,39 @@ async function testGroq() {
   } catch (e) { el.textContent = `❌ ${e.message}`; el.style.color = 'var(--red)'; }
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function addLog(msg, level='info') {
-  if (firstLog) { logBox.innerHTML = ''; firstLog = false; }
-  const line = document.createElement('div');
-  line.className = `log-${level}`;
-  line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-  logBox.appendChild(line);
-  logBox.scrollTop = logBox.scrollHeight;
-}
-function clearLog() { logBox.innerHTML = ''; firstLog = true; }
-
-// Keyboard shortcut: Ctrl/Cmd+Enter uploads all pending
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
-  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') uploadAll();
+  const typing = document.activeElement && ['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName);
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); uploadAll(); return; }
+  if (typing) return;
+  if (e.key === '1') showPanel('upload');
+  if (e.key === '2') showPanel('history');
+  if (e.key === '3') showPanel('settings');
+  if (e.key === '/') {
+    e.preventDefault();
+    showPanel('history');
+    document.getElementById('history-search').focus();
+  }
 });
 
-// ── Load saved settings into form ─────────────────────────────────────────────
+// ── Boot ──────────────────────────────────────────────────────────────────────
 async function loadSettingsForm() {
   try {
     const res = await fetch('/get_settings');
     const data = await res.json();
     if (data.shopify_store) document.getElementById('s-store').value = data.shopify_store;
     if (data.shopify_token) document.getElementById('s-token').value = data.shopify_token;
-    if (data.groq_api_key) document.getElementById('s-groq').value = data.groq_api_key;
+    if (data.groq_api_key)  document.getElementById('s-groq').value = data.groq_api_key;
     if (data.product_vendor) document.getElementById('s-vendor').value = data.product_vendor;
-    if (data.product_type) document.getElementById('s-type').value = data.product_type;
+    if (data.product_type)  document.getElementById('s-type').value = data.product_type;
     document.getElementById('s-hscode').value = data.default_hs_code || '7117.90';
     document.getElementById('s-weight').value = data.default_weight_g || 1;
     document.getElementById('s-origin').value = data.default_country_of_origin || 'IN';
-    document.getElementById('s-qty').value = data.default_inventory_qty || 10;
-    document.getElementById('s-bangle-sizes').value = data.default_bangle_sizes || '2.4,2.6,2.8';
-    DEFAULT_BANGLE_SIZES = data.default_bangle_sizes || '2.4,2.6,2.8';
-    if (data.groq_api_key) document.getElementById('dot-groq').className = 'dot ok';
+    document.getElementById('s-qty').value    = data.default_inventory_qty || 10;
+    const bs = Array.isArray(data.default_bangle_sizes) ? data.default_bangle_sizes.join(',') : (data.default_bangle_sizes || '2.4,2.6,2.8');
+    document.getElementById('s-bangle-sizes').value = bs;
+    DEFAULT_BANGLE_SIZES = bs;
+    if (data.groq_api_key)  document.getElementById('dot-groq').className    = 'dot ok';
     if (data.shopify_store) document.getElementById('dot-shopify').className = 'dot ok';
   } catch(e) {}
 }
