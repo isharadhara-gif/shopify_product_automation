@@ -7,309 +7,519 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --bg:#101310; --surface:#161a17; --surface2:#1d221e; --surface3:#242a25;
-    --border:#2b312b; --border-hi:#3a423a;
-    --gold:#d9a94e; --gold-soft:rgba(217,169,78,.14); --gold-line:rgba(217,169,78,.45);
-    --green:#6fc593; --red:#e57a76; --yellow:#e3b75c;
-    --text:#f1eee4; --muted:#99a094; --faint:#6d746a;
-    --r:14px; --r-sm:9px;
-    --font-ui:'Inter',system-ui,sans-serif;
-    --font-disp:'Fraunces',Georgia,serif;
-    --font-mono:'JetBrains Mono',ui-monospace,monospace;
-  }
-  *{box-sizing:border-box;margin:0;padding:0}
-  html{scrollbar-color:var(--border-hi) transparent}
-  body{background:radial-gradient(900px 500px at 90% -10%,rgba(217,169,78,.05),transparent 60%),var(--bg);color:var(--text);font-family:var(--font-ui);font-size:14px;min-height:100vh;-webkit-font-smoothing:antialiased}
-  ::selection{background:var(--gold-soft)}
-  button,input,select{font-family:inherit}
-  :focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:4px}
-  @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
-  .mono{font-family:var(--font-mono)}
+/* ── Glassmorphism / aurora theme ── */
+:root{
+  --bg0:#06071a;--bg1:#090c24;
+  --glass:rgba(255,255,255,.05);
+  --glass-hi:rgba(255,255,255,.09);
+  --glass-border:rgba(255,255,255,.10);
+  --glass-border-hi:rgba(255,255,255,.20);
+  --accent:#7c6dfa;--accent2:#a78bfa;--accent3:#38bdf8;
+  --glow:rgba(124,109,250,.35);
+  --glow2:rgba(167,139,250,.25);
+  --green:#34d399;--red:#f87171;--yellow:#fbbf24;
+  --text:#f0f0ff;--muted:#8b8fad;--faint:#4a4d6e;
+  --r:16px;--r-sm:10px;--r-xs:7px;
+  --font:'Inter',system-ui,sans-serif;
+  --mono:'JetBrains Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scrollbar-color:rgba(124,109,250,.4) transparent}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(124,109,250,.4);border-radius:99px}
 
-  /* Layout */
-  .app{display:grid;grid-template-columns:252px 1fr;min-height:100vh}
-  .sidebar{border-right:1px solid var(--border);background:linear-gradient(180deg,#141814,#111411);padding:22px 16px;display:flex;flex-direction:column;gap:20px;position:sticky;top:0;height:100vh}
-  .main{padding:0 34px 60px;max-width:1200px;width:100%}
+body{
+  font-family:var(--font);font-size:14px;color:var(--text);
+  min-height:100vh;overflow-x:hidden;
+  background:var(--bg0);
+}
 
-  /* Logo */
-  .logo{display:flex;align-items:center;gap:12px;padding-bottom:18px;border-bottom:1px solid var(--border)}
-  .hallmark{width:40px;height:40px;flex-shrink:0;border:1.5px solid var(--gold);border-radius:8px;display:grid;place-items:center;font-family:var(--font-disp);font-size:19px;color:var(--gold);background:radial-gradient(circle at 30% 25%,rgba(217,169,78,.18),transparent 65%);letter-spacing:.5px}
-  .logo-text{font-family:var(--font-disp);font-size:16px;letter-spacing:.2px}
-  .logo-sub{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:1.4px;margin-top:2px}
+/* aurora background */
+body::before{
+  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(ellipse 70% 50% at 80% -10%, rgba(100,80,255,.28) 0%, transparent 65%),
+    radial-gradient(ellipse 50% 40% at -10% 60%, rgba(56,189,248,.18) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 50% 110%, rgba(124,109,250,.15) 0%, transparent 60%);
+}
 
-  /* Status */
-  .status-bar{display:flex;flex-direction:column;gap:8px}
-  .status-item{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
-  .dot{width:7px;height:7px;border-radius:50%;background:var(--faint);flex-shrink:0}
-  .dot.ok{background:var(--green);box-shadow:0 0 6px rgba(111,197,147,.7)}
-  .dot.warn{background:var(--yellow);box-shadow:0 0 6px rgba(227,183,92,.7)}
-  .mini-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-  .mini-stat{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 11px}
-  .mini-stat-val{font-family:var(--font-mono);font-size:17px;font-weight:700}
-  .mini-stat-label{font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-top:3px}
+button,input,select,textarea{font-family:inherit}
+::selection{background:rgba(124,109,250,.35)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 
-  /* Nav */
-  .nav{display:flex;flex-direction:column;gap:3px}
-  .nav-btn{background:none;border:none;color:var(--muted);font-size:13px;font-weight:600;padding:10px 12px;border-radius:var(--r-sm);text-align:left;cursor:pointer;display:flex;align-items:center;gap:10px;transition:background .15s,color .15s;border-left:2px solid transparent}
-  .nav-btn:hover{background:var(--surface2);color:var(--text)}
-  .nav-btn.active{background:var(--gold-soft);color:var(--gold);border-left-color:var(--gold)}
-  .nav-kbd{margin-left:auto;font-family:var(--font-mono);font-size:10px;color:var(--faint);border:1px solid var(--border);border-radius:4px;padding:1px 5px}
-  .side-guide{margin-top:auto;font-size:11.5px;color:var(--muted);line-height:1.75;border-top:1px solid var(--border);padding-top:16px}
-  .side-guide strong{color:var(--text);font-weight:600;display:block;margin-bottom:2px}
-  .side-guide .g-block{margin-bottom:12px}
-  .side-guide code{font-family:var(--font-mono);font-size:10.5px;color:var(--gold)}
+/* ── Glass mixin helpers ── */
+.glass{
+  background:var(--glass);
+  backdrop-filter:blur(20px) saturate(160%);
+  -webkit-backdrop-filter:blur(20px) saturate(160%);
+  border:1px solid var(--glass-border);
+}
+.glass-hi{
+  background:var(--glass-hi);
+  backdrop-filter:blur(24px) saturate(180%);
+  -webkit-backdrop-filter:blur(24px) saturate(180%);
+  border:1px solid var(--glass-border-hi);
+}
 
-  /* Command bar */
-  .command-bar{position:sticky;top:0;z-index:40;display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:16px 0 14px;margin-bottom:22px;background:linear-gradient(180deg,var(--bg) 82%,transparent);border-bottom:1px solid var(--border)}
-  .page-title{font-family:var(--font-disp);font-size:24px;font-weight:600;letter-spacing:.2px}
-  .page-sub{font-size:12.5px;color:var(--muted);margin-top:3px}
-  .cb-spacer{flex:1}
-  .cb-status{display:flex;align-items:center;gap:14px;font-size:12px;color:var(--muted)}
-  .cb-chip{display:inline-flex;align-items:center;gap:6px}
-  .cb-chip .n{font-family:var(--font-mono);font-weight:700;color:var(--text)}
-  .cb-chip.ready .n{color:var(--gold)}
-  .cb-chip.fail .n{color:var(--red)}
-  .cb-chip.done .n{color:var(--green)}
+/* ── Layout ── */
+.app{position:relative;z-index:1;display:grid;grid-template-columns:260px 1fr;min-height:100vh}
 
-  /* Buttons */
-  .btn{padding:9px 16px;border-radius:var(--r-sm);border:1px solid transparent;font-size:12.5px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:7px;transition:all .15s}
-  .btn-primary{background:var(--gold);color:#191509}
-  .btn-primary:hover{background:#e6bb66}
-  .btn-primary:disabled{opacity:.35;cursor:not-allowed}
-  .btn-ghost{background:transparent;color:var(--muted);border-color:var(--border)}
-  .btn-ghost:hover{color:var(--text);border-color:var(--border-hi);background:var(--surface2)}
-  .btn-sm{padding:6px 11px;font-size:11.5px}
-  .kbd-hint{font-family:var(--font-mono);font-size:10px;opacity:.65;font-weight:600}
+/* ── Sidebar ── */
+.sidebar{
+  position:sticky;top:0;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;gap:18px;padding:22px 16px;
+  border-right:1px solid var(--glass-border);
+  background:rgba(10,12,35,.6);
+  backdrop-filter:blur(30px) saturate(150%);
+  -webkit-backdrop-filter:blur(30px) saturate(150%);
+}
+.main{padding:0 32px 60px;max-width:1240px;width:100%}
 
-  /* Panels */
-  .panel{display:none}
-  .panel.active{display:block;animation:fadein .18s ease}
-  @keyframes fadein{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+/* logo */
+.logo{display:flex;align-items:center;gap:12px;padding-bottom:18px;border-bottom:1px solid var(--glass-border)}
+.logo-gem{
+  width:40px;height:40px;flex-shrink:0;border-radius:12px;
+  background:linear-gradient(135deg,#7c6dfa,#a78bfa,#38bdf8);
+  display:grid;place-items:center;font-size:18px;
+  box-shadow:0 4px 20px rgba(124,109,250,.5);
+}
+.logo-text{font-size:15px;font-weight:700;letter-spacing:-.3px;color:var(--text)}
+.logo-sub{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-top:2px}
 
-  /* Stats */
-  .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
-  .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:15px 17px}
-  .stat-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
-  .stat-val{font-family:var(--font-mono);font-size:23px;font-weight:700;margin-top:7px;letter-spacing:-.5px}
-  .stat-card.green .stat-val{color:var(--green)}
-  .stat-card.red .stat-val{color:var(--red)}
-  .stat-card.gold .stat-val{color:var(--gold)}
+/* status */
+.status-bar{display:flex;flex-direction:column;gap:8px}
+.status-item{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--faint);flex-shrink:0;transition:all .3s}
+.dot.ok{background:var(--green);box-shadow:0 0 8px var(--green)}
+.dot.warn{background:var(--yellow);box-shadow:0 0 8px var(--yellow)}
 
-  /* Drop zone */
-  .upload-zone{border:1.5px dashed var(--border-hi);border-radius:var(--r);padding:32px 24px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;background:var(--surface)}
-  .upload-zone:hover,.upload-zone.drag{border-color:var(--gold);background:var(--gold-soft)}
-  .upload-text{font-family:var(--font-disp);font-size:17px}
-  .upload-hint{font-size:12px;color:var(--muted);margin-top:7px;line-height:1.6}
-  .upload-hint code{font-family:var(--font-mono);font-size:11px;color:var(--gold)}
-  .zone-btns{display:flex;gap:10px;justify-content:center;margin-top:14px;flex-wrap:wrap}
+/* mini stats */
+.mini-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mini-stat{
+  padding:10px 12px;border-radius:var(--r-sm);
+  background:rgba(124,109,250,.08);border:1px solid rgba(124,109,250,.2);
+}
+.mini-stat-val{font-family:var(--mono);font-size:18px;font-weight:700;color:var(--accent2)}
+.mini-stat-label{font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-top:3px}
 
-  /* Toolbar */
-  .toolbar{margin-top:14px;padding:13px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-  .toolbar-label{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.8px}
-  .toolbar .divider{width:1px;height:20px;background:var(--border)}
-  .chip-radio{display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:4px 10px;border-radius:99px;background:var(--surface2);border:1px solid transparent;color:var(--muted)}
-  .chip-radio input{accent-color:var(--gold)}
-  .chip-radio:has(input:checked){border-color:var(--gold-line);color:var(--gold);background:var(--gold-soft)}
+/* nav */
+.nav{display:flex;flex-direction:column;gap:4px}
+.nav-btn{
+  background:transparent;border:none;color:var(--muted);font-size:13px;font-weight:500;
+  padding:10px 12px;border-radius:var(--r-sm);text-align:left;cursor:pointer;
+  display:flex;align-items:center;gap:10px;transition:all .15s;
+  border-left:2px solid transparent;
+}
+.nav-btn:hover{background:var(--glass);color:var(--text)}
+.nav-btn.active{
+  background:linear-gradient(90deg,rgba(124,109,250,.15),rgba(124,109,250,.05));
+  color:var(--accent2);border-left-color:var(--accent);
+}
+.nav-kbd{margin-left:auto;font-family:var(--mono);font-size:9.5px;color:var(--faint);border:1px solid rgba(255,255,255,.1);border-radius:4px;padding:1px 5px}
 
-  .item-input{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:6px 9px;color:var(--text);font-size:12px;width:110px;transition:border-color .12s}
-  .item-input:focus{outline:none;border-color:var(--gold)}
-  .item-input::placeholder{color:var(--faint)}
-  .item-input.title-input{width:225px}
-  .item-input.tags-input{width:195px}
-  .item-input.variant-input{width:165px}
-  .item-input.narrow{width:86px}
-  select.item-input{width:150px;cursor:pointer}
-  .item-input.mono-in{font-family:var(--font-mono);font-size:11.5px}
-  .item-input.invalid{border-color:var(--red)}
+.side-guide{margin-top:auto;font-size:11.5px;color:var(--muted);line-height:1.7;border-top:1px solid var(--glass-border);padding-top:16px}
+.side-guide strong{color:rgba(255,255,255,.7);font-weight:600;display:block;margin-bottom:2px}
+.side-guide .g-block{margin-bottom:12px}
+.side-guide code{font-family:var(--mono);font-size:10.5px;color:var(--accent3)}
 
-  /* Queue */
-  .queue-header{display:flex;align-items:center;margin:24px 0 12px;flex-wrap:wrap;gap:10px}
-  .queue-title{font-family:var(--font-disp);font-size:17px}
-  .queue-filters{display:flex;gap:5px;margin-left:8px}
-  .qf{background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;font-weight:600;padding:4px 11px;border-radius:99px;cursor:pointer}
-  .qf:hover{color:var(--text);border-color:var(--border-hi)}
-  .qf.active{background:var(--gold-soft);color:var(--gold);border-color:var(--gold-line)}
-  .qf .c{font-family:var(--font-mono);font-size:10px;margin-left:3px}
+/* ── Command bar ── */
+.command-bar{
+  position:sticky;top:0;z-index:40;
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:18px 0 14px;margin-bottom:20px;
+  background:linear-gradient(180deg,rgba(6,7,26,.95) 75%,transparent);
+  border-bottom:1px solid var(--glass-border);
+}
+.page-title{font-size:22px;font-weight:700;letter-spacing:-.5px;
+  background:linear-gradient(90deg,#fff,var(--accent2));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.page-sub{font-size:12px;color:var(--muted);margin-top:3px}
+.cb-spacer{flex:1}
+.cb-status{display:flex;align-items:center;gap:12px;font-size:12px;color:var(--muted)}
+.cb-chip{display:inline-flex;align-items:center;gap:5px}
+.cb-chip .n{font-family:var(--mono);font-weight:700;color:var(--text)}
+.cb-chip.ready .n{color:var(--accent2)}
+.cb-chip.fail .n{color:var(--red)}
+.cb-chip.done .n{color:var(--green)}
 
-  .queue-list{display:flex;flex-direction:column;gap:10px}
-  .queue-item{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:15px 17px;display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:flex-start;position:relative;overflow:hidden;transition:border-color .2s}
-  .queue-item::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--border);transition:background .25s}
-  .queue-item.ready::before{background:var(--gold)}
-  .queue-item.uploading{border-color:var(--gold-line)}
-  .queue-item.uploading::before{background:var(--gold);animation:seam 1.1s ease-in-out infinite alternate}
-  @keyframes seam{from{opacity:.35}to{opacity:1}}
-  .queue-item.success{border-color:rgba(111,197,147,.4);opacity:.72}
-  .queue-item.success::before{background:var(--green)}
-  .queue-item.failed{border-color:rgba(229,122,118,.5)}
-  .queue-item.failed::before{background:var(--red)}
+/* ── Buttons ── */
+.btn{
+  padding:9px 18px;border-radius:var(--r-sm);border:1px solid transparent;
+  font-size:12.5px;font-weight:600;cursor:pointer;
+  display:inline-flex;align-items:center;gap:7px;transition:all .18s;
+}
+.btn-primary{
+  background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;
+  box-shadow:0 4px 20px var(--glow);border:none;
+}
+.btn-primary:hover{filter:brightness(1.1);transform:translateY(-1px);box-shadow:0 6px 28px var(--glow)}
+.btn-primary:disabled{opacity:.35;cursor:not-allowed;transform:none;box-shadow:none}
+.btn-ghost{background:var(--glass);color:var(--muted);border-color:var(--glass-border)}
+.btn-ghost:hover{background:var(--glass-hi);color:var(--text);border-color:var(--glass-border-hi)}
+.btn-sm{padding:6px 12px;font-size:11.5px}
+.kbd-hint{font-family:var(--mono);font-size:10px;opacity:.5;font-weight:600}
 
-  /* Thumbnails */
-  .thumb-stack{display:flex;gap:6px;flex-wrap:wrap;max-width:160px}
-  .thumb-wrap{position:relative;width:54px;height:54px;flex-shrink:0}
-  .thumb{width:54px;height:54px;object-fit:cover;border-radius:8px;background:var(--surface2);border:1px solid var(--border);display:block}
-  .thumb-wrap.cover .thumb{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
-  .cover-tag{position:absolute;left:3px;bottom:3px;font-size:8px;font-weight:800;letter-spacing:.5px;background:var(--gold);color:#191509;padding:1px 4px;border-radius:3px}
-  .thumb-remove,.thumb-cover{position:absolute;width:18px;height:18px;border-radius:50%;font-size:11px;line-height:17px;text-align:center;cursor:pointer;border:none;opacity:0;transition:opacity .12s}
-  .thumb-wrap:hover .thumb-remove,.thumb-wrap:hover .thumb-cover{opacity:1}
-  .thumb-remove{top:-5px;right:-5px;background:var(--red);color:#fff}
-  .thumb-cover{top:-5px;left:-5px;background:var(--gold);color:#191509}
-  .thumb-add{width:54px;height:54px;border-radius:8px;border:1.5px dashed var(--border-hi);display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--muted);cursor:pointer;flex-shrink:0;background:var(--surface2);transition:border-color .15s,color .15s}
-  .thumb-add:hover{border-color:var(--gold);color:var(--gold)}
-  .img-count-badge{font-size:10px;color:var(--muted);margin-top:5px;text-align:center}
+/* ── Panels ── */
+.panel{display:none}
+.panel.active{display:block;animation:fadein .2s ease}
+@keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 
-  /* Item */
-  .item-info{min-width:0}
-  .item-name{font-size:13.5px;font-weight:700;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-  .item-name .sku-txt{font-family:var(--font-mono);color:var(--gold)}
-  .item-name .file-txt{color:var(--muted);font-weight:500;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
-  .item-inputs{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center}
-  .item-meta{font-size:11.5px;color:var(--muted);margin-top:8px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-family:var(--font-mono)}
-  .item-price{color:var(--green);font-weight:700}
-  .item-mrp{color:var(--faint);text-decoration:line-through}
-  .item-error-msg{font-size:11px;color:var(--red);margin-top:6px}
-  .variant-pill{font-family:var(--font-ui);font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:var(--gold-soft);color:var(--gold);border:1px solid var(--gold-line)}
-  .dup-pill{font-family:var(--font-ui);font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:rgba(227,183,92,.14);color:var(--yellow);border:1px solid rgba(227,183,92,.4)}
-  .preset-btn{font-size:10.5px;padding:5px 9px;border-radius:7px;background:var(--surface3);color:var(--muted);border:1px solid var(--border);cursor:pointer}
-  .preset-btn:hover{color:var(--gold);border-color:var(--gold-line)}
-  .item-actions{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
-  .badge{font-size:10px;font-weight:800;padding:4px 10px;border-radius:99px;white-space:nowrap;letter-spacing:.3px}
-  .badge-pending{background:var(--surface3);color:var(--muted)}
-  .badge-ready{background:var(--gold-soft);color:var(--gold)}
-  .badge-running{background:var(--gold-soft);color:var(--gold)}
-  .badge-success{background:rgba(111,197,147,.14);color:var(--green)}
-  .badge-failed{background:rgba(229,122,118,.14);color:var(--red)}
-  .remove-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:17px;line-height:1;padding:2px 4px}
-  .remove-btn:hover{color:var(--red)}
+/* ── Stats row ── */
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.stat-card{
+  border-radius:var(--r);padding:16px 18px;
+  background:var(--glass);border:1px solid var(--glass-border);
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  transition:border-color .2s;
+}
+.stat-card:hover{border-color:var(--glass-border-hi)}
+.stat-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+.stat-val{font-family:var(--mono);font-size:24px;font-weight:700;margin-top:8px;letter-spacing:-.5px}
+.stat-card.green .stat-val{color:var(--green)}
+.stat-card.red .stat-val{color:var(--red)}
+.stat-card.purple .stat-val{
+  background:linear-gradient(90deg,var(--accent),var(--accent3));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text
+}
 
-  /* Progress */
-  .progress-wrap{margin:4px 0 12px;background:var(--surface2);border-radius:99px;height:6px;overflow:hidden;display:none}
-  .progress-bar{height:100%;background:var(--gold);width:0%;transition:width .3s ease}
-  .progress-label{font-size:11px;color:var(--muted);margin-bottom:10px;display:none;font-family:var(--font-mono)}
+/* ── Drop zone ── */
+.upload-zone{
+  border:1.5px dashed rgba(124,109,250,.35);border-radius:var(--r);
+  padding:34px 24px;text-align:center;cursor:pointer;
+  transition:all .2s;
+  background:rgba(124,109,250,.04);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+}
+.upload-zone:hover,.upload-zone.drag{
+  border-color:var(--accent);
+  background:rgba(124,109,250,.10);
+  box-shadow:0 0 40px rgba(124,109,250,.12) inset;
+}
+.upload-text{font-size:17px;font-weight:600;color:rgba(255,255,255,.85)}
+.upload-hint{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.6}
+.upload-hint code{font-family:var(--mono);font-size:11px;color:var(--accent3)}
+.zone-btns{display:flex;gap:10px;justify-content:center;margin-top:14px;flex-wrap:wrap}
 
-  /* Log */
-  .log-head{display:flex;align-items:center;gap:10px;margin:26px 0 10px}
-  .log-title{font-family:var(--font-disp);font-size:17px}
-  .log-box{background:#0c0f0c;border:1px solid var(--border);border-radius:var(--r);padding:15px 17px;font-family:var(--font-mono);font-size:11.5px;height:250px;overflow-y:auto;line-height:1.8}
-  .log-info{color:var(--text)}.log-success{color:var(--green)}.log-error{color:var(--red)}.log-muted{color:var(--faint)}
-  .log-time{color:var(--faint);margin-right:7px}
+/* ── Toolbar ── */
+.toolbar{
+  margin-top:14px;padding:13px 16px;border-radius:var(--r);
+  background:var(--glass);border:1px solid var(--glass-border);
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  display:flex;align-items:center;gap:11px;flex-wrap:wrap;
+}
+.toolbar-label{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.8px}
+.toolbar .divider{width:1px;height:20px;background:var(--glass-border)}
+.chip-radio{
+  display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;
+  padding:4px 10px;border-radius:99px;
+  background:rgba(255,255,255,.04);border:1px solid transparent;color:var(--muted);
+  transition:all .12s;
+}
+.chip-radio input{accent-color:var(--accent)}
+.chip-radio:has(input:checked){
+  border-color:rgba(124,109,250,.5);color:var(--accent2);
+  background:rgba(124,109,250,.12);
+}
 
-  /* Results */
-  .results-grid{display:flex;flex-direction:column;gap:8px}
-  .result-card{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--green);border-radius:var(--r);padding:13px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px}
-  .result-title{font-size:13px;font-weight:700}
-  .result-meta{font-size:11px;color:var(--muted);margin-top:3px;font-family:var(--font-mono)}
-  .result-link{font-size:11.5px;color:var(--gold);text-decoration:none;font-weight:600;white-space:nowrap}
-  .result-link:hover{text-decoration:underline}
+/* inputs */
+.item-input{
+  background:rgba(255,255,255,.05);border:1px solid var(--glass-border);
+  border-radius:var(--r-xs);padding:6px 9px;color:var(--text);
+  font-size:12px;width:110px;transition:border-color .12s,background .12s;
+}
+.item-input:focus{outline:none;border-color:var(--accent);background:rgba(124,109,250,.08)}
+.item-input::placeholder{color:var(--faint)}
+.item-input.title-input{width:220px}
+.item-input.tags-input{width:190px}
+.item-input.variant-input{width:162px}
+.item-input.narrow{width:84px}
+select.item-input{width:148px;cursor:pointer}
+.item-input.mono-in{font-family:var(--mono);font-size:11.5px}
+.item-input.invalid{border-color:var(--red)!important;background:rgba(248,113,113,.06)}
 
-  /* History */
-  .history-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap}
-  .search-input{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);padding:9px 14px;color:var(--text);font-size:13px;width:270px}
-  .search-input:focus{outline:none;border-color:var(--gold)}
-  .table-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--border);border-radius:var(--r)}
-  table{width:100%;border-collapse:collapse;font-size:12.5px}
-  th{text-align:left;padding:11px 14px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.6px;font-size:10px;border-bottom:1px solid var(--border);white-space:nowrap}
-  td{padding:10px 14px;border-bottom:1px solid var(--border)}
-  td.mono{font-size:11.5px}
-  tr:last-child td{border-bottom:none}
-  tr:hover td{background:var(--surface2)}
-  .status-ok{color:var(--green);font-weight:600}
-  .status-fail{color:var(--red);font-weight:600}
-  .row-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px}
-  .row-del:hover{color:var(--red)}
+/* ── Queue header ── */
+.queue-header{display:flex;align-items:center;margin:24px 0 12px;flex-wrap:wrap;gap:10px}
+.queue-title{font-size:16px;font-weight:700;color:rgba(255,255,255,.85)}
+.queue-filters{display:flex;gap:5px;margin-left:8px}
+.qf{
+  background:transparent;border:1px solid var(--glass-border);color:var(--muted);
+  font-size:11px;font-weight:600;padding:4px 11px;border-radius:99px;cursor:pointer;
+  transition:all .12s;
+}
+.qf:hover{color:var(--text);border-color:var(--glass-border-hi)}
+.qf.active{background:rgba(124,109,250,.15);color:var(--accent2);border-color:rgba(124,109,250,.4)}
+.qf .c{font-family:var(--mono);font-size:10px;margin-left:3px}
 
-  /* Settings */
-  .settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:700px}
-  .field{display:flex;flex-direction:column;gap:6px}
-  .field.full{grid-column:1/-1}
-  label{font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px}
-  .field-row{display:flex;gap:8px;align-items:center}
-  input[type=text],input[type=password],input[type=number]{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;width:100%}
-  input:focus{outline:none;border-color:var(--gold)}
-  .save-row{grid-column:1/-1;display:flex;gap:10px;align-items:center;margin-top:4px;flex-wrap:wrap}
-  .save-msg{font-size:12px;color:var(--green);display:none}
-  .test-result{font-size:12px}
-  .field-note{font-size:11px;color:var(--muted);line-height:1.5}
-  .field-note code{font-family:var(--font-mono);font-size:10.5px;color:var(--gold)}
-  .quickstart{margin-top:30px;padding:18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);max-width:560px}
-  .quickstart .qs-title{font-family:var(--font-disp);font-size:15px;margin-bottom:10px}
-  .quickstart div:not(.qs-title){font-size:12px;color:var(--muted);line-height:2}
-  .quickstart a{color:var(--gold)}
-  .quickstart code{font-family:var(--font-mono);font-size:11px;color:var(--text)}
+/* ── Queue items ── */
+.queue-list{display:flex;flex-direction:column;gap:10px}
+.queue-item{
+  border-radius:var(--r);padding:16px 18px;
+  display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:flex-start;
+  position:relative;overflow:hidden;transition:border-color .2s,box-shadow .2s;
+  background:rgba(255,255,255,.04);border:1px solid var(--glass-border);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+}
+.queue-item::before{
+  content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:var(--faint);border-radius:0 2px 2px 0;transition:background .2s,box-shadow .2s;
+}
+.queue-item.ready::before{background:var(--accent);box-shadow:0 0 8px var(--accent)}
+.queue-item.uploading{border-color:rgba(124,109,250,.4);box-shadow:0 0 20px rgba(124,109,250,.08)}
+.queue-item.uploading::before{background:var(--accent2);animation:pulse-bar 1.2s ease-in-out infinite alternate}
+@keyframes pulse-bar{from{opacity:.4}to{opacity:1;box-shadow:0 0 12px var(--accent2)}}
+.queue-item.success{border-color:rgba(52,211,153,.25);opacity:.7}
+.queue-item.success::before{background:var(--green)}
+.queue-item.failed{border-color:rgba(248,113,113,.3)}
+.queue-item.failed::before{background:var(--red)}
 
-  /* Toasts */
-  .toast-stack{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:999}
-  .toast{background:var(--surface3);border:1px solid var(--border);border-radius:var(--r-sm);padding:11px 16px;font-size:12.5px;box-shadow:0 8px 24px rgba(0,0,0,.45);animation:toastin .2s ease;max-width:330px}
-  .toast.success{border-left:3px solid var(--green)}
-  .toast.error{border-left:3px solid var(--red)}
-  @keyframes toastin{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
-  .empty{text-align:center;padding:44px 24px;color:var(--muted)}
-  .empty-title{font-family:var(--font-disp);font-size:16px;color:var(--text);margin-bottom:6px}
-  @keyframes spin{to{transform:rotate(360deg)}}
-  .spinner{width:13px;height:13px;border:2px solid rgba(25,21,9,.35);border-top-color:#191509;border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:middle}
-  ::-webkit-scrollbar{width:6px;height:6px}
-  ::-webkit-scrollbar-track{background:transparent}
-  ::-webkit-scrollbar-thumb{background:var(--border-hi);border-radius:99px}
+/* ── Thumbnails ── */
+.thumb-stack{display:flex;gap:6px;flex-wrap:wrap;max-width:170px}
+.thumb-wrap{position:relative;width:56px;height:56px;flex-shrink:0}
+.thumb{
+  width:56px;height:56px;object-fit:cover;border-radius:10px;display:block;
+  border:1px solid var(--glass-border);background:rgba(255,255,255,.04);
+}
+.thumb-wrap.cover .thumb{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),0 0 10px rgba(124,109,250,.3)}
+.cover-tag{
+  position:absolute;left:3px;bottom:3px;font-size:7.5px;font-weight:800;letter-spacing:.5px;
+  background:var(--accent);color:#fff;padding:1px 4px;border-radius:3px;
+}
+.thumb-remove,.thumb-cover{
+  position:absolute;width:18px;height:18px;border-radius:50%;
+  font-size:11px;line-height:17px;text-align:center;cursor:pointer;border:none;
+  opacity:0;transition:opacity .12s;
+}
+.thumb-wrap:hover .thumb-remove,.thumb-wrap:hover .thumb-cover{opacity:1}
+.thumb-remove{top:-5px;right:-5px;background:var(--red);color:#fff}
+.thumb-cover{top:-5px;left:-5px;background:var(--accent2);color:#fff}
+.thumb-add{
+  width:56px;height:56px;border-radius:10px;
+  border:1.5px dashed rgba(124,109,250,.4);
+  display:flex;align-items:center;justify-content:center;
+  font-size:22px;color:rgba(124,109,250,.6);cursor:pointer;flex-shrink:0;
+  background:rgba(124,109,250,.05);transition:all .15s;
+}
+.thumb-add:hover{border-color:var(--accent);color:var(--accent);background:rgba(124,109,250,.1)}
+.img-count-badge{font-size:10px;color:var(--muted);margin-top:5px;text-align:center}
 
-  /* ── Color picker ── */
-  .cp-wrap{position:relative;flex-shrink:0}
-  .cp-trigger{display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:5px 10px;cursor:pointer;min-width:175px;max-width:240px;user-select:none;transition:border-color .12s}
-  .cp-trigger:hover{border-color:var(--border-hi)}
-  .cp-trigger.open,.cp-trigger:focus-visible{border-color:var(--gold);outline:none}
-  .cp-trigger.has-sel{border-color:var(--gold-line)}
-  .cp-preview{display:flex;gap:3px;align-items:center;flex-shrink:0}
-  .cp-dot-mini{width:11px;height:11px;border-radius:50%;border:1px solid rgba(255,255,255,.18);flex-shrink:0}
-  .cp-lbl{flex:1;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
-  .cp-lbl.placeholder{color:var(--faint)}
-  .cp-caret{color:var(--faint);font-size:10px;flex-shrink:0;transition:transform .15s}
-  .cp-trigger.open .cp-caret{transform:rotate(180deg)}
+/* ── Item fields ── */
+.item-info{min-width:0}
+.item-name{font-size:13px;font-weight:600;display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:2px}
+.item-name .sku-txt{font-family:var(--mono);color:var(--accent2)}
+.item-name .file-txt{color:var(--muted);font-weight:400;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px}
+.item-inputs{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center}
+.item-meta{font-size:11.5px;color:var(--muted);margin-top:8px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-family:var(--mono)}
+.item-price{color:var(--green);font-weight:700}
+.item-mrp{color:var(--faint);text-decoration:line-through}
+.item-error-msg{font-size:11px;color:var(--red);margin-top:6px}
+.variant-pill{font-family:var(--font);font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:rgba(124,109,250,.15);color:var(--accent2);border:1px solid rgba(124,109,250,.3)}
+.dup-pill{font-family:var(--font);font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:rgba(251,191,36,.1);color:var(--yellow);border:1px solid rgba(251,191,36,.3)}
+.preset-btn{font-size:10.5px;padding:5px 9px;border-radius:var(--r-xs);background:rgba(255,255,255,.04);color:var(--muted);border:1px solid var(--glass-border);cursor:pointer;transition:all .12s}
+.preset-btn:hover{color:var(--accent2);border-color:rgba(124,109,250,.4);background:rgba(124,109,250,.08)}
+.item-actions{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+.badge{font-size:10px;font-weight:700;padding:4px 10px;border-radius:99px;white-space:nowrap;letter-spacing:.3px}
+.badge-pending{background:rgba(255,255,255,.07);color:var(--muted)}
+.badge-ready{background:rgba(124,109,250,.2);color:var(--accent2)}
+.badge-running{background:rgba(124,109,250,.2);color:var(--accent2)}
+.badge-success{background:rgba(52,211,153,.15);color:var(--green)}
+.badge-failed{background:rgba(248,113,113,.15);color:var(--red)}
+.remove-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;line-height:1;padding:2px 4px}
+.remove-btn:hover{color:var(--red)}
 
-  /* Dropdown renders in a portal at bottom of body so z-index always wins */
-  #cp-portal{position:fixed;z-index:9999;display:none}
-  #cp-portal.visible{display:block}
-  .cp-dd{background:var(--surface);border:1px solid var(--border-hi);border-radius:12px;padding:12px;width:462px;max-width:calc(100vw - 20px);box-shadow:0 16px 48px rgba(0,0,0,.7)}
-  .cp-search-box{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:12px;margin-bottom:10px}
-  .cp-search-box:focus{outline:none;border-color:var(--gold)}
-  /* Card-style chips: a full-width color swatch on top + name below. Fixed
-     6 columns (54 brand colors ÷ 6 = exactly 9 full rows) so the grid always
-     ends flush — no ragged half-empty row of whitespace at the bottom. */
-  .cp-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;max-height:320px;overflow-y:auto;padding-right:6px;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y;scrollbar-color:var(--gold-line) var(--surface2)}
-  .cp-grid::-webkit-scrollbar{width:8px}
-  .cp-grid::-webkit-scrollbar-track{background:var(--surface2);border-radius:99px}
-  .cp-grid::-webkit-scrollbar-thumb{background:var(--gold-line);border-radius:99px}
-  .cp-grid::-webkit-scrollbar-thumb:hover{background:var(--gold)}
-  .cp-chip{display:flex;flex-direction:column;align-items:stretch;gap:0;padding:0;border-radius:8px;cursor:pointer;border:1px solid var(--border);font-size:10px;background:var(--surface2);overflow:hidden;transition:border-color .12s,transform .12s;-webkit-tap-highlight-color:transparent}
-  .cp-chip:hover{border-color:var(--border-hi);transform:translateY(-1px)}
-  .cp-chip.sel{border-color:var(--gold)}
-  .cp-chip-dot{width:100%;height:36px;flex-shrink:0;position:relative;border-bottom:1px solid rgba(255,255,255,.1)}
-  .cp-chip-dot::after{content:'';position:absolute;inset:0;box-shadow:inset 0 -10px 14px -8px rgba(0,0,0,.35)}
-  .cp-chip.sel .cp-chip-dot::before{content:'✓';position:absolute;top:2px;right:3px;width:14px;height:14px;border-radius:50%;background:var(--gold);color:#191509;font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.5);z-index:1}
-  .cp-chip-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:4px 5px;color:var(--muted);transition:color .12s;text-align:center}
-  .cp-chip.sel .cp-chip-name{color:var(--gold);font-weight:700;background:var(--gold-soft)}
-  .cp-foot{display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
-  .cp-count{font-size:11px;color:var(--muted)}
-  .cp-clear-btn{font-size:11px;color:var(--red);background:none;border:none;cursor:pointer;padding:0}
-  .cp-clear-btn:hover{text-decoration:underline}
+/* ── Progress ── */
+.progress-wrap{margin:4px 0 12px;background:rgba(255,255,255,.06);border-radius:99px;height:5px;overflow:hidden;display:none}
+.progress-bar{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent3));width:0%;transition:width .3s ease}
+.progress-label{font-size:11px;color:var(--muted);margin-bottom:10px;display:none;font-family:var(--mono)}
 
-  @media(max-width:960px){.stats-row{grid-template-columns:1fr 1fr}}
-  @media(max-width:768px){
-    .app{grid-template-columns:1fr}
-    .sidebar{position:static;height:auto;border-right:none;border-bottom:1px solid var(--border)}
-    .side-guide{display:none}
-    .main{padding:0 16px 50px}
-    .settings-grid{grid-template-columns:1fr}
-    .queue-item{grid-template-columns:1fr}
-    .item-actions{flex-direction:row;align-items:center}
-  }
+/* ── Log ── */
+.log-head{display:flex;align-items:center;gap:10px;margin:26px 0 10px}
+.log-title{font-size:16px;font-weight:700;color:rgba(255,255,255,.8)}
+.log-box{
+  background:rgba(6,7,26,.7);border:1px solid var(--glass-border);border-radius:var(--r);
+  padding:14px 16px;font-family:var(--mono);font-size:11.5px;height:240px;overflow-y:auto;line-height:1.8;
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+}
+.log-info{color:rgba(240,240,255,.8)}.log-success{color:var(--green)}.log-error{color:var(--red)}.log-muted{color:var(--faint)}
+.log-time{color:var(--faint);margin-right:7px}
+
+/* ── Results ── */
+.results-grid{display:flex;flex-direction:column;gap:8px}
+.result-card{
+  background:var(--glass);border:1px solid var(--glass-border);
+  border-left:3px solid var(--green);border-radius:var(--r);
+  padding:13px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+}
+.result-title{font-size:13px;font-weight:600}
+.result-meta{font-size:11px;color:var(--muted);margin-top:3px;font-family:var(--mono)}
+.result-link{font-size:11.5px;color:var(--accent2);text-decoration:none;font-weight:600;white-space:nowrap}
+.result-link:hover{text-decoration:underline}
+
+/* ── History ── */
+.history-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap}
+.search-input{
+  background:var(--glass);border:1px solid var(--glass-border);
+  border-radius:var(--r-sm);padding:9px 14px;color:var(--text);font-size:13px;width:270px;
+}
+.search-input:focus{outline:none;border-color:var(--accent)}
+.table-wrap{
+  overflow-x:auto;background:var(--glass);border:1px solid var(--glass-border);border-radius:var(--r);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;padding:11px 14px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.6px;font-size:10px;border-bottom:1px solid var(--glass-border);white-space:nowrap}
+td{padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.04)}
+td.mono{font-size:11.5px;font-family:var(--mono)}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(124,109,250,.05)}
+.status-ok{color:var(--green);font-weight:600}
+.status-fail{color:var(--red);font-weight:600}
+.row-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px}
+.row-del:hover{color:var(--red)}
+
+/* ── Settings ── */
+.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:700px}
+.field{display:flex;flex-direction:column;gap:6px}
+.field.full{grid-column:1/-1}
+label{font-size:10.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.8px}
+.field-row{display:flex;gap:8px;align-items:center}
+input[type=text],input[type=password],input[type=number]{
+  background:var(--glass);border:1px solid var(--glass-border);
+  border-radius:var(--r-sm);padding:10px 12px;color:var(--text);font-size:13px;width:100%;
+}
+input:focus{outline:none;border-color:var(--accent);background:rgba(124,109,250,.06)}
+.save-row{grid-column:1/-1;display:flex;gap:10px;align-items:center;margin-top:4px;flex-wrap:wrap}
+.save-msg{font-size:12px;color:var(--green);display:none}
+.test-result{font-size:12px}
+.field-note{font-size:11px;color:var(--muted);line-height:1.5}
+.field-note code{font-family:var(--mono);font-size:10.5px;color:var(--accent3)}
+.quickstart{
+  margin-top:30px;padding:20px;border-radius:var(--r);max-width:560px;
+  background:var(--glass);border:1px solid var(--glass-border);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+}
+.quickstart .qs-title{font-size:15px;font-weight:700;margin-bottom:10px;color:var(--accent2)}
+.quickstart p{font-size:12px;color:var(--muted);line-height:2}
+.quickstart a{color:var(--accent3)}
+.quickstart code{font-family:var(--mono);font-size:11px;color:var(--text)}
+
+/* ── Toasts ── */
+.toast-stack{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:9999}
+.toast{
+  background:rgba(15,16,40,.92);border:1px solid var(--glass-border);
+  border-radius:var(--r-sm);padding:11px 16px;font-size:12.5px;
+  box-shadow:0 8px 32px rgba(0,0,0,.6);animation:toastin .2s ease;max-width:330px;
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+}
+.toast.success{border-left:3px solid var(--green)}
+.toast.error{border-left:3px solid var(--red)}
+@keyframes toastin{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
+
+.empty{text-align:center;padding:44px 24px;color:var(--muted)}
+.empty-title{font-size:16px;font-weight:600;color:rgba(255,255,255,.5);margin-bottom:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{width:13px;height:13px;border:2px solid rgba(255,255,255,.1);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:middle}
+
+/* ── Color picker portal ── */
+#cp-portal{position:fixed;z-index:9999;display:none}
+#cp-portal.visible{display:block}
+.cp-dd{
+  background:rgba(10,12,36,.94);border:1px solid var(--glass-border-hi);border-radius:14px;
+  padding:14px;width:480px;max-width:calc(100vw - 20px);
+  box-shadow:0 20px 60px rgba(0,0,0,.75);
+  backdrop-filter:blur(30px) saturate(160%);-webkit-backdrop-filter:blur(30px) saturate(160%);
+}
+.cp-search-box{
+  width:100%;background:rgba(255,255,255,.06);border:1px solid var(--glass-border);
+  border-radius:var(--r-xs);padding:8px 11px;color:var(--text);font-size:12px;margin-bottom:11px;
+}
+.cp-search-box:focus{outline:none;border-color:var(--accent);background:rgba(124,109,250,.08)}
+
+/* 6-column card grid — 54 colors ÷ 6 = 9 clean rows */
+.cp-grid{
+  display:grid;grid-template-columns:repeat(6,1fr);gap:6px;
+  max-height:310px;overflow-y:auto;padding-right:4px;
+  overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y;
+  scrollbar-color:rgba(124,109,250,.4) rgba(255,255,255,.04);
+}
+.cp-grid::-webkit-scrollbar{width:6px}
+.cp-grid::-webkit-scrollbar-track{background:rgba(255,255,255,.04);border-radius:99px}
+.cp-grid::-webkit-scrollbar-thumb{background:rgba(124,109,250,.4);border-radius:99px}
+.cp-grid::-webkit-scrollbar-thumb:hover{background:var(--accent)}
+
+.cp-chip{
+  display:flex;flex-direction:column;align-items:stretch;
+  border-radius:9px;cursor:pointer;
+  border:1px solid rgba(255,255,255,.08);
+  background:rgba(255,255,255,.04);overflow:hidden;
+  transition:border-color .12s,transform .12s,box-shadow .12s;
+  -webkit-tap-highlight-color:transparent;user-select:none;
+}
+.cp-chip:hover{border-color:rgba(255,255,255,.2);transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,.4)}
+.cp-chip.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),0 4px 16px rgba(124,109,250,.25)}
+
+.cp-chip-swatch{width:100%;height:34px;flex-shrink:0;position:relative}
+.cp-chip-swatch::after{content:'';position:absolute;inset:0;box-shadow:inset 0 -8px 12px -6px rgba(0,0,0,.4)}
+/* tick on selected */
+.cp-chip.sel .cp-chip-swatch::before{
+  content:'✓';position:absolute;top:3px;right:3px;
+  width:14px;height:14px;border-radius:50%;
+  background:var(--accent);color:#fff;font-size:9px;font-weight:800;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 1px 4px rgba(0,0,0,.5);z-index:1;
+}
+.cp-chip-name{
+  font-size:9.5px;padding:3px 4px 4px;color:var(--muted);
+  text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  transition:color .12s;
+}
+.cp-chip.sel .cp-chip-name{color:var(--accent2);font-weight:600;background:rgba(124,109,250,.1)}
+
+.cp-foot{display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--glass-border)}
+.cp-count{font-size:11px;color:var(--muted)}
+.cp-clear-btn{font-size:11px;color:var(--red);background:none;border:none;cursor:pointer;padding:0}
+.cp-clear-btn:hover{text-decoration:underline}
+
+/* trigger */
+.cp-wrap{position:relative;flex-shrink:0}
+.cp-trigger{
+  display:flex;align-items:center;gap:7px;
+  background:rgba(255,255,255,.05);border:1px solid var(--glass-border);
+  border-radius:var(--r-xs);padding:6px 10px;cursor:pointer;
+  min-width:175px;max-width:240px;user-select:none;transition:all .12s;
+}
+.cp-trigger:hover{border-color:var(--glass-border-hi);background:rgba(255,255,255,.08)}
+.cp-trigger.open{border-color:var(--accent);background:rgba(124,109,250,.08)}
+.cp-trigger.has-sel{border-color:rgba(124,109,250,.4)}
+.cp-preview{display:flex;gap:3px;align-items:center;flex-shrink:0}
+.cp-dot-mini{width:11px;height:11px;border-radius:50%;border:1px solid rgba(255,255,255,.15);flex-shrink:0}
+.cp-lbl{flex:1;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+.cp-lbl.placeholder{color:var(--faint)}
+.cp-caret{color:var(--faint);font-size:10px;flex-shrink:0;transition:transform .15s}
+.cp-trigger.open .cp-caret{transform:rotate(180deg)}
+
+@media(max-width:960px){.stats-row{grid-template-columns:1fr 1fr}}
+@media(max-width:768px){
+  .app{grid-template-columns:1fr}
+  .sidebar{position:static;height:auto;border-right:none;border-bottom:1px solid var(--glass-border)}
+  .side-guide{display:none}
+  .main{padding:0 14px 50px}
+  .settings-grid{grid-template-columns:1fr}
+  .queue-item{grid-template-columns:1fr}
+  .item-actions{flex-direction:row;align-items:center}
+  .cp-dd{width:calc(100vw - 20px)}
+}
 </style>
 </head>
 <body>
 
-<!-- Color picker portal — single floating panel, always on top -->
+<!-- Single portal color picker -->
 <div id="cp-portal">
-  <div class="cp-dd" id="cp-dd-inner">
+  <div class="cp-dd">
     <input class="cp-search-box" id="cp-search" placeholder="Search colors…" autocomplete="off">
     <div class="cp-grid" id="cp-grid"></div>
     <div class="cp-foot">
@@ -324,12 +534,13 @@
 <div class="app">
   <aside class="sidebar">
     <div class="logo">
-      <div class="hallmark">Ish</div>
+      <div class="logo-gem">💎</div>
       <div>
-        <div class="logo-text">Listing Studio</div>
+        <div class="logo-text">Ishhaara Studio</div>
         <div class="logo-sub">Shopify pipeline</div>
       </div>
     </div>
+
     <div class="status-bar">
       <div class="status-item">
         <div class="dot {% if has_groq %}ok{% else %}warn{% endif %}" id="dot-groq"></div>
@@ -340,31 +551,33 @@
         <span>Shopify {% if not has_shopify %}— not set{% endif %}</span>
       </div>
     </div>
+
     <div class="mini-stats">
       <div class="mini-stat"><div class="mini-stat-val" id="ms-total">0</div><div class="mini-stat-label">Listed</div></div>
       <div class="mini-stat"><div class="mini-stat-val" id="ms-rate">—</div><div class="mini-stat-label">Success</div></div>
     </div>
+
     <nav class="nav">
       <button class="nav-btn active" data-panel="upload" onclick="showPanel('upload',event)">📤 Upload <span class="nav-kbd">1</span></button>
       <button class="nav-btn" data-panel="history" onclick="showPanel('history',event)">📋 History <span class="nav-kbd">2</span></button>
       <button class="nav-btn" data-panel="settings" onclick="showPanel('settings',event)">⚙️ Settings <span class="nav-kbd">3</span></button>
     </nav>
+
     <div class="side-guide">
-      <div class="g-block"><strong>Naming</strong>Files: <code>SKU_Cost.jpg</code> · Folders: <code>SKU_Cost/</code> — every image in one folder becomes one product.</div>
-      <div class="g-block"><strong>Variants</strong>Pick colors from the selector. Fill Sizes for size variants. Both = combined variants.</div>
-      <div class="g-block"><strong>Shortcuts</strong><code>⌘/Ctrl+Enter</code> upload all · <code>1 2 3</code> switch tabs.</div>
-      <div class="g-block"><strong>Channels</strong>Every product publishes to all active sales channels automatically.</div>
+      <div class="g-block"><strong>File naming</strong>Files: <code>SKU_Cost.jpg</code><br>Folders: <code>SKU_Cost/</code> → one product.</div>
+      <div class="g-block"><strong>Colors</strong>Click the color selector per item. Combine with Sizes for variant grids.</div>
+      <div class="g-block"><strong>Shortcuts</strong><code>⌘↵</code> upload · <code>1 2 3</code> tabs · <code>Esc</code> close picker</div>
     </div>
   </aside>
 
   <main class="main">
 
-    <!-- Upload panel -->
+    <!-- ── Upload panel ── -->
     <div id="panel-upload" class="panel active">
       <div class="command-bar">
         <div>
           <div class="page-title">Upload products</div>
-          <div class="page-sub">Drop images, price them, list everywhere in one click</div>
+          <div class="page-sub">Drop images · pick colors · list everywhere</div>
         </div>
         <div class="cb-spacer"></div>
         <div class="cb-status">
@@ -380,21 +593,22 @@
         <div class="stat-card"><div class="stat-label">In queue</div><div class="stat-val" id="stat-queued">0</div></div>
         <div class="stat-card green"><div class="stat-label">Uploaded</div><div class="stat-val" id="stat-success">0</div></div>
         <div class="stat-card red"><div class="stat-label">Failed</div><div class="stat-val" id="stat-failed">0</div></div>
-        <div class="stat-card gold"><div class="stat-label">Catalog value</div><div class="stat-val" id="stat-value">₹0</div></div>
+        <div class="stat-card purple"><div class="stat-label">Catalog value</div><div class="stat-val" id="stat-value">₹0</div></div>
       </div>
 
+      <!-- Drop zone -->
       <div class="upload-zone" id="dropzone">
         <input type="file" id="file-input" accept="image/*" multiple style="display:none">
         <input type="file" id="folder-input" accept="image/*" webkitdirectory multiple style="display:none">
-        <div class="upload-text">Drop images or folders here</div>
+        <div class="upload-text">✨ Drop images or folders here</div>
         <div class="zone-btns">
-          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();document.getElementById('file-input').click()">🖼️ Select images</button>
-          <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();document.getElementById('folder-input').click()">📂 Select folder</button>
+          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();triggerFileInput()">🖼️ Select images</button>
+          <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();triggerFolderInput()">📂 Select folder</button>
         </div>
-        <div class="upload-hint">JPG, PNG, WEBP · auto-cropped to 1080×1440 · each folder = one product</div>
+        <div class="upload-hint">JPG · PNG · WEBP · auto-cropped to 1080×1440 · each folder = one product</div>
       </div>
 
-      <!-- Bulk toolbar -->
+      <!-- Toolbar -->
       <div class="toolbar">
         <span class="toolbar-label">Markup</span>
         <label class="chip-radio"><input type="radio" name="markup" value="2"> 2×</label>
@@ -403,9 +617,9 @@
         <label class="chip-radio"><input type="radio" name="markup" value="4" checked> 4×</label>
         <label class="chip-radio"><input type="radio" name="markup" value="5"> 5×</label>
         <div class="divider"></div>
-        <span class="toolbar-label">Apply to all pending</span>
+        <span class="toolbar-label">Bulk fill</span>
         <input id="bulk-cp" type="number" class="item-input mono-in narrow" placeholder="Cost ₹">
-        <select id="bulk-category" class="item-input" style="width:135px">
+        <select id="bulk-category" class="item-input" style="width:130px">
           <option value="">Category…</option>
           <option>Necklace</option><option>Earrings</option><option>Hand accessories</option>
           <option>Rings</option><option>Hair accessories</option>
@@ -414,7 +628,7 @@
         <input id="bulk-hs" type="text" class="item-input mono-in narrow" placeholder="HS code">
         <input id="bulk-origin" type="text" class="item-input mono-in narrow" placeholder="Origin">
         <input id="bulk-qty" type="number" class="item-input mono-in narrow" placeholder="Qty">
-        <select id="bulk-color" class="item-input" style="width:145px">
+        <select id="bulk-color" class="item-input" style="width:138px">
           <option value="">Color…</option>
           <option>Red</option><option>Orange</option><option>Yellow</option><option>Green</option>
           <option>Blue</option><option>Purple</option><option>Pink</option><option>Brown</option>
@@ -435,10 +649,10 @@
           <option>Light Violet</option><option>Multicolor</option>
         </select>
         <input id="bulk-sizes" type="text" class="item-input mono-in variant-input" placeholder="Sizes 2.4,2.6,2.8">
-        <button class="btn btn-ghost btn-sm" onclick="bulkApply()">Apply</button>
+        <button class="btn btn-ghost btn-sm" onclick="bulkApply()">Apply all</button>
         <div class="divider"></div>
         <span class="toolbar-label">Speed</span>
-        <select id="concurrency" class="item-input" style="width:120px">
+        <select id="concurrency" class="item-input" style="width:118px">
           <option value="1">1 at a time</option>
           <option value="2">2 at a time</option>
           <option value="3" selected>3 at a time</option>
@@ -449,7 +663,7 @@
       <!-- Queue -->
       <div id="queue-section" style="display:none">
         <div class="queue-header">
-          <span class="queue-title">Queue · <span class="mono" id="queue-count">0</span></span>
+          <span class="queue-title">Queue <span style="color:var(--muted);font-weight:400">·</span> <span style="font-family:var(--mono)" id="queue-count">0</span></span>
           <div class="queue-filters">
             <button class="qf active" data-qf="all" onclick="setQueueFilter('all')">All</button>
             <button class="qf" data-qf="ready" onclick="setQueueFilter('ready')">Ready<span class="c" id="qfc-ready"></span></button>
@@ -482,10 +696,10 @@
       </div>
     </div>
 
-    <!-- History panel -->
+    <!-- ── History panel ── -->
     <div id="panel-history" class="panel">
       <div class="command-bar">
-        <div><div class="page-title">Upload history</div><div class="page-sub">Everything this tool has listed, newest first</div></div>
+        <div><div class="page-title">Upload history</div><div class="page-sub">Every listing, newest first</div></div>
         <div class="cb-spacer"></div>
         <button class="btn btn-ghost btn-sm" onclick="exportCsv()">⬇ Export CSV</button>
       </div>
@@ -508,7 +722,7 @@
       </div>
     </div>
 
-    <!-- Settings panel -->
+    <!-- ── Settings panel ── -->
     <div id="panel-settings" class="panel">
       <div class="command-bar">
         <div><div class="page-title">Settings</div><div class="page-sub">Credentials and catalog defaults</div></div>
@@ -528,7 +742,7 @@
           <span class="field-note">Scopes: <code>write_products</code> <code>read_products</code> <code>write_inventory</code> <code>read_inventory</code> <code>write_publications</code></span>
         </div>
         <div class="field full">
-          <label>Groq API key <a href="https://console.groq.com" target="_blank" style="color:var(--gold);font-weight:400;text-transform:none;letter-spacing:0">Get free key →</a></label>
+          <label>Groq API key <a href="https://console.groq.com" target="_blank" style="color:var(--accent3);font-weight:400;text-transform:none;letter-spacing:0">Get free key →</a></label>
           <div class="field-row">
             <input type="password" id="s-groq" placeholder="gsk_xxxxxxxxxxxx">
             <button class="btn btn-ghost btn-sm" onclick="testGroq()">Test</button>
@@ -539,9 +753,9 @@
         <div class="field"><label>Product type</label><input type="text" id="s-type" placeholder="Jewellery"></div>
         <div class="field"><label>Default HS code</label><input type="text" id="s-hscode" placeholder="7117.90"></div>
         <div class="field"><label>Default weight (g)</label><input type="number" id="s-weight" placeholder="1"></div>
-        <div class="field"><label>Default country of origin</label><input type="text" id="s-origin" placeholder="IN"></div>
+        <div class="field"><label>Country of origin</label><input type="text" id="s-origin" placeholder="IN"></div>
         <div class="field"><label>Default inventory qty</label><input type="number" id="s-qty" placeholder="10"></div>
-        <div class="field full"><label>Default bangle sizes (quick-fill preset)</label><input type="text" id="s-bangle-sizes" placeholder="2.4,2.6,2.8"></div>
+        <div class="field full"><label>Default bangle sizes</label><input type="text" id="s-bangle-sizes" placeholder="2.4,2.6,2.8"></div>
         <div class="save-row">
           <button class="btn btn-primary" onclick="saveSettings()">Save settings</button>
           <span class="save-msg" id="save-msg">✅ Saved</span>
@@ -549,13 +763,13 @@
       </div>
       <div class="quickstart">
         <div class="qs-title">Quick start</div>
-        <div>
-          1. Get a free Groq key → <a href="https://console.groq.com" target="_blank">console.groq.com</a><br>
-          2. Get a Shopify token → Admin → Settings → Apps → Develop apps<br>
+        <p>
+          1. Groq key → <a href="https://console.groq.com" target="_blank">console.groq.com</a><br>
+          2. Shopify token → Admin → Settings → Apps → Develop apps<br>
           3. Scopes: <code>write_products</code>, <code>write_inventory</code>, <code>write_publications</code><br>
-          4. Drop images, price them, pick colors, upload all<br>
-          5. Products publish to every connected sales channel automatically
-        </div>
+          4. Drop images · set prices · pick colors · Upload all<br>
+          5. Auto-published to every connected sales channel
+        </p>
       </div>
     </div>
 
@@ -566,7 +780,7 @@
 const socket = io();
 
 // ── 54 brand colors ───────────────────────────────────────────────────────────
-const BRAND_COLORS = [
+const BRAND_COLORS=[
   {n:'Red',h:'#dc3232'},{n:'Orange',h:'#e67828'},{n:'Yellow',h:'#e6c832'},
   {n:'Green',h:'#32a046'},{n:'Blue',h:'#3259c8'},{n:'Purple',h:'#8232b4'},
   {n:'Pink',h:'#e678a0'},{n:'Brown',h:'#825028'},{n:'Black',h:'#1e1e1e'},
@@ -588,462 +802,391 @@ const BRAND_COLORS = [
   {n:'Multicolor',h:'linear-gradient(135deg,#dc3232,#e6c832,#32a046,#3259c8,#9650dc)'},
 ];
 
-// ── Single portal color picker ────────────────────────────────────────────────
-let _cpActiveId = null; // item.id currently open
+// ── Color picker (single portal, never rebuilds queue DOM) ────────────────────
+let _cpActiveId=null;
+const _portal=document.getElementById('cp-portal');
+const _cpGrid=document.getElementById('cp-grid');
+const _cpSearch=document.getElementById('cp-search');
+const _cpCount=document.getElementById('cp-count');
 
-const _portal    = document.getElementById('cp-portal');
-const _cpDdInner = document.getElementById('cp-dd-inner');
-const _cpGrid    = document.getElementById('cp-grid');
-const _cpSearch  = document.getElementById('cp-search');
-const _cpCount   = document.getElementById('cp-count');
-const _cpClearBtn = document.getElementById('cp-clear-btn');
+// Build chip grid ONCE
+_cpGrid.innerHTML=BRAND_COLORS.map(c=>`
+  <div class="cp-chip" data-color="${c.n}" onclick="cpChipClick('${c.n}')">
+    <div class="cp-chip-swatch" style="background:${c.h}"></div>
+    <div class="cp-chip-name">${c.n}</div>
+  </div>`).join('');
 
-// Build the chip grid once — each chip is a full color-preview card so people
-// can recognize a shade at a glance instead of hunting for a tiny dot.
-_cpGrid.innerHTML = BRAND_COLORS.map(c => {
-  return `<div class="cp-chip" data-color="${c.n}" onclick="cpChipClick('${c.n}')">
-    <span class="cp-chip-dot" style="background:${c.h}"></span>
-    <span class="cp-chip-name">${c.n}</span>
-  </div>`;
-}).join('');
-
-_cpSearch.addEventListener('input', () => {
-  const q = _cpSearch.value.toLowerCase();
-  _cpGrid.querySelectorAll('.cp-chip').forEach(ch => {
-    ch.style.display = ch.dataset.color.toLowerCase().includes(q) ? '' : 'none';
-  });
+_cpSearch.addEventListener('input',()=>{
+  const q=_cpSearch.value.toLowerCase();
+  _cpGrid.querySelectorAll('.cp-chip').forEach(ch=>{ch.style.display=ch.dataset.color.toLowerCase().includes(q)?'':'none'});
 });
 
-_cpClearBtn.addEventListener('click', e => {
+document.getElementById('cp-clear-btn').addEventListener('click',e=>{
   e.stopPropagation();
-  if (!_cpActiveId) return;
-  const item = queue.find(q => q.id == _cpActiveId);
-  if (item) item.colors = '';
-  _cpSyncChips([]);
-  _cpUpdateCount(0);
+  if(!_cpActiveId)return;
+  const item=queue.find(q=>q.id==_cpActiveId);
+  if(item)item.colors='';
+  _cpGrid.querySelectorAll('.cp-chip').forEach(ch=>ch.classList.remove('sel'));
+  _cpCount.textContent='';
   _cpRefreshTrigger(_cpActiveId);
   updateStats();
 });
 
-// FIX: position is now purely viewport-relative (portal is position:fixed),
-// so we must NOT add window.scrollY/scrollX — that was pushing the dropdown
-// further down the page the more you'd scrolled. We also clamp it so it
-// never renders off the right/bottom edge of the viewport.
-function cpOpen(itemId, triggerEl) {
-  if (_cpActiveId === itemId) { cpClose(); return; }
+function cpOpen(itemId,triggerEl){
+  if(_cpActiveId===itemId){cpClose();return;}
   cpClose();
-  _cpActiveId = itemId;
-
-  const rect = triggerEl.getBoundingClientRect();
-  _portal.style.top  = (rect.bottom + 6) + 'px';
-  _portal.style.left = rect.left + 'px';
-  _portal.classList.add('visible');
+  _cpActiveId=itemId;
   triggerEl.classList.add('open');
 
-  // Sync selected state in grid
-  const item = queue.find(q => q.id == itemId);
-  const sel = item ? _parseColors(item.colors) : [];
-  _cpSyncChips(sel);
-  _cpUpdateCount(sel.length);
-  _cpSearch.value = '';
-  _cpGrid.querySelectorAll('.cp-chip').forEach(ch => ch.style.display = '');
+  // Position: viewport-relative (portal is position:fixed)
+  const rect=triggerEl.getBoundingClientRect();
+  _portal.style.left=rect.left+'px';
+  _portal.style.top=(rect.bottom+6)+'px';
+  _portal.classList.add('visible');
+
+  // Sync chip states
+  const item=queue.find(q=>q.id==itemId);
+  const sel=item?_parseColors(item.colors):[];
+  _cpGrid.querySelectorAll('.cp-chip').forEach(ch=>ch.classList.toggle('sel',sel.includes(ch.dataset.color)));
+  _cpCount.textContent=sel.length?`${sel.length} selected`:'';
+  _cpSearch.value='';
+  _cpGrid.querySelectorAll('.cp-chip').forEach(ch=>ch.style.display='');
   _cpSearch.focus();
 
-  // Clamp to viewport after the dropdown has its real dimensions
-  requestAnimationFrame(() => {
-    const ddRect = _cpDdInner.getBoundingClientRect();
-    const vw = window.innerWidth, vh = window.innerHeight;
-    let left = rect.left, top = rect.bottom + 6;
-
-    if (left + ddRect.width > vw - 10) left = Math.max(10, vw - ddRect.width - 10);
-    if (left < 10) left = 10;
-
-    if (top + ddRect.height > vh - 10) {
-      // Not enough room below — flip above the trigger if there's more room there
-      const spaceAbove = rect.top;
-      const spaceBelow = vh - rect.bottom;
-      if (spaceAbove > spaceBelow) {
-        top = Math.max(10, rect.top - ddRect.height - 6);
-      } else {
-        top = Math.max(10, vh - ddRect.height - 10);
-      }
+  // Clamp after paint
+  requestAnimationFrame(()=>{
+    const dd=_portal.firstElementChild.getBoundingClientRect();
+    const vw=window.innerWidth,vh=window.innerHeight;
+    let left=rect.left,top=rect.bottom+6;
+    if(left+dd.width>vw-10)left=Math.max(10,vw-dd.width-10);
+    if(left<10)left=10;
+    if(top+dd.height>vh-10){
+      top=rect.top-dd.height-6>10?rect.top-dd.height-6:Math.max(10,vh-dd.height-10);
     }
-
-    _portal.style.left = left + 'px';
-    _portal.style.top  = top + 'px';
+    _portal.style.left=left+'px';
+    _portal.style.top=top+'px';
   });
 }
 
-function cpClose() {
-  if (!_cpActiveId) return;
-  const t = document.getElementById('cp-trig-' + _cpActiveId);
-  if (t) t.classList.remove('open');
+function cpClose(){
+  if(!_cpActiveId)return;
+  const t=document.getElementById('cp-trig-'+_cpActiveId);
+  if(t)t.classList.remove('open');
   _portal.classList.remove('visible');
-  _cpActiveId = null;
+  _cpActiveId=null;
 }
 
-function cpChipClick(colorName) {
-  if (!_cpActiveId) return;
-  const item = queue.find(q => q.id == _cpActiveId);
-  if (!item) return;
-
-  let sel = _parseColors(item.colors);
-  const idx = sel.indexOf(colorName);
-  if (idx >= 0) sel.splice(idx, 1); else sel.push(colorName);
-  item.colors = sel.join(', ');
-
-  // Update just the chip + trigger — no renderQueue()
-  const chip = _cpGrid.querySelector(`[data-color="${CSS.escape(colorName)}"]`);
-  if (chip) chip.classList.toggle('sel', idx < 0);
-  _cpUpdateCount(sel.length);
+function cpChipClick(colorName){
+  if(!_cpActiveId)return;
+  const item=queue.find(q=>q.id==_cpActiveId);
+  if(!item)return;
+  let sel=_parseColors(item.colors);
+  const idx=sel.indexOf(colorName);
+  if(idx>=0)sel.splice(idx,1);else sel.push(colorName);
+  item.colors=sel.join(', ');
+  const chip=_cpGrid.querySelector(`[data-color="${CSS.escape(colorName)}"]`);
+  if(chip)chip.classList.toggle('sel',idx<0);
+  _cpCount.textContent=sel.length?`${sel.length} selected`:'';
   _cpRefreshTrigger(_cpActiveId);
-
-  // Refresh variant count pill only
-  const nameEl = document.getElementById('iname-' + _cpActiveId);
-  if (nameEl) nameEl.innerHTML = _variantPillHtml(item);
+  const nameEl=document.getElementById('iname-'+_cpActiveId);
+  if(nameEl)nameEl.innerHTML=_variantPillHtml(item);
   updateStats();
 }
 
-function _cpSyncChips(sel) {
-  _cpGrid.querySelectorAll('.cp-chip').forEach(ch => {
-    ch.classList.toggle('sel', sel.includes(ch.dataset.color));
-  });
-}
-function _cpUpdateCount(n) {
-  _cpCount.textContent = n ? `${n} selected` : '';
-}
-function _cpRefreshTrigger(itemId) {
-  const item = queue.find(q => q.id == itemId);
-  const trig = document.getElementById('cp-trig-' + itemId);
-  if (!trig || !item) return;
-  const sel = _parseColors(item.colors);
-  trig.classList.toggle('has-sel', sel.length > 0);
-
-  const preview = trig.querySelector('.cp-preview');
-  const lbl     = trig.querySelector('.cp-lbl');
-  if (preview) preview.innerHTML = sel.slice(0,5).map(n => {
-    const c = BRAND_COLORS.find(x => x.n === n);
-    const s = c ? (c.h.startsWith('linear') ? `background:${c.h};border-radius:2px;width:14px;height:11px;border:none` : `background:${c.h}`) : 'background:#888';
+function _cpRefreshTrigger(itemId){
+  const item=queue.find(q=>q.id==itemId);
+  const trig=document.getElementById('cp-trig-'+itemId);
+  if(!trig||!item)return;
+  const sel=_parseColors(item.colors);
+  trig.classList.toggle('has-sel',sel.length>0);
+  const pre=trig.querySelector('.cp-preview');
+  const lbl=trig.querySelector('.cp-lbl');
+  if(pre)pre.innerHTML=sel.slice(0,5).map(n=>{
+    const c=BRAND_COLORS.find(x=>x.n===n);
+    const s=c?(c.h.startsWith('linear')?`background:${c.h};border-radius:2px;width:14px;height:11px;border:none`:`background:${c.h}`):'background:#888';
     return `<span class="cp-dot-mini" style="${s}"></span>`;
   }).join('');
-  if (lbl) {
-    lbl.textContent = sel.length ? sel.join(', ') : 'Select colors…';
-    lbl.className = sel.length ? 'cp-lbl' : 'cp-lbl placeholder';
-  }
+  if(lbl){lbl.textContent=sel.length?sel.join(', '):'Select colors…';lbl.className=sel.length?'cp-lbl':'cp-lbl placeholder';}
 }
 
-function _parseColors(str) {
-  return (str || '').split(',').map(s => s.trim()).filter(Boolean);
-}
+function _parseColors(str){return(str||'').split(',').map(s=>s.trim()).filter(Boolean)}
 
-// Close portal on outside click or window resize. Scrolling INSIDE the
-// dropdown (browsing the color grid) must NOT close it — only close on
-// scroll that happens outside the portal (e.g. the page/queue behind it).
-document.addEventListener('click', e => {
-  if (!_cpActiveId) return;
-  if (_portal.contains(e.target)) return;
-  const trig = document.getElementById('cp-trig-' + _cpActiveId);
-  if (trig && trig.contains(e.target)) return;
+// Close on outside click/resize; keep open when scrolling the grid itself
+document.addEventListener('click',e=>{
+  if(!_cpActiveId)return;
+  if(_portal.contains(e.target))return;
+  const t=document.getElementById('cp-trig-'+_cpActiveId);
+  if(t&&t.contains(e.target))return;
   cpClose();
-}, true);
-document.addEventListener('scroll', e => {
-  if (!_cpActiveId) return;
-  if (_portal.contains(e.target)) return; // scrolling the color grid itself — keep open
+},true);
+document.addEventListener('scroll',e=>{
+  if(!_cpActiveId)return;
+  if(_portal.contains(e.target))return;
   cpClose();
-}, true);
-window.addEventListener('resize', cpClose);
+},true);
+window.addEventListener('resize',cpClose);
 
-// ── Color trigger HTML builder (used inside buildQueueItemHtml) ───────────────
-function buildCpTrigger(itemId, colors, locked) {
-  const sel = _parseColors(colors);
-  if (locked) {
-    return `<div style="font-size:11.5px;color:var(--muted);padding:5px 0">${sel.join(', ') || '—'}</div>`;
-  }
-  const dotHtml = sel.slice(0,5).map(n => {
-    const c = BRAND_COLORS.find(x => x.n === n);
-    const s = c ? (c.h.startsWith('linear') ? `background:${c.h};border-radius:2px;width:14px;height:11px;border:none` : `background:${c.h}`) : 'background:#888';
-    return `<span class="cp-dot-mini" style="${s}"></span>`;
+function buildCpTrigger(itemId,colors,locked){
+  const sel=_parseColors(colors);
+  if(locked)return`<div style="font-size:11.5px;color:var(--muted);padding:5px 0">${sel.join(', ')||'—'}</div>`;
+  const dots=sel.slice(0,5).map(n=>{
+    const c=BRAND_COLORS.find(x=>x.n===n);
+    const s=c?(c.h.startsWith('linear')?`background:${c.h};border-radius:2px;width:14px;height:11px;border:none`:`background:${c.h}`):'background:#888';
+    return`<span class="cp-dot-mini" style="${s}"></span>`;
   }).join('');
-  const lbl = sel.length ? sel.join(', ') : 'Select colors…';
-  return `
-  <div class="cp-wrap">
+  return`<div class="cp-wrap">
     <div class="cp-trigger${sel.length?' has-sel':''}" id="cp-trig-${itemId}"
       onclick="event.stopPropagation();cpOpen('${itemId}',this)" tabindex="0"
       onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();cpOpen('${itemId}',this)}">
-      <div class="cp-preview">${dotHtml}</div>
-      <span class="cp-lbl${sel.length?'':' placeholder'}">${lbl}</span>
+      <div class="cp-preview">${dots}</div>
+      <span class="cp-lbl${sel.length?'':' placeholder'}">${sel.length?sel.join(', '):'Select colors…'}</span>
       <span class="cp-caret">▾</span>
     </div>
   </div>`;
 }
 
-// ── Queue data ────────────────────────────────────────────────────────────────
-let queue = [];
-let history = [];
-let historyFilter = 'all';
-let queueFilter = 'all';
-let logLines = [];
-let DEFAULT_BANGLE_SIZES = '2.4,2.6,2.8';
-const logBox = document.getElementById('log-box');
-let firstLog = true;
+// ── App state ─────────────────────────────────────────────────────────────────
+let queue=[],history=[],historyFilter='all',queueFilter='all',logLines=[];
+let DEFAULT_BANGLE_SIZES='2.4,2.6,2.8';
+const logBox=document.getElementById('log-box');
+let firstLog=true;
 
 // ── Toasts ────────────────────────────────────────────────────────────────────
-function toast(msg, type='success') {
-  const el = document.createElement('div');
-  el.className = `toast ${type}`;
-  el.textContent = msg;
+function toast(msg,type='success'){
+  const el=document.createElement('div');
+  el.className=`toast ${type}`;el.textContent=msg;
   document.getElementById('toast-stack').appendChild(el);
-  setTimeout(() => el.remove(), 4000);
+  setTimeout(()=>el.remove(),4000);
 }
 
 // ── Socket ────────────────────────────────────────────────────────────────────
-socket.on('log', ({msg, level}) => addLog(msg, level));
-socket.on('product_done', data => {
-  const item = queue.find(q => q.sku === data.sku && q.status === 'uploading');
-  if (item) { item.status = data.status; item.error = data.error || null; renderQueue(); }
-  if (data.status === 'success') { addResult(data); toast(`${data.sku} listed on Shopify`, 'success'); }
-  else toast(`${data.sku} failed: ${data.error || 'see log'}`, 'error');
-  updateStats(); checkAllDone();
+socket.on('log',({msg,level})=>addLog(msg,level));
+socket.on('product_done',data=>{
+  const item=queue.find(q=>q.sku===data.sku&&q.status==='uploading');
+  if(item){item.status=data.status;item.error=data.error||null;renderQueue();}
+  if(data.status==='success'){addResult(data);toast(`${data.sku} listed on Shopify`,'success');}
+  else toast(`${data.sku} failed: ${data.error||'see log'}`,'error');
+  updateStats();checkAllDone();
 });
 
 // ── Nav ───────────────────────────────────────────────────────────────────────
-function showPanel(name, evt) {
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('panel-' + name).classList.add('active');
-  const btn = evt ? evt.currentTarget : document.querySelector(`.nav-btn[data-panel="${name}"]`);
-  if (btn) btn.classList.add('active');
-  if (name === 'history') loadHistory();
+function showPanel(name,evt){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('panel-'+name).classList.add('active');
+  const btn=evt?evt.currentTarget:document.querySelector(`.nav-btn[data-panel="${name}"]`);
+  if(btn)btn.classList.add('active');
+  if(name==='history')loadHistory();
 }
 
-// ── Fast, smooth thumbnail generation ──────────────────────────────────────────
-// Instead of FileReader → full-size base64 data URL (which can be multi-MB
-// per photo and freezes the main thread when selecting many images at once),
-// we draw the image onto a small canvas and export a compressed JPEG thumb.
-// This keeps memory + string size tiny and selection feels instant.
-function fileToThumb(file, maxDim = 160, quality = 0.72) {
-  return new Promise((resolve) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-      const w = Math.max(1, Math.round(img.width * scale));
-      const h = Math.max(1, Math.round(img.height * scale));
-      const canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, w, h);
+// ── Fast thumbnail via canvas (avoid full-res base64 freezing the thread) ────
+function fileToThumb(file,maxDim=160,q=0.72){
+  return new Promise(resolve=>{
+    const url=URL.createObjectURL(file);
+    const img=new Image();
+    img.onload=()=>{
+      const scale=Math.min(1,maxDim/Math.max(img.width,img.height));
+      const w=Math.max(1,Math.round(img.width*scale));
+      const h=Math.max(1,Math.round(img.height*scale));
+      const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+      cv.getContext('2d').drawImage(img,0,0,w,h);
       URL.revokeObjectURL(url);
-      try {
-        resolve(canvas.toDataURL('image/jpeg', quality));
-      } catch (e) {
-        resolve(url); // fallback, shouldn't normally happen
-      }
+      try{resolve(cv.toDataURL('image/jpeg',q));}catch{resolve('');}
     };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      resolve(''); // don't block the batch on one bad file
-    };
-    img.src = url;
+    img.onerror=()=>{URL.revokeObjectURL(url);resolve('');};
+    img.src=url;
   });
 }
 
 // ── File intake ───────────────────────────────────────────────────────────────
-const dropzone = document.getElementById('dropzone');
-const fileInput = document.getElementById('file-input');
+const dropzone=document.getElementById('dropzone');
+const fileInput=document.getElementById('file-input');
+const folderInput=document.getElementById('folder-input');
 
-// FIX: file-input and folder-input are both children of dropzone. When a
-// zone button calls e.g. folder-input.click(), that synthesizes a NEW click
-// event on folder-input which — since it's nested inside dropzone — bubbles
-// straight back up to this listener and fires fileInput.click() too, opening
-// both pickers at once. Guard by ignoring any click that originated from a
-// button or an input; only clicks on the empty zone itself should open the
-// default (image) picker.
-dropzone.addEventListener('click', (e) => {
-  if (e.target.closest('button, input')) return;
-  fileInput.click();
+// Separate trigger functions so buttons can call them directly
+// without any click event bubbling back to the dropzone
+function triggerFileInput(){fileInput.click();}
+function triggerFolderInput(){folderInput.click();}
+
+// Dropzone click: only fire if the click was directly on the zone background,
+// not on a child button or input (those handle themselves)
+dropzone.addEventListener('click',e=>{
+  if(e.target.closest('button,input'))return;
+  triggerFileInput();
 });
-dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
-dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
-dropzone.addEventListener('drop', async e => {
-  e.preventDefault(); dropzone.classList.remove('drag');
-  const items = e.dataTransfer.items;
-  if (items && items.length && items[0].webkitGetAsEntry) {
-    const entries = [...items].map(it => it.webkitGetAsEntry()).filter(Boolean);
-    const groups = await Promise.all(entries.map(en => traverseFileTree(en)));
+dropzone.addEventListener('dragover',e=>{e.preventDefault();dropzone.classList.add('drag');});
+dropzone.addEventListener('dragleave',()=>dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop',async e=>{
+  e.preventDefault();dropzone.classList.remove('drag');
+  const items=e.dataTransfer.items;
+  if(items&&items.length&&items[0].webkitGetAsEntry){
+    const entries=[...items].map(it=>it.webkitGetAsEntry()).filter(Boolean);
+    const groups=await Promise.all(entries.map(en=>traverseFileTree(en)));
     handleEntries(groups.flat());
-  } else {
-    handleEntries([...e.dataTransfer.files].map(f => ({file:f,relativePath:f.name})));
+  }else{
+    handleEntries([...e.dataTransfer.files].map(f=>({file:f,relativePath:f.name})));
   }
 });
-fileInput.addEventListener('change', () => {
-  handleEntries([...fileInput.files].map(f => ({file:f,relativePath:f.webkitRelativePath||f.name})));
-  fileInput.value = '';
+
+fileInput.addEventListener('change',()=>{
+  if(!fileInput.files.length)return;
+  handleEntries([...fileInput.files].map(f=>({file:f,relativePath:f.webkitRelativePath||f.name})));
+  fileInput.value='';
 });
-document.getElementById('folder-input').addEventListener('change', function() {
-  handleEntries([...this.files].map(f => ({file:f,relativePath:f.webkitRelativePath||f.name})));
-  this.value = '';
+folderInput.addEventListener('change',function(){
+  if(!this.files.length)return;
+  handleEntries([...this.files].map(f=>({file:f,relativePath:f.webkitRelativePath||f.name})));
+  this.value='';
 });
 
-function traverseFileTree(entry, path='') {
-  return new Promise(resolve => {
-    if (!entry) return resolve([]);
-    if (entry.isFile) {
-      entry.file(file => resolve([{file, relativePath: path + file.name}]));
-    } else if (entry.isDirectory) {
-      const reader = entry.createReader(); let collected = [];
-      const readBatch = () => reader.readEntries(async batch => {
-        if (!batch.length) {
-          const nested = await Promise.all(collected.map(e => traverseFileTree(e, path + entry.name + '/')));
+function traverseFileTree(entry,path=''){
+  return new Promise(resolve=>{
+    if(!entry)return resolve([]);
+    if(entry.isFile){entry.file(file=>resolve([{file,relativePath:path+file.name}]));}
+    else if(entry.isDirectory){
+      const reader=entry.createReader();let collected=[];
+      const readBatch=()=>reader.readEntries(async batch=>{
+        if(!batch.length){
+          const nested=await Promise.all(collected.map(e=>traverseFileTree(e,path+entry.name+'/')));
           resolve(nested.flat());
-        } else { collected = collected.concat(batch); readBatch(); }
-      }, () => resolve([]));
+        }else{collected=collected.concat(batch);readBatch();}
+      },()=>resolve([]));
       readBatch();
-    } else resolve([]);
+    }else resolve([]);
   });
 }
 
-function parseFilename(filename) {
-  const stem = filename.replace(/\.[^.]+$/, '');
-  let m = stem.match(/^(.+?)_(\d+(?:\.\d+)?)_(\d+)$/);
-  if (m) return {sku:m[1].toUpperCase(), cost:m[2], groupKey:`${m[1].toUpperCase()}_${m[2]}`};
-  m = stem.match(/^(.+?)_(\d+(?:\.\d+)?)$/);
-  if (m) return {sku:m[1].toUpperCase(), cost:m[2], groupKey:`${m[1].toUpperCase()}_${m[2]}`};
-  m = stem.match(/^(.+?)[-_](\d+)$/);
-  const sku = (m ? m[1] : stem).toUpperCase().replace(/[^A-Z0-9-]/g, '');
-  return {sku, cost:'', groupKey:sku};
+function parseFilename(filename){
+  const stem=filename.replace(/\.[^.]+$/,'');
+  let m=stem.match(/^(.+?)_(\d+(?:\.\d+)?)_(\d+)$/);
+  if(m)return{sku:m[1].toUpperCase(),cost:m[2],groupKey:`${m[1].toUpperCase()}_${m[2]}`};
+  m=stem.match(/^(.+?)_(\d+(?:\.\d+)?)$/);
+  if(m)return{sku:m[1].toUpperCase(),cost:m[2],groupKey:`${m[1].toUpperCase()}_${m[2]}`};
+  m=stem.match(/^(.+?)[-_](\d+)$/);
+  const sku=(m?m[1]:stem).toUpperCase().replace(/[^A-Z0-9-]/g,'');
+  return{sku,cost:'',groupKey:sku};
 }
 
-function groupKeyFor({file, relativePath}) {
-  const parts = relativePath.split('/');
-  if (parts.length > 1) {
-    const folderPath = parts.slice(0,-1).join('/');
-    const folderName = parts[parts.length-2];
-    let sku = folderName.toUpperCase().replace(/[^A-Z0-9-]/g,''), cost = '';
-    const m = folderName.match(/^(.+?)_(\d+(?:\.\d+)?)$/);
-    if (m) { sku = m[1].toUpperCase().replace(/[^A-Z0-9-]/g,''); cost = m[2]; }
-    return {sku, cost, groupKey:`folder:${folderPath}`};
+function groupKeyFor({file,relativePath}){
+  const parts=relativePath.split('/');
+  if(parts.length>1){
+    const folderPath=parts.slice(0,-1).join('/');
+    const folderName=parts[parts.length-2];
+    let sku=folderName.toUpperCase().replace(/[^A-Z0-9-]/g,''),cost='';
+    const m=folderName.match(/^(.+?)_(\d+(?:\.\d+)?)$/);
+    if(m){sku=m[1].toUpperCase().replace(/[^A-Z0-9-]/g,'');cost=m[2];}
+    return{sku,cost,groupKey:`folder:${folderPath}`};
   }
   return parseFilename(file.name);
 }
 
-// FIX: swapped FileReader (full-size base64 data URLs) for the lightweight
-// canvas-based fileToThumb() above. All files are processed concurrently via
-// Promise.all and we still render only ONCE at the end, but each individual
-// thumbnail is now a small compressed JPEG instead of a multi-MB string, so
-// the browser no longer stutters while selecting/dropping a large batch.
-async function handleEntries(entries) {
-  const images = entries.filter(e => e.file.type.startsWith('image/') || /\.(jpe?g|png|webp)$/i.test(e.file.name));
-  if (!images.length) return;
+// Batch ALL reads with fast canvas thumbs → single render at end
+async function handleEntries(entries){
+  const images=entries.filter(e=>e.file.type.startsWith('image/')||/\.(jpe?g|png|webp)$/i.test(e.file.name));
+  if(!images.length)return;
 
-  const results = await Promise.all(images.map(async en => {
-    const {file, relativePath} = en;
-    const parsed = groupKeyFor({file, relativePath});
-    const thumb = await fileToThumb(file);
-    return {file, relativePath, parsed, thumb};
+  const results=await Promise.all(images.map(async en=>{
+    const parsed=groupKeyFor(en);
+    const thumb=await fileToThumb(en.file);
+    return{file:en.file,parsed,thumb};
   }));
 
-  results.forEach(({file, parsed, thumb}) => {
-    let item = queue.find(q => q.groupKey === parsed.groupKey && q.status === 'pending');
-    if (item) {
-      item.images.push({file, thumb, name: file.name});
-    } else {
+  results.forEach(({file,parsed,thumb})=>{
+    let item=queue.find(q=>q.groupKey===parsed.groupKey&&q.status==='pending');
+    if(item){item.images.push({file,thumb,name:file.name});}
+    else{
       queue.push({
-        id: Date.now() + Math.random(),
-        groupKey: parsed.groupKey,
-        sku: parsed.sku, costPrice: parsed.cost,
-        title:'', category:'', tags:'', weight:'', hscode:'', origin:'', qty:'',
-        colors:'', sizes:'',
-        images: [{file, thumb, name: file.name}],
-        status:'pending', error:null
+        id:Date.now()+Math.random(),
+        groupKey:parsed.groupKey,sku:parsed.sku,costPrice:parsed.cost,
+        title:'',category:'',tags:'',weight:'',hscode:'',origin:'',qty:'',
+        colors:'',sizes:'',
+        images:[{file,thumb,name:file.name}],
+        status:'pending',error:null
       });
     }
   });
-
-  renderQueue(); updateStats();
+  renderQueue();updateStats();
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function isReady(item) { return item.status==='pending' && item.sku && item.costPrice; }
-function bucketOf(item) {
-  if (item.status==='pending') return isReady(item) ? 'ready' : 'incomplete';
-  return item.status;
-}
-function dupSkus() {
-  const seen={}, dups=new Set();
-  queue.forEach(q => { const s=(q.sku||'').trim(); if(!s)return; if(seen[s])dups.add(s); seen[s]=true; });
+function isReady(item){return item.status==='pending'&&item.sku&&item.costPrice;}
+function bucketOf(item){if(item.status==='pending')return isReady(item)?'ready':'incomplete';return item.status;}
+function dupSkus(){
+  const seen={},dups=new Set();
+  queue.forEach(q=>{const s=(q.sku||'').trim();if(!s)return;if(seen[s])dups.add(s);seen[s]=true;});
   return dups;
 }
-function variantCountFor(item) {
-  const colors = _parseColors(item.colors);
-  const sizes  = (item.sizes||'').split(',').map(s=>s.trim()).filter(Boolean);
-  if (!colors.length && !sizes.length) return 1;
-  return Math.max(colors.length,1) * Math.max(sizes.length,1);
+function variantCountFor(item){
+  const colors=_parseColors(item.colors);
+  const sizes=(item.sizes||'').split(',').map(s=>s.trim()).filter(Boolean);
+  if(!colors.length&&!sizes.length)return 1;
+  return Math.max(colors.length,1)*Math.max(sizes.length,1);
 }
-function _variantPillHtml(item) {
-  const v = variantCountFor(item), dups = dupSkus();
-  const extra = item.images.length>1 ? `${item.images[0].name} +${item.images.length-1}` : item.images[0].name;
-  return `<span class="sku-txt">${item.sku||'(no SKU)'}</span>
+function _variantPillHtml(item){
+  const v=variantCountFor(item),dups=dupSkus();
+  const extra=item.images.length>1?`${item.images[0].name} +${item.images.length-1}`:item.images[0].name;
+  return`<span class="sku-txt">${item.sku||'(no SKU)'}</span>
     <span class="file-txt">${extra}</span>
     ${v>1?`<span class="variant-pill">${v} variants</span>`:''}
-    ${item.sku&&dups.has(item.sku.trim())?`<span class="dup-pill">duplicate SKU</span>`:''}`;
+    ${item.sku&&dups.has(item.sku.trim())?'<span class="dup-pill">duplicate SKU</span>':''}`;
 }
 
-function setQueueFilter(f) {
-  queueFilter = f;
-  document.querySelectorAll('.qf').forEach(b => b.classList.toggle('active', b.dataset.qf===f));
+function setQueueFilter(f){
+  queueFilter=f;
+  document.querySelectorAll('.qf').forEach(b=>b.classList.toggle('active',b.dataset.qf===f));
   renderQueue();
 }
 
-// ── Full queue render ─────────────────────────────────────────────────────────
-function renderQueue() {
-  cpClose(); // close any open picker before rebuilding DOM
-  const list = document.getElementById('queue-list');
-  const section = document.getElementById('queue-section');
-  section.style.display = queue.length ? 'block' : 'none';
-  document.getElementById('queue-count').textContent = queue.length;
+// ── Queue render ──────────────────────────────────────────────────────────────
+function renderQueue(){
+  cpClose();
+  const list=document.getElementById('queue-list');
+  const section=document.getElementById('queue-section');
+  section.style.display=queue.length?'block':'none';
+  document.getElementById('queue-count').textContent=queue.length;
 
-  const dups = dupSkus();
-  const counts = {ready:0,incomplete:0,failed:0,success:0};
-  queue.forEach(q => { const b=bucketOf(q); if(counts[b]!==undefined)counts[b]++; });
-  ['ready','incomplete','failed','success'].forEach(k => {
-    const el = document.getElementById('qfc-'+k);
-    if (el) el.textContent = counts[k] ? ` ${counts[k]}` : '';
+  const counts={ready:0,incomplete:0,failed:0,success:0};
+  queue.forEach(q=>{const b=bucketOf(q);if(counts[b]!==undefined)counts[b]++;});
+  ['ready','incomplete','failed','success'].forEach(k=>{
+    const el=document.getElementById('qfc-'+k);
+    if(el)el.textContent=counts[k]?` ${counts[k]}`:'';
   });
 
-  const visible = queue.filter(q => queueFilter==='all' || bucketOf(q)===queueFilter);
-  if (!visible.length) {
-    list.innerHTML = `<div class="empty"><div class="empty-title">Nothing here</div>No items match this filter.</div>`;
-  } else {
-    list.innerHTML = visible.map(item => buildQueueItemHtml(item, dups)).join('');
+  const dups=dupSkus();
+  const visible=queue.filter(q=>queueFilter==='all'||bucketOf(q)===queueFilter);
+  if(!visible.length){
+    list.innerHTML='<div class="empty"><div class="empty-title">Nothing here</div>No items match this filter.</div>';
+  }else{
+    list.innerHTML=visible.map(item=>buildQueueItemHtml(item,dups)).join('');
   }
 }
 
-function buildQueueItemHtml(item, dups) {
-  const sp     = item.costPrice ? calcSP(parseFloat(item.costPrice), getMarkup()) : null;
-  const ready  = isReady(item);
-  const locked = item.status !== 'pending';
-  const badge  = {
-    pending:   ready ? ['badge-ready','Ready'] : ['badge-pending','Needs info'],
-    uploading: ['badge-running','Uploading…'],
-    success:   ['badge-success','Done ✅'],
-    failed:    ['badge-failed','Failed ❌'],
+function thumbsHtml(item,locked){
+  const id=item.id;
+  return item.images.map((img,i)=>`
+    <div class="thumb-wrap${i===0?' cover':''}">
+      <img class="thumb" src="${img.thumb}" title="${img.name}" alt="" loading="lazy">
+      ${i===0?'<span class="cover-tag">COVER</span>':''}
+      ${!locked&&i>0?`<button class="thumb-cover" title="Make cover" onclick="makeCover('${id}',${i})">★</button>`:''}
+      ${!locked?`<button class="thumb-remove" title="Remove" onclick="removeImage('${id}',${i})">×</button>`:''}
+    </div>`).join('')+(!locked?`<button class="thumb-add" title="Add images" onclick="addImages('${id}')">+</button>`:'');
+}
+
+function buildQueueItemHtml(item,dups){
+  const sp=item.costPrice?calcSP(parseFloat(item.costPrice),getMarkup()):null;
+  const ready=isReady(item),locked=item.status!=='pending';
+  const badge={
+    pending:ready?['badge-ready','Ready']:['badge-pending','Needs info'],
+    uploading:['badge-running','Uploading…'],
+    success:['badge-success','Done ✅'],
+    failed:['badge-failed','Failed ❌'],
   }[item.status];
 
-  const thumbs = item.images.map((img, idx) => `
-    <div class="thumb-wrap${idx===0?' cover':''}">
-      <img class="thumb" src="${img.thumb}" title="${img.name}" alt="" loading="lazy">
-      ${idx===0 ? '<span class="cover-tag">COVER</span>' : ''}
-      ${!locked&&idx>0 ? `<button class="thumb-cover" title="Make cover" onclick="makeCover('${item.id}',${idx})">★</button>` : ''}
-      ${!locked ? `<button class="thumb-remove" title="Remove" onclick="removeImage('${item.id}',${idx})">×</button>` : ''}
-    </div>`).join('');
-  const addBtn = !locked ? `<button class="thumb-add" title="Add images" onclick="addImagesToItem('${item.id}')">+</button>` : '';
-
-  return `
+  return`
   <div class="queue-item ${item.status}${ready?' ready':''}" id="qi-${item.id}">
     <div>
-      <div class="thumb-stack">${thumbs}${addBtn}</div>
-      <div class="img-count-badge">${item.images.length} image${item.images.length>1?'s':''}</div>
+      <div class="thumb-stack" id="ts-${item.id}">${thumbsHtml(item,locked)}</div>
+      <div class="img-count-badge" id="ic-${item.id}">${item.images.length} image${item.images.length>1?'s':''}</div>
     </div>
     <div class="item-info">
       <div class="item-name" id="iname-${item.id}">${_variantPillHtml(item)}</div>
@@ -1058,8 +1201,7 @@ function buildQueueItemHtml(item, dups) {
       <div class="item-inputs">
         <select class="item-input" onchange="onField('${item.id}','category',this.value)" ${locked?'disabled':''}>
           <option value="">No category template</option>
-          ${['Necklace','Earrings','Hand accessories','Rings','Hair accessories'].map(c =>
-            `<option value="${c}"${item.category===c?' selected':''}>${c}</option>`).join('')}
+          ${['Necklace','Earrings','Hand accessories','Rings','Hair accessories'].map(c=>`<option value="${c}"${item.category===c?' selected':''}>${c}</option>`).join('')}
         </select>
         <input class="item-input tags-input" placeholder="Tags" value="${item.tags}"
           oninput="onField('${item.id}','tags',this.value)" ${locked?'disabled':''}>
@@ -1073,12 +1215,12 @@ function buildQueueItemHtml(item, dups) {
           oninput="onField('${item.id}','qty',this.value)" ${locked?'disabled':''}>
       </div>
       <div class="item-inputs" style="align-items:flex-start">
-        ${buildCpTrigger(item.id, item.colors, locked)}
+        ${buildCpTrigger(item.id,item.colors,locked)}
         <input class="item-input mono-in variant-input" placeholder="Sizes e.g. 2.4,2.6,2.8" value="${item.sizes}"
           oninput="onField('${item.id}','sizes',this.value)" ${locked?'disabled':''}>
         ${!locked?`<button class="preset-btn" onclick="applyBangleSizes('${item.id}')">📏 Bangle sizes</button>`:''}
       </div>
-      <div class="item-meta" id="imeta-${item.id}">${metaHtml(item, sp)}</div>
+      <div class="item-meta" id="imeta-${item.id}">${metaHtml(item,sp)}</div>
       ${item.status==='failed'&&item.error?`<div class="item-error-msg">⚠ ${item.error}</div>`:''}
     </div>
     <div class="item-actions">
@@ -1089,231 +1231,174 @@ function buildQueueItemHtml(item, dups) {
   </div>`;
 }
 
-function metaHtml(item, sp) {
-  if (!item.costPrice) return `<span style="color:var(--yellow);font-family:var(--font-ui)">Enter cost price</span>`;
-  return `<span>CP ₹${item.costPrice}</span><span class="item-mrp">MRP ₹${sp*2}</span><span class="item-price">SP ₹${sp}</span>`;
+function metaHtml(item,sp){
+  if(!item.costPrice)return`<span style="color:var(--yellow)">Enter cost price to see selling price</span>`;
+  return`<span>CP ₹${item.costPrice}</span><span class="item-mrp">MRP ₹${sp*2}</span><span class="item-price">SP ₹${sp}</span>`;
 }
 
-// ── Field update — targeted DOM patches, never calls renderQueue() ────────────
-function onField(id, field, val) {
-  const item = queue.find(q => q.id == id);
-  if (!item) return;
-  item[field] = val;
-
-  if (field === 'sizes') {
-    const el = document.getElementById('iname-' + id);
-    if (el) el.innerHTML = _variantPillHtml(item);
+// ── Targeted DOM patches — never calls renderQueue() for minor updates ────────
+function onField(id,field,val){
+  const item=queue.find(q=>q.id==id);if(!item)return;
+  item[field]=val;
+  if(field==='sku'||field==='sizes'){
+    const el=document.getElementById('iname-'+id);
+    if(el)el.innerHTML=_variantPillHtml(item);
   }
-  if (field === 'sku') {
-    const el = document.getElementById('iname-' + id);
-    if (el) el.innerHTML = _variantPillHtml(item);
-    const inp = document.querySelector(`#qi-${id} input.mono-in:first-child`);
-    if (inp) inp.classList.toggle('invalid', !val);
-  }
-  if (field === 'costPrice' || field === 'sku') {
-    const sp = item.costPrice ? calcSP(parseFloat(item.costPrice), getMarkup()) : null;
-    const m = document.getElementById('imeta-' + id);
-    if (m) m.innerHTML = metaHtml(item, sp);
-    const card = document.getElementById('qi-' + id);
-    if (card && item.status === 'pending') {
-      card.classList.toggle('ready', isReady(item));
-      const b = card.querySelector('.badge');
-      if (b) { b.className='badge '+(isReady(item)?'badge-ready':'badge-pending'); b.textContent=isReady(item)?'Ready':'Needs info'; }
+  if(field==='costPrice'||field==='sku'){
+    const sp=item.costPrice?calcSP(parseFloat(item.costPrice),getMarkup()):null;
+    const m=document.getElementById('imeta-'+id);if(m)m.innerHTML=metaHtml(item,sp);
+    const card=document.getElementById('qi-'+id);
+    if(card&&item.status==='pending'){
+      card.classList.toggle('ready',isReady(item));
+      const b=card.querySelector('.badge');
+      if(b){b.className='badge '+(isReady(item)?'badge-ready':'badge-pending');b.textContent=isReady(item)?'Ready':'Needs info';}
     }
   }
   updateStats();
 }
 
-function applyBangleSizes(id) {
-  const item = queue.find(q => q.id == id);
-  if (!item) return;
-  item.sizes = DEFAULT_BANGLE_SIZES;
-  const inp = document.querySelector(`#qi-${id} input.variant-input`);
-  if (inp) inp.value = DEFAULT_BANGLE_SIZES;
-  const el = document.getElementById('iname-' + id);
-  if (el) el.innerHTML = _variantPillHtml(item);
-  updateStats();
-  toast(`Applied bangle sizes (${DEFAULT_BANGLE_SIZES})`, 'success');
+function applyBangleSizes(id){
+  const item=queue.find(q=>q.id==id);if(!item)return;
+  item.sizes=DEFAULT_BANGLE_SIZES;
+  const inp=document.querySelector(`#qi-${id} input.variant-input`);if(inp)inp.value=DEFAULT_BANGLE_SIZES;
+  const el=document.getElementById('iname-'+id);if(el)el.innerHTML=_variantPillHtml(item);
+  updateStats();toast(`Bangle sizes applied (${DEFAULT_BANGLE_SIZES})`,'success');
 }
 
-document.querySelectorAll('input[name="markup"]').forEach(r => {
-  r.addEventListener('change', () => {
-    queue.forEach(item => {
-      const sp = item.costPrice ? calcSP(parseFloat(item.costPrice), getMarkup()) : null;
-      const m = document.getElementById('imeta-' + item.id);
-      if (m) m.innerHTML = metaHtml(item, sp);
-    });
-    updateStats();
+document.querySelectorAll('input[name="markup"]').forEach(r=>r.addEventListener('change',()=>{
+  queue.forEach(item=>{
+    const sp=item.costPrice?calcSP(parseFloat(item.costPrice),getMarkup()):null;
+    const m=document.getElementById('imeta-'+item.id);if(m)m.innerHTML=metaHtml(item,sp);
   });
-});
+  updateStats();
+}));
 
-function makeCover(id, idx) {
-  const item = queue.find(q => q.id == id);
-  if (!item || !item.images[idx]) return;
-  const [img] = item.images.splice(idx, 1);
-  item.images.unshift(img);
-  // Patch just the thumb stack, not the whole queue
-  const stack = document.querySelector(`#qi-${id} .thumb-stack`);
-  if (stack) {
-    const locked = item.status !== 'pending';
-    stack.innerHTML = item.images.map((im, i) => `
-      <div class="thumb-wrap${i===0?' cover':''}">
-        <img class="thumb" src="${im.thumb}" title="${im.name}" alt="" loading="lazy">
-        ${i===0?'<span class="cover-tag">COVER</span>':''}
-        ${!locked&&i>0?`<button class="thumb-cover" title="Make cover" onclick="makeCover('${id}',${i})">★</button>`:''}
-        ${!locked?`<button class="thumb-remove" title="Remove" onclick="removeImage('${id}',${i})">×</button>`:''}
-      </div>`).join('') + (!locked ? `<button class="thumb-add" onclick="addImagesToItem('${id}')">+</button>` : '');
-  }
-  toast('Cover image updated', 'success');
+// Patch thumb stack in-place (no renderQueue)
+function _patchThumbStack(id){
+  const item=queue.find(q=>q.id==id);if(!item)return;
+  const locked=item.status!=='pending';
+  const ts=document.getElementById('ts-'+id);if(ts)ts.innerHTML=thumbsHtml(item,locked);
+  const ic=document.getElementById('ic-'+id);if(ic)ic.textContent=`${item.images.length} image${item.images.length>1?'s':''}`;
+  const nm=document.getElementById('iname-'+id);if(nm)nm.innerHTML=_variantPillHtml(item);
 }
 
-// FIX: same canvas-based thumbnail path as handleEntries, run concurrently,
-// single DOM patch at the end — no more freezing when adding several images
-// to an existing queue item.
-function addImagesToItem(id) {
-  const input = document.createElement('input');
-  input.type='file'; input.accept='image/*'; input.multiple=true;
-  input.onchange = async () => {
-    const item = queue.find(q => q.id == id);
-    if (!item) return;
-    const files = [...input.files];
-    if (!files.length) return;
+function makeCover(id,idx){
+  const item=queue.find(q=>q.id==id);if(!item||!item.images[idx])return;
+  const[img]=item.images.splice(idx,1);item.images.unshift(img);
+  _patchThumbStack(id);toast('Cover updated','success');
+}
 
-    const newImages = await Promise.all(files.map(async file => {
-      const thumb = await fileToThumb(file);
-      return {file, thumb, name: file.name};
-    }));
-    item.images.push(...newImages);
-
-    const locked = item.status !== 'pending';
-    const stack = document.querySelector(`#qi-${id} .thumb-stack`);
-    if (stack) {
-      stack.innerHTML = item.images.map((im, i) => `
-        <div class="thumb-wrap${i===0?' cover':''}">
-          <img class="thumb" src="${im.thumb}" title="${im.name}" alt="" loading="lazy">
-          ${i===0?'<span class="cover-tag">COVER</span>':''}
-          ${!locked&&i>0?`<button class="thumb-cover" title="Make cover" onclick="makeCover('${id}',${i})">★</button>`:''}
-          ${!locked?`<button class="thumb-remove" title="Remove" onclick="removeImage('${id}',${i})">×</button>`:''}
-        </div>`).join('') + (!locked?`<button class="thumb-add" onclick="addImagesToItem('${id}')">+</button>`:'');
-    }
-    const badge = document.querySelector(`#qi-${id} .img-count-badge`);
-    if (badge) badge.textContent = `${item.images.length} image${item.images.length>1?'s':''}`;
-    const nameEl = document.getElementById('iname-' + id);
-    if (nameEl) nameEl.innerHTML = _variantPillHtml(item);
+// Add images to existing item — canvas thumbs, batch, single DOM patch
+function addImages(id){
+  const inp=document.createElement('input');
+  inp.type='file';inp.accept='image/*';inp.multiple=true;
+  inp.onchange=async()=>{
+    const item=queue.find(q=>q.id==id);
+    if(!item||!inp.files.length)return;
+    const files=[...inp.files];
+    const newImgs=await Promise.all(files.map(async f=>({file:f,thumb:await fileToThumb(f),name:f.name})));
+    item.images.push(...newImgs);
+    _patchThumbStack(id);
     updateStats();
   };
-  input.click();
+  inp.click();
 }
 
-function removeImage(id, idx) {
-  const item = queue.find(q => q.id == id);
-  if (!item) return;
-  item.images.splice(idx, 1);
-  if (item.images.length === 0) { queue = queue.filter(q => q.id != id); renderQueue(); updateStats(); return; }
-  // Patch just the thumb stack
-  const locked = item.status !== 'pending';
-  const stack = document.querySelector(`#qi-${id} .thumb-stack`);
-  if (stack) {
-    stack.innerHTML = item.images.map((im, i) => `
-      <div class="thumb-wrap${i===0?' cover':''}">
-        <img class="thumb" src="${im.thumb}" title="${im.name}" alt="" loading="lazy">
-        ${i===0?'<span class="cover-tag">COVER</span>':''}
-        ${!locked&&i>0?`<button class="thumb-cover" title="Make cover" onclick="makeCover('${id}',${i})">★</button>`:''}
-        ${!locked?`<button class="thumb-remove" title="Remove" onclick="removeImage('${id}',${i})">×</button>`:''}
-      </div>`).join('') + (!locked?`<button class="thumb-add" onclick="addImagesToItem('${id}')">+</button>`:'');
-  }
-  const badge = document.querySelector(`#qi-${id} .img-count-badge`);
-  if (badge) badge.textContent = `${item.images.length} image${item.images.length>1?'s':''}`;
-  updateStats();
+function removeImage(id,idx){
+  const item=queue.find(q=>q.id==id);if(!item)return;
+  item.images.splice(idx,1);
+  if(!item.images.length){queue=queue.filter(q=>q.id!=id);renderQueue();updateStats();return;}
+  _patchThumbStack(id);updateStats();
 }
 
-function removeItem(id) { queue = queue.filter(q => q.id != id); renderQueue(); updateStats(); }
-function clearDone()    { queue = queue.filter(q => q.status !== 'success'); renderQueue(); updateStats(); }
-function retryItem(id)  { const item = queue.find(q => q.id==id); if(item){item.status='pending';item.error=null;renderQueue();} }
-function retryFailed()  {
-  let n=0; queue.forEach(q=>{if(q.status==='failed'){q.status='pending';q.error=null;n++;}});
+function removeItem(id){queue=queue.filter(q=>q.id!=id);renderQueue();updateStats();}
+function clearDone(){queue=queue.filter(q=>q.status!=='success');renderQueue();updateStats();}
+function retryItem(id){const item=queue.find(q=>q.id==id);if(item){item.status='pending';item.error=null;renderQueue();}}
+function retryFailed(){
+  let n=0;queue.forEach(q=>{if(q.status==='failed'){q.status='pending';q.error=null;n++;}});
   renderQueue();
   if(n){toast(`Re-queued ${n} item(s)`,'success');uploadAll();}else toast('No failed items','error');
 }
 
 // ── Bulk apply ────────────────────────────────────────────────────────────────
-function bulkApply() {
-  const cp     = document.getElementById('bulk-cp').value.trim();
-  const cat    = document.getElementById('bulk-category').value;
-  const tags   = document.getElementById('bulk-tags').value.trim();
-  const hs     = document.getElementById('bulk-hs').value.trim();
-  const origin = document.getElementById('bulk-origin').value.trim();
-  const qty    = document.getElementById('bulk-qty').value.trim();
-  const color  = document.getElementById('bulk-color').value.trim();
-  const sizes  = document.getElementById('bulk-sizes').value.trim();
-  if (!cp&&!cat&&!tags&&!hs&&!origin&&!qty&&!color&&!sizes) { toast('Fill at least one field','error'); return; }
+function bulkApply(){
+  const vals={
+    cp:document.getElementById('bulk-cp').value.trim(),
+    cat:document.getElementById('bulk-category').value,
+    tags:document.getElementById('bulk-tags').value.trim(),
+    hs:document.getElementById('bulk-hs').value.trim(),
+    origin:document.getElementById('bulk-origin').value.trim(),
+    qty:document.getElementById('bulk-qty').value.trim(),
+    color:document.getElementById('bulk-color').value.trim(),
+    sizes:document.getElementById('bulk-sizes').value.trim(),
+  };
+  if(!Object.values(vals).some(Boolean)){toast('Fill at least one field','error');return;}
   let n=0;
-  queue.forEach(q => {
+  queue.forEach(q=>{
     if(q.status!=='pending')return;
-    if(cp)     q.costPrice=cp;
-    if(cat)    q.category=cat;
-    if(tags)   q.tags=tags;
-    if(hs)     q.hscode=hs;
-    if(origin) q.origin=origin;
-    if(qty)    q.qty=qty;
-    if(color)  q.colors=color;
-    if(sizes)  q.sizes=sizes;
+    if(vals.cp)     q.costPrice=vals.cp;
+    if(vals.cat)    q.category=vals.cat;
+    if(vals.tags)   q.tags=vals.tags;
+    if(vals.hs)     q.hscode=vals.hs;
+    if(vals.origin) q.origin=vals.origin;
+    if(vals.qty)    q.qty=vals.qty;
+    if(vals.color)  q.colors=vals.color;
+    if(vals.sizes)  q.sizes=vals.sizes;
     n++;
   });
-  renderQueue(); updateStats();
-  toast(n?`Applied to ${n} item(s)`:'No pending items', n?'success':'error');
+  renderQueue();updateStats();
+  toast(n?`Applied to ${n} items`:'No pending items',n?'success':'error');
 }
 
 // ── Price ─────────────────────────────────────────────────────────────────────
-function getMarkup() { return parseFloat(document.querySelector('input[name="markup"]:checked')?.value||4); }
-function calcSP(cp, markup) {
-  markup = markup||getMarkup();
-  const raw = cp*markup;
-  const tiers=[99,199,299,399,499,599,699,799,899,999,1499,1999,2499,2999,3499,3999,4499,4999,5999,6999,7999,8999,9999,12999,14999,19999,24999,29999,39999,49999,99999];
-  for(const t of tiers){if(t>=raw)return t;}
+function getMarkup(){return parseFloat(document.querySelector('input[name="markup"]:checked')?.value||4);}
+function calcSP(cp,markup){
+  markup=markup||getMarkup();const raw=cp*markup;
+  const t=[99,199,299,399,499,599,699,799,899,999,1499,1999,2499,2999,3499,3999,4499,4999,5999,6999,7999,8999,9999,12999,14999,19999,24999,29999,39999,49999,99999];
+  for(const v of t)if(v>=raw)return v;
   return Math.floor(raw/1000)*1000+999;
 }
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
-function updateStats() {
-  const ready      = queue.filter(isReady).length;
-  const incomplete = queue.filter(q=>q.status==='pending'&&!isReady(q)).length;
-  const queued     = queue.filter(q=>q.status==='pending'||q.status==='uploading').length;
-  const success    = queue.filter(q=>q.status==='success').length;
-  const failed     = queue.filter(q=>q.status==='failed').length;
-  const value      = queue.reduce((s,q)=>s+(q.costPrice?calcSP(parseFloat(q.costPrice),getMarkup())*variantCountFor(q):0),0);
-  document.getElementById('stat-queued').textContent  = queued;
-  document.getElementById('stat-success').textContent = success;
-  document.getElementById('stat-failed').textContent  = failed;
-  document.getElementById('stat-value').textContent   = '₹'+value.toLocaleString('en-IN');
-  document.getElementById('cb-ready').textContent      = ready;
-  document.getElementById('cb-incomplete').textContent = incomplete;
-  document.getElementById('cb-failed').textContent     = failed;
-  document.getElementById('cb-done').textContent       = success;
-  const btn = document.getElementById('upload-all-btn');
-  if (!btn.disabled) btn.innerHTML = ready ? `⬆ Upload ${ready} ready <span class="kbd-hint">⌘↵</span>` : `⬆ Upload all <span class="kbd-hint">⌘↵</span>`;
-  document.getElementById('ms-total').textContent = success;
-  const total = success+failed;
-  document.getElementById('ms-rate').textContent = total ? Math.round((success/total)*100)+'%' : '—';
-  ['ready','incomplete','failed','success'].forEach(k => {
-    const el = document.getElementById('qfc-'+k);
-    if(el) el.textContent = {ready,incomplete,failed,success}[k] ? ` ${({ready,incomplete,failed,success})[k]}` : '';
+function updateStats(){
+  const ready=queue.filter(isReady).length;
+  const incomplete=queue.filter(q=>q.status==='pending'&&!isReady(q)).length;
+  const queued=queue.filter(q=>q.status==='pending'||q.status==='uploading').length;
+  const success=queue.filter(q=>q.status==='success').length;
+  const failed=queue.filter(q=>q.status==='failed').length;
+  const value=queue.reduce((s,q)=>s+(q.costPrice?calcSP(parseFloat(q.costPrice),getMarkup())*variantCountFor(q):0),0);
+  document.getElementById('stat-queued').textContent=queued;
+  document.getElementById('stat-success').textContent=success;
+  document.getElementById('stat-failed').textContent=failed;
+  document.getElementById('stat-value').textContent='₹'+value.toLocaleString('en-IN');
+  document.getElementById('cb-ready').textContent=ready;
+  document.getElementById('cb-incomplete').textContent=incomplete;
+  document.getElementById('cb-failed').textContent=failed;
+  document.getElementById('cb-done').textContent=success;
+  const btn=document.getElementById('upload-all-btn');
+  if(!btn.disabled)btn.innerHTML=ready?`⬆ Upload ${ready} ready <span class="kbd-hint">⌘↵</span>`:`⬆ Upload all <span class="kbd-hint">⌘↵</span>`;
+  document.getElementById('ms-total').textContent=success;
+  const tot=success+failed;
+  document.getElementById('ms-rate').textContent=tot?Math.round((success/tot)*100)+'%':'—';
+  const counts={ready,incomplete,failed,success};
+  ['ready','incomplete','failed','success'].forEach(k=>{
+    const el=document.getElementById('qfc-'+k);if(el)el.textContent=counts[k]?` ${counts[k]}`:'';
   });
 }
 
 // ── Upload ────────────────────────────────────────────────────────────────────
-async function uploadAll() {
-  const pending = queue.filter(q=>q.status==='pending');
-  if (!pending.length) { toast('Nothing to upload','error'); return; }
-  const valid = pending.filter(q=>q.sku&&q.costPrice);
-  pending.filter(q=>!q.sku||!q.costPrice).forEach(q=>addLog(`⚠ Skipping ${q.sku||q.images[0].name} — missing SKU or cost`,'error'));
-  if (!valid.length) { toast('All pending items missing SKU or cost','error'); return; }
-  const btn = document.getElementById('upload-all-btn');
-  btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Uploading…';
-  if (firstLog) { logBox.innerHTML=''; firstLog=false; }
+async function uploadAll(){
+  const pending=queue.filter(q=>q.status==='pending');
+  if(!pending.length){toast('Nothing to upload','error');return;}
+  const valid=pending.filter(q=>q.sku&&q.costPrice);
+  pending.filter(q=>!q.sku||!q.costPrice).forEach(q=>addLog(`⚠ Skipping ${q.sku||q.images[0]?.name||'item'} — missing SKU or cost`,'error'));
+  if(!valid.length){toast('All items missing SKU or cost price','error');return;}
+  const btn=document.getElementById('upload-all-btn');
+  btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Uploading…';
+  if(firstLog){logBox.innerHTML='';firstLog=false;}
   const pw=document.getElementById('progress-wrap'),pb=document.getElementById('progress-bar'),pl=document.getElementById('progress-label');
-  pw.style.display='block'; pl.style.display='block';
-  let done=0; const total=valid.length; const t0=Date.now();
+  pw.style.display='block';pl.style.display='block';
+  let done=0;const total=valid.length,t0=Date.now();
   const tick=()=>{
     pb.style.width=Math.round((done/total)*100)+'%';
     let eta='';
@@ -1321,49 +1406,45 @@ async function uploadAll() {
     pl.textContent=`${done}/${total} processed${eta}`;
   };
   tick();
-  const concurrency = parseInt(document.getElementById('concurrency').value||'3');
+  const concurrency=parseInt(document.getElementById('concurrency').value||'3');
   let cursor=0;
-  async function worker(){
-    while(cursor<valid.length){const item=valid[cursor++];await uploadOne(item);done++;tick();}
-  }
+  async function worker(){while(cursor<valid.length){const item=valid[cursor++];await uploadOne(item);done++;tick();}}
   await Promise.all(Array.from({length:Math.min(concurrency,valid.length)},worker));
   setTimeout(()=>{pw.style.display='none';pl.style.display='none';},1500);
 }
 
-async function uploadOne(item) {
-  item.status='uploading'; renderQueue();
-  try {
+async function uploadOne(item){
+  item.status='uploading';renderQueue();
+  try{
     const fd=new FormData();
     item.images.forEach(img=>fd.append('images',img.file));
     fd.append('sku',item.sku);
     const res=await fetch('/upload',{method:'POST',body:fd});
     const data=await res.json();
-    if(!res.ok) throw new Error(data.error||'Upload failed');
+    if(!res.ok)throw new Error(data.error||'Upload failed');
     socket.emit('start_upload',{
-      filenames:data.filenames, sku:item.sku, cost_price:item.costPrice,
-      markup:getMarkup(), title:item.title, category:item.category,
-      tags:item.tags, weight_g:item.weight||null, hs_code:item.hscode,
-      country_of_origin:item.origin, inventory_qty:item.qty||null,
+      filenames:data.filenames,sku:item.sku,cost_price:item.costPrice,
+      markup:getMarkup(),title:item.title,category:item.category,
+      tags:item.tags,weight_g:item.weight||null,hs_code:item.hscode,
+      country_of_origin:item.origin,inventory_qty:item.qty||null,
       colors:_parseColors(item.colors),
       sizes:(item.sizes||'').split(',').map(s=>s.trim()).filter(Boolean)
     });
-    await new Promise(resolve=>{ const check=()=>{if(item.status!=='uploading')return resolve();setTimeout(check,300);}; check(); });
-  } catch(e) {
-    item.status='failed'; item.error=e.message; renderQueue();
+    await new Promise(resolve=>{const check=()=>{if(item.status!=='uploading')return resolve();setTimeout(check,300);};check();});
+  }catch(e){
+    item.status='failed';item.error=e.message;renderQueue();
     addLog(`❌ Upload failed for ${item.sku}: ${e.message}`,'error');
   }
 }
 
-function checkAllDone() {
-  if (queue.every(q=>q.status!=='uploading'&&q.status!=='pending')) {
-    const btn=document.getElementById('upload-all-btn');
-    btn.disabled=false; updateStats();
+function checkAllDone(){
+  if(queue.every(q=>q.status!=='uploading'&&q.status!=='pending')){
+    const btn=document.getElementById('upload-all-btn');btn.disabled=false;updateStats();
   }
 }
-
-function addResult(data) {
+function addResult(data){
   document.getElementById('results-section').style.display='block';
-  const card=document.createElement('div'); card.className='result-card';
+  const card=document.createElement('div');card.className='result-card';
   card.innerHTML=`<div><div class="result-title">${data.title||data.sku}</div>
     <div class="result-meta">SKU ${data.sku} · ₹${data.selling_price} · all channels</div></div>
     <a href="${data.shopify_url}" target="_blank" class="result-link">View in Shopify →</a>`;
@@ -1371,60 +1452,57 @@ function addResult(data) {
 }
 
 // ── Log ───────────────────────────────────────────────────────────────────────
-function addLog(msg,level='info') {
+function addLog(msg,level='info'){
   logLines.push({time:new Date().toLocaleTimeString(),msg,level});
   if(logLines.length>800)logLines.shift();
   if(firstLog){logBox.innerHTML='';firstLog=false;}
   if(document.getElementById('log-errors-only').checked&&level!=='error')return;
-  const line=document.createElement('div');
-  line.className='log-'+level;
+  const line=document.createElement('div');line.className='log-'+level;
   line.innerHTML=`<span class="log-time">${logLines[logLines.length-1].time}</span>`;
   line.appendChild(document.createTextNode(msg));
-  logBox.appendChild(line);
-  logBox.scrollTop=logBox.scrollHeight;
+  logBox.appendChild(line);logBox.scrollTop=logBox.scrollHeight;
 }
-function renderLog() {
+function renderLog(){
   const eo=document.getElementById('log-errors-only').checked;
   logBox.innerHTML='';
   const lines=logLines.filter(l=>!eo||l.level==='error');
   if(!lines.length){logBox.innerHTML=`<span class="log-muted">No${eo?' error':''} entries</span>`;return;}
   lines.forEach(({time,msg,level})=>{
-    const d=document.createElement('div'); d.className='log-'+level;
-    d.innerHTML=`<span class="log-time">${time}</span>`;
-    d.appendChild(document.createTextNode(msg)); logBox.appendChild(d);
+    const d=document.createElement('div');d.className='log-'+level;
+    d.innerHTML=`<span class="log-time">${time}</span>`;d.appendChild(document.createTextNode(msg));logBox.appendChild(d);
   });
 }
 function copyLog(){navigator.clipboard.writeText(logLines.map(l=>`[${l.time}] ${l.msg}`).join('\n')).then(()=>toast('Log copied','success'));}
 function clearLog(){logLines=[];logBox.innerHTML='';firstLog=true;}
 
 // ── History ───────────────────────────────────────────────────────────────────
-async function loadHistory() {
+async function loadHistory(){
   const tbody=document.getElementById('history-tbody');
   tbody.innerHTML='<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:32px">Loading…</td></tr>';
-  const res=await fetch('/history'); history=await res.json(); renderHistory();
+  const res=await fetch('/history');history=await res.json();renderHistory();
 }
-function setHistoryFilter(f) {
+function setHistoryFilter(f){
   historyFilter=f;
   ['all','success','failed'].forEach(k=>{
     const b=document.getElementById('hf-'+k);
-    b.style.background=k===f?'var(--gold)':'';
-    b.style.color=k===f?'#191509':'';
-    b.style.borderColor=k===f?'var(--gold)':'';
+    b.style.background=k===f?'var(--accent)':'';
+    b.style.color=k===f?'#fff':'';
+    b.style.borderColor=k===f?'var(--accent)':'';
   });
   renderHistory();
 }
-function renderHistory() {
+function renderHistory(){
   const tbody=document.getElementById('history-tbody');
   const q=(document.getElementById('history-search').value||'').toLowerCase();
   let rows=history;
   if(historyFilter!=='all')rows=rows.filter(r=>r.status===historyFilter);
   if(q)rows=rows.filter(r=>(r.sku||'').toLowerCase().includes(q)||(r.title||'').toLowerCase().includes(q));
-  if(!rows.length){tbody.innerHTML='<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:32px">No matching uploads</td></tr>';return;}
+  if(!rows.length){tbody.innerHTML='<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:32px">No matches</td></tr>';return;}
   tbody.innerHTML=rows.map(r=>{
     const i=history.indexOf(r);
-    return `<tr>
+    return`<tr>
       <td class="mono" style="color:var(--muted)">${r.timestamp?.slice(0,19).replace('T',' ')||'—'}</td>
-      <td class="mono" style="color:var(--gold)"><strong>${r.sku}</strong></td>
+      <td class="mono" style="color:var(--accent2)"><strong>${r.sku}</strong></td>
       <td>${r.title||'—'}</td>
       <td class="mono" style="color:var(--muted)">${r.image_count||1}</td>
       <td class="mono" style="color:var(--muted)">${r.variant_count||1}</td>
@@ -1434,7 +1512,7 @@ function renderHistory() {
       <td class="mono" style="color:var(--muted)">${r.country_of_origin||'—'}</td>
       <td class="${r.status==='success'?'status-ok':'status-fail'}">${r.status}</td>
       <td>${r.shopify_url?`<a href="${r.shopify_url}" target="_blank" class="result-link">View →</a>`:`<span style="color:var(--red);font-size:11px">${(r.error||'—').slice(0,40)}</span>`}</td>
-      <td><button class="row-del" onclick="deleteHistoryRow(${i})" title="Delete">🗑</button></td>
+      <td><button class="row-del" onclick="deleteHistoryRow(${i})">🗑</button></td>
     </tr>`;
   }).join('');
 }
@@ -1442,8 +1520,8 @@ async function deleteHistoryRow(idx){await fetch(`/history/${idx}`,{method:'DELE
 function exportCsv(){window.open('/history/csv','_blank');}
 
 // ── Settings ──────────────────────────────────────────────────────────────────
-async function saveSettings() {
-  const payload={
+async function saveSettings(){
+  const p={
     shopify_store:document.getElementById('s-store').value.trim(),
     shopify_token:document.getElementById('s-token').value.trim(),
     groq_api_key:document.getElementById('s-groq').value.trim(),
@@ -1455,17 +1533,15 @@ async function saveSettings() {
     default_inventory_qty:document.getElementById('s-qty').value.trim(),
     default_bangle_sizes:document.getElementById('s-bangle-sizes').value.trim(),
   };
-  await fetch('/save_settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-  const msg=document.getElementById('save-msg'); msg.style.display='inline';
-  if(payload.groq_api_key)document.getElementById('dot-groq').className='dot ok';
-  if(payload.shopify_store)document.getElementById('dot-shopify').className='dot ok';
-  if(payload.default_bangle_sizes)DEFAULT_BANGLE_SIZES=payload.default_bangle_sizes;
-  toast('Settings saved','success');
-  setTimeout(()=>msg.style.display='none',2500);
+  await fetch('/save_settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
+  const msg=document.getElementById('save-msg');msg.style.display='inline';
+  if(p.groq_api_key)document.getElementById('dot-groq').className='dot ok';
+  if(p.shopify_store)document.getElementById('dot-shopify').className='dot ok';
+  if(p.default_bangle_sizes)DEFAULT_BANGLE_SIZES=p.default_bangle_sizes;
+  toast('Settings saved','success');setTimeout(()=>msg.style.display='none',2500);
 }
 async function testShopify(){
-  await saveSettings();
-  const el=document.getElementById('test-shopify-result');
+  await saveSettings();const el=document.getElementById('test-shopify-result');
   el.textContent='Testing…';el.style.color='var(--muted)';
   try{const r=await(await fetch('/test_shopify',{method:'POST'})).json();
     if(r.ok){el.textContent=`✅ Connected to ${r.shop_name}`;el.style.color='var(--green)';}
@@ -1473,8 +1549,7 @@ async function testShopify(){
   catch(e){el.textContent=`❌ ${e.message}`;el.style.color='var(--red)';}
 }
 async function testGroq(){
-  await saveSettings();
-  const el=document.getElementById('test-groq-result');
+  await saveSettings();const el=document.getElementById('test-groq-result');
   el.textContent='Testing…';el.style.color='var(--muted)';
   try{const r=await(await fetch('/test_groq',{method:'POST'})).json();
     if(r.ok){el.textContent='✅ Groq key works';el.style.color='var(--green)';}
@@ -1483,8 +1558,8 @@ async function testGroq(){
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
-async function loadSettingsForm() {
-  try {
+async function loadSettingsForm(){
+  try{
     const d=await(await fetch('/get_settings')).json();
     if(d.shopify_store)document.getElementById('s-store').value=d.shopify_store;
     if(d.shopify_token)document.getElementById('s-token').value=d.shopify_token;
@@ -1496,14 +1571,13 @@ async function loadSettingsForm() {
     document.getElementById('s-origin').value=d.default_country_of_origin||'IN';
     document.getElementById('s-qty').value=d.default_inventory_qty||10;
     const bs=Array.isArray(d.default_bangle_sizes)?d.default_bangle_sizes.join(','):(d.default_bangle_sizes||'2.4,2.6,2.8');
-    document.getElementById('s-bangle-sizes').value=bs; DEFAULT_BANGLE_SIZES=bs;
+    document.getElementById('s-bangle-sizes').value=bs;DEFAULT_BANGLE_SIZES=bs;
     if(d.groq_api_key)document.getElementById('dot-groq').className='dot ok';
     if(d.shopify_store)document.getElementById('dot-shopify').className='dot ok';
-  } catch(e){}
+  }catch(e){}
 }
 
-// Keyboard shortcuts
-document.addEventListener('keydown', e => {
+document.addEventListener('keydown',e=>{
   const typing=document.activeElement&&['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName);
   if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();uploadAll();return;}
   if(e.key==='Escape'){cpClose();return;}
