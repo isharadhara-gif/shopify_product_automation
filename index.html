@@ -358,6 +358,58 @@
     .queue-item { grid-template-columns: 1fr; }
     .item-actions { flex-direction: row; align-items: center; }
   }
+
+  /* ── Color chip selector ────────────────────────────────────────────── */
+  .color-picker-wrap { position: relative; }
+  .color-picker-trigger {
+    display: flex; align-items: center; gap: 7px;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 7px;
+    padding: 5px 9px; font-size: 12px; color: var(--text); cursor: pointer;
+    min-width: 170px; transition: border-color .12s; user-select: none;
+  }
+  .color-picker-trigger:hover { border-color: var(--border-hi); }
+  .color-picker-trigger.open { border-color: var(--gold); }
+  .color-picker-trigger.has-colors { border-color: var(--gold-line); }
+  .cp-swatches-preview { display: flex; gap: 3px; flex-wrap: wrap; }
+  .cp-swatch-mini {
+    width: 12px; height: 12px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,.18); flex-shrink: 0;
+  }
+  .cp-label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11.5px; }
+  .cp-caret { color: var(--faint); font-size: 10px; flex-shrink: 0; }
+
+  .color-picker-dropdown {
+    position: absolute; top: calc(100% + 5px); left: 0; z-index: 200;
+    background: var(--surface); border: 1px solid var(--border-hi); border-radius: 12px;
+    padding: 12px; width: 320px; box-shadow: 0 12px 36px rgba(0,0,0,.55);
+    display: none;
+  }
+  .color-picker-dropdown.open { display: block; }
+  .cp-search {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 7px; padding: 6px 10px; color: var(--text); font-size: 12px;
+    margin-bottom: 10px;
+  }
+  .cp-search:focus { outline: none; border-color: var(--gold); }
+  .cp-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(68px, 1fr));
+    gap: 5px; max-height: 260px; overflow-y: auto;
+  }
+  .cp-chip {
+    display: flex; align-items: center; gap: 5px;
+    padding: 4px 7px; border-radius: 6px; cursor: pointer;
+    border: 1px solid transparent; font-size: 11px; transition: all .1s;
+    background: var(--surface2);
+  }
+  .cp-chip:hover { border-color: var(--border-hi); background: var(--surface3); }
+  .cp-chip.selected { border-color: var(--gold-line); background: var(--gold-soft); color: var(--gold); }
+  .cp-dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(255,255,255,.2); }
+  .cp-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cp-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .cp-selected-count { font-size: 11px; color: var(--muted); }
+  .cp-clear { font-size: 11px; color: var(--red); background: none; border: none; cursor: pointer; padding: 0; }
+  .cp-clear:hover { text-decoration: underline; }
+
 </style>
 </head>
 <body>
@@ -465,6 +517,26 @@
         <input id="bulk-hs" type="text" class="item-input mono-in narrow" placeholder="HS code">
         <input id="bulk-origin" type="text" class="item-input mono-in narrow" placeholder="Origin">
         <input id="bulk-qty" type="number" class="item-input mono-in narrow" placeholder="Qty">
+        <select id="bulk-color" class="item-input" style="width:150px">
+          <option value="">Color…</option>
+          <option>Red</option><option>Orange</option><option>Yellow</option><option>Green</option>
+          <option>Blue</option><option>Purple</option><option>Pink</option><option>Brown</option>
+          <option>Black</option><option>White</option><option>Grey</option><option>Magenta</option>
+          <option>Maroon</option><option>Indigo</option><option>Turquoise</option><option>Beige</option>
+          <option>Teal</option><option>Violet</option><option>Gold</option><option>Silver</option>
+          <option>Rose Gold</option><option>Dark Red</option><option>Dark Orange</option>
+          <option>Dark Yellow</option><option>Dark Green</option><option>Dark Blue</option>
+          <option>Dark Purple</option><option>Dark Pink</option><option>Dark Brown</option>
+          <option>Dark Grey</option><option>Dark Magenta</option><option>Dark Maroon</option>
+          <option>Dark Indigo</option><option>Dark Turquoise</option><option>Dark Beige</option>
+          <option>Dark Teal</option><option>Dark Violet</option><option>Light Red</option>
+          <option>Light Orange</option><option>Light Yellow</option><option>Light Green</option>
+          <option>Light Blue</option><option>Light Purple</option><option>Light Pink</option>
+          <option>Light Brown</option><option>Off White</option><option>Light Grey</option>
+          <option>Light Magenta</option><option>Light Maroon</option><option>Light Indigo</option>
+          <option>Light Turquoise</option><option>Light Beige</option><option>Light Teal</option>
+          <option>Light Violet</option><option>Multicolor</option>
+        </select>
         <input id="bulk-sizes" type="text" class="item-input mono-in variant-input" placeholder="Sizes 2.4,2.6,2.8">
         <button class="btn btn-ghost btn-sm" onclick="bulkApply()">Apply</button>
         <div class="divider"></div>
@@ -609,6 +681,211 @@
 
 <script>
 const socket = io();
+
+// ── 54 brand colors with display RGB for swatches ───────────────────────────
+const BRAND_COLORS = [
+  { name: 'Red',              hex: '#dc3232' },
+  { name: 'Orange',           hex: '#e67828' },
+  { name: 'Yellow',           hex: '#e6c832' },
+  { name: 'Green',            hex: '#32a046' },
+  { name: 'Blue',             hex: '#3259c8' },
+  { name: 'Purple',           hex: '#8232b4' },
+  { name: 'Pink',             hex: '#e678a0' },
+  { name: 'Brown',            hex: '#825028' },
+  { name: 'Black',            hex: '#1e1e1e' },
+  { name: 'White',            hex: '#f5f5f5' },
+  { name: 'Grey',             hex: '#969696' },
+  { name: 'Magenta',          hex: '#c832a0' },
+  { name: 'Maroon',           hex: '#78141e' },
+  { name: 'Indigo',           hex: '#3c32a0' },
+  { name: 'Turquoise',        hex: '#32b9af' },
+  { name: 'Beige',            hex: '#dcc8a5' },
+  { name: 'Teal',             hex: '#1e8282' },
+  { name: 'Violet',           hex: '#9650dc' },
+  { name: 'Gold',             hex: '#d2a532' },
+  { name: 'Silver',           hex: '#b9bec8' },
+  { name: 'Rose Gold',        hex: '#d29182' },
+  { name: 'Dark Red',         hex: '#8c1414' },
+  { name: 'Dark Orange',      hex: '#b4550f' },
+  { name: 'Dark Yellow',      hex: '#b49614' },
+  { name: 'Dark Green',       hex: '#196423' },
+  { name: 'Dark Blue',        hex: '#14288c' },
+  { name: 'Dark Purple',      hex: '#551482' },
+  { name: 'Dark Pink',        hex: '#b9466e' },
+  { name: 'Dark Brown',       hex: '#502d0f' },
+  { name: 'Dark Grey',        hex: '#505050' },
+  { name: 'Dark Magenta',     hex: '#961473' },
+  { name: 'Dark Maroon',      hex: '#4b0a0f' },
+  { name: 'Dark Indigo',      hex: '#23196e' },
+  { name: 'Dark Turquoise',   hex: '#148278' },
+  { name: 'Dark Beige',       hex: '#af9b73' },
+  { name: 'Dark Teal',        hex: '#0f5555' },
+  { name: 'Dark Violet',      hex: '#692daa' },
+  { name: 'Light Red',        hex: '#ff7878' },
+  { name: 'Light Orange',     hex: '#ffb978' },
+  { name: 'Light Yellow',     hex: '#fff08c' },
+  { name: 'Light Green',      hex: '#8ce18c' },
+  { name: 'Light Blue',       hex: '#82afff' },
+  { name: 'Light Purple',     hex: '#c396f0' },
+  { name: 'Light Pink',       hex: '#ffb9d2' },
+  { name: 'Light Brown',      hex: '#be9164' },
+  { name: 'Off White',        hex: '#ebe6d7' },
+  { name: 'Light Grey',       hex: '#d2d2d2' },
+  { name: 'Light Magenta',    hex: '#ff96e6' },
+  { name: 'Light Maroon',     hex: '#b95a64' },
+  { name: 'Light Indigo',     hex: '#827ddc' },
+  { name: 'Light Turquoise',  hex: '#8ce6e1' },
+  { name: 'Light Beige',      hex: '#f0e1c8' },
+  { name: 'Light Teal',       hex: '#64c8c3' },
+  { name: 'Light Violet',     hex: '#d2a5ff' },
+  { name: 'Multicolor',       hex: 'linear-gradient(135deg,#dc3232,#e6c832,#32a046,#3259c8,#9650dc)' },
+];
+
+// Active color picker state
+let _cpOpen = null; // item id whose picker is open
+
+function cpSwatchStyle(hex) {
+  return hex.startsWith('linear') ? `background:${hex}` : `background:${hex}`;
+}
+
+function openColorPicker(itemId) {
+  if (_cpOpen === itemId) { closeColorPicker(); return; }
+  if (_cpOpen) closeColorPicker();
+  _cpOpen = itemId;
+  const trigger = document.getElementById(`cp-trigger-${itemId}`);
+  const dd = document.getElementById(`cp-dd-${itemId}`);
+  if (trigger) trigger.classList.add('open');
+  if (dd) { dd.classList.add('open'); dd.querySelector('.cp-search')?.focus(); }
+  // Close on outside click
+  setTimeout(() => document.addEventListener('click', cpOutsideClick, { once: true, capture: true }), 0);
+}
+
+function closeColorPicker() {
+  if (!_cpOpen) return;
+  const trigger = document.getElementById(`cp-trigger-${_cpOpen}`);
+  const dd = document.getElementById(`cp-dd-${_cpOpen}`);
+  if (trigger) trigger.classList.remove('open');
+  if (dd) dd.classList.remove('open');
+  _cpOpen = null;
+}
+
+function cpOutsideClick(e) {
+  if (!_cpOpen) return;
+  const dd = document.getElementById(`cp-dd-${_cpOpen}`);
+  const trigger = document.getElementById(`cp-trigger-${_cpOpen}`);
+  if (dd && !dd.contains(e.target) && trigger && !trigger.contains(e.target)) {
+    closeColorPicker();
+  } else {
+    // Re-attach listener since it was once
+    setTimeout(() => document.addEventListener('click', cpOutsideClick, { once: true, capture: true }), 0);
+  }
+}
+
+function cpSearch(itemId, val) {
+  const dd = document.getElementById(`cp-dd-${itemId}`);
+  if (!dd) return;
+  const q = val.toLowerCase();
+  dd.querySelectorAll('.cp-chip').forEach(chip => {
+    chip.style.display = chip.dataset.name.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
+function cpToggleColor(itemId, colorName) {
+  const item = queue.find(q => q.id == itemId);
+  if (!item) return;
+  let selected = item.colors ? item.colors.split(',').map(s => s.trim()).filter(Boolean) : [];
+  const idx = selected.indexOf(colorName);
+  if (idx >= 0) selected.splice(idx, 1);
+  else selected.push(colorName);
+  item.colors = selected.join(', ');
+
+  // Update chip visual
+  const chip = document.querySelector(`#cp-dd-${itemId} [data-name="${CSS.escape(colorName)}"]`);
+  if (chip) chip.classList.toggle('selected', idx < 0);
+
+  // Update trigger preview
+  _cpUpdateTrigger(itemId, selected);
+  // Update variant count pill in name row
+  const nameEl = document.getElementById(`name-${itemId}`);
+  if (nameEl) nameEl.innerHTML = nameHtml(item, variantCountFor(item), item.sku && dupSkus().has(item.sku.trim()));
+  updateStats();
+}
+
+function cpClearColors(itemId) {
+  const item = queue.find(q => q.id == itemId);
+  if (!item) return;
+  item.colors = '';
+  const dd = document.getElementById(`cp-dd-${itemId}`);
+  if (dd) dd.querySelectorAll('.cp-chip').forEach(c => c.classList.remove('selected'));
+  _cpUpdateTrigger(itemId, []);
+  const nameEl = document.getElementById(`name-${itemId}`);
+  if (nameEl) nameEl.innerHTML = nameHtml(item, variantCountFor(item), item.sku && dupSkus().has(item.sku.trim()));
+  updateStats();
+}
+
+function _cpUpdateTrigger(itemId, selected) {
+  const trigger = document.getElementById(`cp-trigger-${itemId}`);
+  if (!trigger) return;
+  trigger.classList.toggle('has-colors', selected.length > 0);
+  const previewEl = trigger.querySelector('.cp-swatches-preview');
+  const labelEl   = trigger.querySelector('.cp-label');
+  const countEl   = trigger.closest('.color-picker-wrap')?.querySelector('.cp-selected-count');
+  if (previewEl) {
+    previewEl.innerHTML = selected.slice(0,5).map(n => {
+      const c = BRAND_COLORS.find(x => x.name === n);
+      const style = c ? cpSwatchStyle(c.hex) : 'background:#888';
+      return `<span class="cp-swatch-mini" style="${style}"></span>`;
+    }).join('');
+  }
+  if (labelEl) labelEl.textContent = selected.length ? selected.join(', ') : 'Select colors…';
+  if (countEl) countEl.textContent = selected.length ? `${selected.length} selected` : '';
+}
+
+function buildColorPickerHtml(itemId, currentColors, locked) {
+  const selected = currentColors ? currentColors.split(',').map(s => s.trim()).filter(Boolean) : [];
+  const swatchPreviews = selected.slice(0,5).map(n => {
+    const c = BRAND_COLORS.find(x => x.name === n);
+    const style = c ? cpSwatchStyle(c.hex) : 'background:#888';
+    return `<span class="cp-swatch-mini" style="${style}"></span>`;
+  }).join('');
+  const label = selected.length ? selected.join(', ') : 'Select colors…';
+
+  if (locked) {
+    return `<div style="font-size:12px;color:var(--muted);padding:4px 0">${label || '—'}</div>`;
+  }
+
+  const chips = BRAND_COLORS.map(c => {
+    const isSelected = selected.includes(c.name);
+    const dotStyle = c.hex.startsWith('linear')
+      ? `background:${c.hex};border-radius:3px;width:14px;height:11px`
+      : `background:${c.hex};border-radius:50%`;
+    return `<div class="cp-chip${isSelected?' selected':''}" data-name="${c.name}"
+      onclick="cpToggleColor('${itemId}','${c.name}')">
+      <span class="cp-dot" style="${dotStyle}"></span>
+      <span class="cp-name">${c.name}</span>
+    </div>`;
+  }).join('');
+
+  return `
+  <div class="color-picker-wrap">
+    <div class="color-picker-trigger${selected.length?' has-colors':''}" id="cp-trigger-${itemId}"
+      onclick="event.stopPropagation();openColorPicker('${itemId}')">
+      <div class="cp-swatches-preview">${swatchPreviews}</div>
+      <span class="cp-label">${label}</span>
+      <span class="cp-caret">▾</span>
+    </div>
+    <div class="color-picker-dropdown" id="cp-dd-${itemId}">
+      <input class="cp-search" placeholder="Search colors…" oninput="cpSearch('${itemId}',this.value)" onclick="event.stopPropagation()">
+      <div class="cp-grid">${chips}</div>
+      <div class="cp-footer">
+        <span class="cp-selected-count">${selected.length ? selected.length+' selected' : ''}</span>
+        <button class="cp-clear" onclick="event.stopPropagation();cpClearColors('${itemId}')">Clear all</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+
 
 // One queue item = one product; can hold multiple images (first = cover).
 let queue = [];
@@ -761,7 +1038,7 @@ function addToQueue({ file, relativePath }, forcedKey = null) {
         id: Date.now() + Math.random(),
         groupKey, sku: forcedKey ? '' : parsed.sku, costPrice: forcedKey ? '' : parsed.cost,
         title: '', category: '', tags: '', weight: '', hscode: '', origin: '', qty: '',
-        colors: '', sizes: '', _detectedColor: null,
+        colors: '', sizes: '',
         images: [{ file, thumb, name: file.name }],
         status: 'pending', error: null
       };
@@ -879,15 +1156,13 @@ function buildQueueItemHtml(item, dups) {
           <input class="item-input mono-in narrow" placeholder="Qty" value="${item.qty}" type="number" title="Inventory quantity"
             oninput="onFieldInput('${item.id}','qty',this.value)" ${locked?'disabled':''}>
         </div>
-        <div class="item-inputs">
-          <input class="item-input variant-input" placeholder="Colors e.g. Red, Gold" value="${item.colors}"
-            oninput="onFieldInput('${item.id}','colors',this.value)" ${locked?'disabled':''}>
+        <div class="item-inputs" style="align-items:flex-start">
+          ${buildColorPickerHtml(item.id, item.colors, locked)}
           <input class="item-input mono-in variant-input" placeholder="Sizes e.g. 2.4,2.6,2.8" value="${item.sizes}"
             oninput="onFieldInput('${item.id}','sizes',this.value)" ${locked?'disabled':''}>
           ${!locked ? `<button class="preset-btn" onclick="applyBangleSizes('${item.id}')" title="Fill default bangle sizes">📏 Bangle sizes</button>` : ''}
         </div>
         <div class="item-meta" id="meta-${item.id}">${metaHtml(item, sp)}</div>
-        <div class="item-meta" style="margin-top:4px"><span class="color-detect-badge" style="font-family:var(--font-ui);font-size:11px;color:var(--gold);background:var(--gold-soft);border:1px solid var(--gold-line);padding:2px 8px;border-radius:99px">${item._detectedColor ? '🎨 '+item._detectedColor : item.colors ? '' : '<span style=\'color:var(--faint)\'>Color auto-detected on upload</span>'}</span></div>
         ${item.status==='failed' && item.error ? `<div class="item-error-msg">⚠ ${item.error}</div>` : ''}
       </div>
       <div class="item-actions">
@@ -1031,8 +1306,9 @@ function bulkApply() {
   const hs     = document.getElementById('bulk-hs').value.trim();
   const origin = document.getElementById('bulk-origin').value.trim();
   const qty    = document.getElementById('bulk-qty').value.trim();
+  const color  = document.getElementById('bulk-color').value.trim();
   const sizes  = document.getElementById('bulk-sizes').value.trim();
-  if (!cp && !cat && !tags && !hs && !origin && !qty && !sizes) {
+  if (!cp && !cat && !tags && !hs && !origin && !qty && !color && !sizes) {
     toast('Fill at least one bulk field first', 'error'); return;
   }
   let n = 0;
@@ -1044,6 +1320,7 @@ function bulkApply() {
     if (hs)     q.hscode = hs;
     if (origin) q.origin = origin;
     if (qty)    q.qty = qty;
+    if (color)  q.colors = color;
     if (sizes)  q.sizes = sizes;
     n++;
   });
@@ -1175,24 +1452,6 @@ async function uploadOne(item) {
     const res = await fetch('/upload', { method: 'POST', body: fd });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Upload failed');
-
-    // Show detected color in card immediately (non-blocking)
-    if (!item.colors && data.filenames && data.filenames[0]) {
-      fetch('/detect_color', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({filename: data.filenames[0]})
-      }).then(r => r.json()).then(d => {
-        if (d.color && !item.colors) {
-          item._detectedColor = d.color;
-          const el = document.getElementById(`qi-${item.id}`);
-          if (el) {
-            const badge = el.querySelector('.color-detect-badge');
-            if (badge) badge.textContent = '🎨 ' + d.color;
-          }
-        }
-      }).catch(() => {});
-    }
 
     socket.emit('start_upload', {
       filenames: data.filenames,
