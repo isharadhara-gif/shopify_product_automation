@@ -269,20 +269,24 @@
   /* Dropdown renders in a portal at bottom of body so z-index always wins */
   #cp-portal{position:fixed;z-index:9999;display:none}
   #cp-portal.visible{display:block}
-  .cp-dd{background:var(--surface);border:1px solid var(--border-hi);border-radius:12px;padding:12px;width:352px;box-shadow:0 16px 48px rgba(0,0,0,.7)}
+  .cp-dd{background:var(--surface);border:1px solid var(--border-hi);border-radius:12px;padding:12px;width:462px;max-width:calc(100vw - 20px);box-shadow:0 16px 48px rgba(0,0,0,.7)}
   .cp-search-box{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:12px;margin-bottom:10px}
   .cp-search-box:focus{outline:none;border-color:var(--gold)}
-  /* Card-style chips: a full-width color swatch on top + name below, laid out
-     with auto-fill so the grid always stretches to use the dropdown's full
-     width instead of leaving a ragged empty column on the right. */
-  .cp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px;max-height:308px;overflow-y:auto;padding-right:2px}
-  .cp-chip{display:flex;flex-direction:column;align-items:stretch;gap:0;padding:0;border-radius:8px;cursor:pointer;border:1px solid var(--border);font-size:11px;background:var(--surface2);overflow:hidden;transition:border-color .12s,transform .12s;-webkit-tap-highlight-color:transparent}
+  /* Card-style chips: a full-width color swatch on top + name below. Fixed
+     6 columns (54 brand colors ÷ 6 = exactly 9 full rows) so the grid always
+     ends flush — no ragged half-empty row of whitespace at the bottom. */
+  .cp-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;max-height:320px;overflow-y:auto;padding-right:6px;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y;scrollbar-color:var(--gold-line) var(--surface2)}
+  .cp-grid::-webkit-scrollbar{width:8px}
+  .cp-grid::-webkit-scrollbar-track{background:var(--surface2);border-radius:99px}
+  .cp-grid::-webkit-scrollbar-thumb{background:var(--gold-line);border-radius:99px}
+  .cp-grid::-webkit-scrollbar-thumb:hover{background:var(--gold)}
+  .cp-chip{display:flex;flex-direction:column;align-items:stretch;gap:0;padding:0;border-radius:8px;cursor:pointer;border:1px solid var(--border);font-size:10px;background:var(--surface2);overflow:hidden;transition:border-color .12s,transform .12s;-webkit-tap-highlight-color:transparent}
   .cp-chip:hover{border-color:var(--border-hi);transform:translateY(-1px)}
   .cp-chip.sel{border-color:var(--gold)}
-  .cp-chip-dot{width:100%;height:38px;flex-shrink:0;position:relative;border-bottom:1px solid rgba(255,255,255,.1)}
+  .cp-chip-dot{width:100%;height:36px;flex-shrink:0;position:relative;border-bottom:1px solid rgba(255,255,255,.1)}
   .cp-chip-dot::after{content:'';position:absolute;inset:0;box-shadow:inset 0 -10px 14px -8px rgba(0,0,0,.35)}
-  .cp-chip.sel .cp-chip-dot::before{content:'✓';position:absolute;top:3px;right:5px;width:16px;height:16px;border-radius:50%;background:var(--gold);color:#191509;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.5);z-index:1}
-  .cp-chip-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:5px 7px;color:var(--muted);transition:color .12s}
+  .cp-chip.sel .cp-chip-dot::before{content:'✓';position:absolute;top:2px;right:3px;width:14px;height:14px;border-radius:50%;background:var(--gold);color:#191509;font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.5);z-index:1}
+  .cp-chip-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:4px 5px;color:var(--muted);transition:color .12s;text-align:center}
   .cp-chip.sel .cp-chip-name{color:var(--gold);font-weight:700;background:var(--gold-soft)}
   .cp-foot{display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
   .cp-count{font-size:11px;color:var(--muted)}
@@ -732,8 +736,9 @@ function _parseColors(str) {
   return (str || '').split(',').map(s => s.trim()).filter(Boolean);
 }
 
-// Close portal on outside click, scroll, or window resize (re-open on resize
-// would need re-measuring, simplest safe behaviour is to just close it)
+// Close portal on outside click or window resize. Scrolling INSIDE the
+// dropdown (browsing the color grid) must NOT close it — only close on
+// scroll that happens outside the portal (e.g. the page/queue behind it).
 document.addEventListener('click', e => {
   if (!_cpActiveId) return;
   if (_portal.contains(e.target)) return;
@@ -741,7 +746,11 @@ document.addEventListener('click', e => {
   if (trig && trig.contains(e.target)) return;
   cpClose();
 }, true);
-document.addEventListener('scroll', cpClose, true);
+document.addEventListener('scroll', e => {
+  if (!_cpActiveId) return;
+  if (_portal.contains(e.target)) return; // scrolling the color grid itself — keep open
+  cpClose();
+}, true);
 window.addEventListener('resize', cpClose);
 
 // ── Color trigger HTML builder (used inside buildQueueItemHtml) ───────────────
