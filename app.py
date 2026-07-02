@@ -4,7 +4,6 @@ from pathlib import Path
 from flask import Flask, request, jsonify, Response
 from flask_socketio import SocketIO
 from PIL import Image, ImageOps
-import numpy as np
 
 # ── Default catalog values ────────────────────────────────────────────────────
 DEFAULT_HS_CODE = '7117.90'
@@ -16,8 +15,6 @@ DEFAULT_BANGLE_SIZES = ['2.4', '2.6', '2.8']
 TARGET_W, TARGET_H = 1080, 1440
 
 # ── Brand color palette (54 colors) ──────────────────────────────────────────
-# Each entry: (display_name, (R, G, B))
-# Order matters only for tie-breaking; no entry is skipped.
 BRAND_COLORS = [
     ("Red",              (220,  50,  50)),
     ("Orange",           (230, 120,  40)),
@@ -73,99 +70,98 @@ BRAND_COLORS = [
     ("Light Beige",      (240, 225, 200)),
     ("Light Teal",       (100, 200, 195)),
     ("Light Violet",     (210, 165, 255)),
-    ("Multicolor",       (128, 128, 128)),  # kept as last-resort fallback only
+    ("Multicolor",       (128, 128, 128)),   # fallback only — not used in nearest-neighbour
 ]
 
-# Pre-build a numpy array of reference RGBs for vectorised distance computation.
-_COLOR_REFS = np.array([c[1] for c in BRAND_COLORS[:-1]], dtype=np.float32)  # skip Multicolor
-_COLOR_NAMES = [c[0] for c in BRAND_COLORS[:-1]]
+def _nearest_brand_color(r: int, g: int, b: int) -> str:
+    """Return the closest brand color name using squared-Euclidean distance in RGB."""
+    best_name, best_d = "Multicolor", float('inf')
+    for name, (cr, cg, cb) in BRAND_COLORS[:-1]:   # skip Multicolor entry
+        d = (r - cr) ** 2 + (g - cg) ** 2 + (b - cb) ** 2
+        if d < best_d:
+            best_d, best_name = d, name
+    return best_name
 
-def _dominant_rgb_from_image(img: Image.Image, n_clusters: int = 5) -> tuple[int,int,int]:
-    """Return the single most-representative (R,G,B) of the *subject* pixels.
 
-    Strategy:
-      1. Resize to a tiny thumbnail so the algorithm is fast.
-      2. Exclude near-white pixels (typical photo backgrounds).
-      3. If too few foreground pixels survive, fall back to the full image median.
-      4. Use simple k-means (5 iterations, 5 clusters) to find the dominant cluster
-         and return its centroid.  k-means handles multi-coloured products gracefully
-         — the largest cluster wins, which is what Multicolor detection below uses.
+def _sample_foreground(img: Image.Image, size: int = 120) -> list[tuple[int,int,int]]:
+    """Resize to *size*×*size*, convert to RGB, and return only non-background pixels.
+
+    "Background" = luma > 230 (near-white studio backdrop).
+    Falls back to all pixels when fewer than 50 foreground pixels survive.
     """
-    thumb = img.convert('RGB').resize((120, 120), Image.LANCZOS)
-    px = np.array(thumb, dtype=np.float32).reshape(-1, 3)
-
-    # Exclude very light (background) pixels: luma > 230 roughly = near-white
-    luma = 0.299 * px[:,0] + 0.587 * px[:,1] + 0.114 * px[:,2]
-    fg = px[luma < 230]
-    if len(fg) < 50:          # too few foreground pixels — use everything
-        fg = px
-
-    # Simple k-means, 5 iterations
-    rng = np.random.default_rng(42)
-    centers = fg[rng.choice(len(fg), n_clusters, replace=False)]
-    for _ in range(5):
-        dists  = np.linalg.norm(fg[:, None, :] - centers[None, :, :], axis=2)
-        labels = np.argmin(dists, axis=1)
-        for k in range(n_clusters):
-            members = fg[labels == k]
-            if len(members):
-                centers[k] = members.mean(axis=0)
-
-    # Pick the largest cluster's centroid
-    counts   = np.bincount(labels, minlength=n_clusters)
-    dominant = centers[np.argmax(counts)]
-    return int(dominant[0]), int(dominant[1]), int(dominant[2])
+    thumb = img.convert("RGB").resize((size, size), Image.LANCZOS)
+    pixels = list(thumb.getdata())                       # list of (R,G,B) tuples
+    fg = [(r, g, b) for r, g, b in pixels
+          if (0.299 * r + 0.587 * g + 0.114 * b) < 230]
+    return fg if len(fg) >= 50 else pixels
 
 
-def _is_multicolor(img: Image.Image, threshold: float = 0.22) -> bool:
-    """Return True when no single cluster accounts for ≥ (1-threshold) of foreground
-    pixels — i.e. the product has several distinct colours.
+def _kmeans_dominant(pixels: list[tuple[int,int,int]],
+                     k: int = 5, iterations: int = 5,
+                     seed: int = 42) -> tuple[tuple[int,int,int], float]:
+    """Pure-Python mini k-means.
 
-    A threshold of 0.22 means: if the largest cluster holds < 78 % of foreground
-    pixels, call it Multicolor.  Adjust lower → more items labelled Multicolor.
+    Returns (dominant_centroid_rgb, dominant_cluster_share).
+    dominant_cluster_share is the fraction of pixels in the largest cluster —
+    used by the caller to decide whether the image is multicolor.
     """
-    thumb = img.convert('RGB').resize((120, 120), Image.LANCZOS)
-    px = np.array(thumb, dtype=np.float32).reshape(-1, 3)
-    luma = 0.299 * px[:,0] + 0.587 * px[:,1] + 0.114 * px[:,2]
-    fg = px[luma < 230]
-    if len(fg) < 50:
-        fg = px
+    # Deterministic seed: pick k evenly-spaced pixels as initial centers
+    step = max(1, len(pixels) // k)
+    centers = [pixels[i * step] for i in range(k)]
 
-    n_clusters = 5
-    rng = np.random.default_rng(42)
-    centers = fg[rng.choice(len(fg), n_clusters, replace=False)]
-    for _ in range(5):
-        dists  = np.linalg.norm(fg[:, None, :] - centers[None, :, :], axis=2)
-        labels = np.argmin(dists, axis=1)
-        for k in range(n_clusters):
-            members = fg[labels == k]
-            if len(members):
-                centers[k] = members.mean(axis=0)
+    labels = [0] * len(pixels)
+    for _ in range(iterations):
+        # Assignment step
+        for i, (r, g, b) in enumerate(pixels):
+            best_c, best_d = 0, float('inf')
+            for ci, (cr, cg, cb) in enumerate(centers):
+                d = (r-cr)**2 + (g-cg)**2 + (b-cb)**2
+                if d < best_d:
+                    best_d, best_c = d, ci
+            labels[i] = best_c
 
-    counts = np.bincount(labels, minlength=n_clusters)
-    dominant_share = counts.max() / counts.sum()
-    return dominant_share < (1.0 - threshold)
+        # Update step — recompute centroids
+        sums   = [[0, 0, 0] for _ in range(k)]
+        counts = [0] * k
+        for i, (r, g, b) in enumerate(pixels):
+            c = labels[i]
+            sums[c][0] += r; sums[c][1] += g; sums[c][2] += b
+            counts[c] += 1
+        for c in range(k):
+            if counts[c]:
+                centers[c] = (sums[c][0] // counts[c],
+                               sums[c][1] // counts[c],
+                               sums[c][2] // counts[c])
+
+    dominant_c = max(range(k), key=lambda c: (labels.count(c) if c < len(centers) else 0))
+    dominant_share = labels.count(dominant_c) / len(pixels) if pixels else 1.0
+    return centers[dominant_c], dominant_share
 
 
 def detect_color_from_image(image_path: Path) -> str:
-    """Open *image_path*, analyse its dominant colour, and return the closest
-    name from BRAND_COLORS (including "Multicolor" when the image has several
-    distinct hues).
+    """Detect the dominant brand color of the jewellery in *image_path*.
 
-    Falls back to "Multicolor" on any error so the pipeline never crashes.
+    Algorithm:
+      1. Strip near-white background pixels (studio backdrops).
+      2. Run 5-cluster k-means on a 120×120 thumbnail (pure Pillow, no numpy).
+      3. If the largest cluster holds < 78 % of foreground pixels → "Multicolor".
+      4. Otherwise map the dominant centroid to the nearest brand color by
+         squared RGB distance.
+
+    Returns one of the 54 BRAND_COLORS names.  Never raises — falls back to
+    "Multicolor" on any error.
     """
     try:
         img = Image.open(image_path)
-        img = ImageOps.exif_transpose(img).convert('RGB')
+        img = ImageOps.exif_transpose(img)
 
-        if _is_multicolor(img):
+        pixels = _sample_foreground(img)
+        centroid, share = _kmeans_dominant(pixels)
+
+        if share < 0.78:          # no single colour dominates → multicolor product
             return "Multicolor"
 
-        r, g, b = _dominant_rgb_from_image(img)
-
-        # Vectorised nearest-neighbour in RGB space
-        dists = np.sum((_COLOR_REFS - np.array([r, g, b], dtype=np.float32)) ** 2, axis=1)
-        return _COLOR_NAMES[int(np.argmin(dists))]
+        return _nearest_brand_color(*centroid)
 
     except Exception:
         return "Multicolor"
