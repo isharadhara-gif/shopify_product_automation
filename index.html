@@ -839,7 +839,17 @@ function fileToThumb(file, maxDim = 160, quality = 0.72) {
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('file-input');
 
-dropzone.addEventListener('click', () => fileInput.click());
+// FIX: file-input and folder-input are both children of dropzone. When a
+// zone button calls e.g. folder-input.click(), that synthesizes a NEW click
+// event on folder-input which — since it's nested inside dropzone — bubbles
+// straight back up to this listener and fires fileInput.click() too, opening
+// both pickers at once. Guard by ignoring any click that originated from a
+// button or an input; only clicks on the empty zone itself should open the
+// default (image) picker.
+dropzone.addEventListener('click', (e) => {
+  if (e.target.closest('button, input')) return;
+  fileInput.click();
+});
 dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
 dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
 dropzone.addEventListener('drop', async e => {
