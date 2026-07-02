@@ -442,18 +442,24 @@ def generate_product_details(image_paths, sku, sid):
         mime = {'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png','webp':'image/webp'}.get(ext,'image/jpeg')
         vendor = settings.get('product_vendor') or os.environ.get('PRODUCT_VENDOR', 'the brand')
 
-        prompt = f"""You are a Shopify product copywriter for a brand called {vendor}.
-The SKU is {sku}. Look at the product image carefully.
+        prompt = f"""You are an expert jewellery copywriter for {vendor}, an Indian fashion jewellery brand.
+The SKU is {sku}. Study the product image carefully — it is a piece of jewellery.
+
+IMPORTANT RULES:
+- Title must name the jewellery type specifically (e.g. "Kundan Choker Necklace Set", "Oxidised Jhumka Earrings", "Meenakari Bangle", "Temple Jewellery Maang Tikka"). Never use clothing terms.
+- Use Indian jewellery vocabulary where relevant: Kundan, Polki, Meenakari, Jadau, Oxidised, Temple, Antique, Filigree, Jhumka, Chandbali, Maang Tikka, Matha Patti, Kamarband, Bajuband, Haathphool, Choker, Layered, Statement, etc.
+- Tags must be jewellery-only: piece type, style, occasion (wedding, festive, bridal, casual, ethnic), finish (gold-plated, silver-plated, antique, oxidised), and stone if visible.
+- Description must focus on jewellery: metal finish, stone/bead type, craftsmanship technique, and occasion suitability. No clothing references.
 
 Respond ONLY with a valid JSON object (no markdown, no extra text):
 {{
-  "title": "Short product name 4-7 words",
-  "description": "2-3 sentence HTML product description highlighting material, craftsmanship, occasion suitability. Wrap any key feature label in <strong></strong> tags.",
+  "title": "Specific jewellery name using Indian jewellery terms, 4-8 words",
+  "description": "2-3 sentence HTML description covering: jewellery type and style, metal finish and stones/beads, craftsmanship and occasion. Use <strong> tags on key feature labels only.",
   "handle": "url-slug-from-title-lowercase-hyphens",
   "seo_title": "Buy [Title] Online - {vendor} (max 60 chars)",
-  "seo_description": "Buy [Title] from {vendor}.Shop Now And Get Best Offers At Our Online Store. (max 160 chars)",
-  "alt_text": "{vendor} [Title] - descriptive alt text for image",
-  "tags": "comma separated relevant tags"
+  "seo_description": "Buy [Title] from {vendor}. Shop handcrafted Indian jewellery online. (max 160 chars)",
+  "alt_text": "{vendor} [Title] — handcrafted Indian jewellery",
+  "tags": "comma-separated jewellery tags: piece type, style, occasion, finish, stone/material"
 }}"""
 
         headers = {'Authorization': f'Bearer {groq_key}', 'Content-Type': 'application/json'}
@@ -594,13 +600,6 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid,
     colors = [c.strip() for c in (colors or []) if c.strip()]
     sizes  = [s.strip() for s in (sizes  or []) if s.strip()]
 
-    # ── Auto-detect color from cover image when no colors provided ──────────
-    if not colors:
-        log(sid, '🎨 Auto-detecting color from cover image…')
-        detected = detect_color_from_image(image_paths[0])
-        colors = [detected]
-        log(sid, f'🎨 Detected color: {detected}', 'success')
-
     log(sid, f'📦 Creating Shopify product: {title}…')
 
     base_variant = {
@@ -728,21 +727,6 @@ def upload():
         saved.append(processed_path.name)
 
     return jsonify({'filenames':saved,'sku':sku})
-
-# ── NEW: detect color from an already-uploaded image ─────────────────────────
-@app.route('/detect_color', methods=['POST'])
-def detect_color_route():
-    """Frontend can pre-flight a color detection so it shows the result
-    in the UI before the user hits Upload All."""
-    data = request.get_json()
-    filename = (data or {}).get('filename','')
-    if not filename:
-        return jsonify({'error':'filename required'}), 400
-    path = UPLOAD_DIR / filename
-    if not path.exists():
-        return jsonify({'error':'file not found'}), 404
-    color = detect_color_from_image(path)
-    return jsonify({'color': color})
 
 @app.route('/history')
 def history():
