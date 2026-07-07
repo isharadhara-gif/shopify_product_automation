@@ -11,6 +11,7 @@
 <style>
 /* ── Glassmorphism / aurora theme ── */
 :root{
+  color-scheme:dark;
   --bg0:#06071a;--bg1:#090c24;
   --glass:rgba(255,255,255,.05);
   --glass-hi:rgba(255,255,255,.09);
@@ -237,7 +238,8 @@ button,input,select,textarea{font-family:inherit}
 .item-input.tags-input{width:190px}
 .item-input.variant-input{width:162px}
 .item-input.narrow{width:84px}
-select.item-input{width:148px;cursor:pointer}
+select.item-input{width:148px;cursor:pointer;color-scheme:dark}
+select.item-input option{background:#12142c;color:var(--text)}
 .item-input.mono-in{font-family:var(--mono);font-size:11.5px}
 .item-input.invalid{border-color:var(--red)!important;background:rgba(248,113,113,.06)}
 
@@ -1139,7 +1141,7 @@ async function handleEntries(entries){
     if(item){item.images.push({file,thumb,name:file.name});}
     else{
       queue.push({
-        id:Date.now()+Math.random(),
+        id:'itm'+Date.now()+'r'+Math.floor(Math.random()*1000000),
         groupKey:parsed.groupKey,sku:parsed.sku,costPrice:parsed.cost,
         title:'',category:'',tags:'',weight:'',hscode:'',origin:'',qty:'',
         colors:'',sizes:'',
