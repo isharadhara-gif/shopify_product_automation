@@ -207,7 +207,61 @@ def process_image(path: Path) -> Path:
     except Exception:
         return path
 
-# ── Category description templates ───────────────────────────────────────────
+# ── Category list, tag presets & description templates ───────────────────────
+# Single source of truth for every jewellery category the studio understands.
+# Used to populate the dropdown selects on the frontend (via /tag_presets),
+# to select the static SEO description template, and to ground the Groq
+# title-generation prompt so it can't mistitle a piece as the wrong type.
+CATEGORIES = [
+    'Necklace', 'Choker', 'Pendant',
+    'Earring', 'Ear Cuff',
+    'Maang Tikka', 'Mathapatti', 'Nath',
+    'Bangles', 'Kada / Handcuff', 'Bracelet', 'Hathphool / Hand Harness',
+    'Brooch', 'Ring', 'Hair Accessories',
+]
+
+# Tag presets sourced directly from the brand's generalized group-tag sheet.
+# Keyed by the same category names used above so the frontend can pull a
+# ready-made tag string the moment a seller picks a category.
+TAG_PRESETS = {
+    'Necklace':                 'PPCOD, Long Necklace, Statement Necklace, Stone Necklace, Temple Necklace, Ethnic, Sabyasachi',
+    'Choker':                   'PPCOD, Choker Necklaces, Choker Set, Choker Bridal Necklace, Ethnic, New Arrivals',
+    'Pendant':                  'PPCOD, Pendant Necklace, AD Jewellery, Western, New Arrivals',
+    'Earring':                  'PPCOD, COD, Dangler Earrings, Pearl Earrings, Bugadi Earrings, Statement Earrings, Ethnic, Western',
+    'Ear Cuff':                 'PPCOD, Earcuff Earrings, Designer Earcuffs, Ethnic, Sabyasachi, New Arrivals',
+    'Maang Tikka':              'PPCOD, Maangtikas, Tikka, Teeka, Mang Tikka, Ethnic, New Arrivals',
+    'Mathapatti':               'PPCOD, Mathapatti, Matha Patti, Head Jewellery, Passa, Bridal, Ethnic, New Arrivals',
+    'Nath':                     'PPCOD, Nath, Nose Ring, Nathni, Bridal Nath, Ethnic, New Arrivals',
+    'Bangles':                  'PPCOD, Bangle, Bangles, Kada, Kangan, Ethnic, New Arrivals',
+    'Kada / Handcuff':          'PPCOD, Handcuff Bracelets, Kada, AD Jewellery, Ethnic, New Arrivals',
+    'Bracelet':                 'PPCOD, Bracelet, Crystal Bracelets, Stone Bracelets, Western, Ethnic, New Arrivals',
+    'Hathphool / Hand Harness': 'PPCOD, Hand Harness, Hath Phool, Haathphool, Hand Jewellery, Ethnic',
+    'Brooch':                   'PPCOD, Brooch, Brooch for Men, Blazer Brooch, Ethnic, New Arrivals',
+    'Ring':                     'PPCOD, Ring, Rings, Statement Ring, Adjustable Ring, Ethnic, Western, New Arrivals',
+    'Hair Accessories':         'PPCOD, Hair Pin, Hair Clip, Juda Pin, Hair Vine, Ethnic, New Arrivals',
+}
+
+# Hints fed straight into the Groq prompt so the model grounds the title in
+# the seller-picked category instead of guessing the piece type from the
+# photo alone (which is what was causing mistitled listings).
+CATEGORY_TITLE_HINTS = {
+    'Necklace':                 'This is a NECKLACE (worn around the full neck, longer chain/strand). Use terms like Long Necklace, Statement Necklace, Temple Necklace, Kundan Necklace Set.',
+    'Choker':                   'This is a CHOKER (short necklace sitting snugly at the base of the throat). Title must include "Choker" — e.g. "Kundan Choker Necklace Set", "Bridal Choker Set".',
+    'Pendant':                  'This is a PENDANT NECKLACE (a single drop/charm on a slim chain). Title should read like "[Stone/Style] Pendant Necklace".',
+    'Earring':                  'This is a pair of EARRINGS. Identify the exact earring style shown — studs, jhumkas, danglers, hoops, chandbalis, or bugadi — and name it precisely in the title.',
+    'Ear Cuff':                 'This is an EAR CUFF (clip-on cartilage/ear-wrap piece worn without a piercing). Title must include "Ear Cuff" or "Earcuff".',
+    'Maang Tikka':              'This is a MAANG TIKKA / TEEKA (a chain with a pendant that sits on the centre parting, hanging onto the forehead). Title must include "Maang Tikka" or "Teeka".',
+    'Mathapatti':               'This is a MATHAPATTI / MATHA PATTI (an elaborate head jewellery piece with chains that spread across the forehead and into the hairline, often with a side passa). Title must include "Mathapatti" or "Matha Patti".',
+    'Nath':                     'This is a NATH (a nose ring or nose pin, sometimes chain-linked to the hair). Title must include "Nath" or "Nose Ring".',
+    'Bangles':                  'This is a set of BANGLES (closed-circle wrist jewellery, worn stacked). Title must include "Bangle" or "Bangles" or "Kangan".',
+    'Kada / Handcuff':          'This is a KADA / HANDCUFF BRACELET (a broad, often open-cuff, statement wrist piece). Title must include "Kada" or "Handcuff Bracelet".',
+    'Bracelet':                 'This is a BRACELET (a delicate chain-link or beaded wrist piece, not a broad cuff). Title must include "Bracelet".',
+    'Hathphool / Hand Harness': 'This is a HATHPHOOL / HAND HARNESS (a ring-to-wrist piece connected by chains across the back of the hand). Title must include "Hathphool" or "Hand Harness".',
+    'Brooch':                   'This is a BROOCH (a pin-back accessory for blazers, sarees, or dupattas). Title must include "Brooch".',
+    'Ring':                     'This is a RING (finger jewellery). Title must include "Ring".',
+    'Hair Accessories':         'This is a HAIR ACCESSORY (hairpin, clip, juda pin, or hair vine). Title must include the specific accessory type, e.g. "Hair Pin", "Juda Pin", "Hair Vine".',
+}
+
 CATEGORY_DESCRIPTIONS = {
     'Necklace': """Hello lovely souls! Don\u2019t you agree that your look is never complete without a breathtaking necklace? A necklace set isn\u2019t just an accessory. It is the star of the show, ensuring you make a lasting impression every time you step out of your house.
 Ishhaara's necklaces for women whether it be a gold choker necklace set, pearl necklace, silver necklace set, or long necklace offer a phenomenal look. Pair these necklace sets and instantly make a wonderful appeal wherever you go. So, grab this chance and quickly check out the standout features of Ishhaara's necklace.
@@ -230,7 +284,49 @@ Care Label
 3. Avoid using detergents, soaps, or toothpaste to clean your necklace.
 4. Clean your necklace after every use with a soft brush.""",
 
-    'Earrings': """Hey gorgeous! Don\u2019t you think your face glows differently the moment the right pair of earrings catches the light? Earrings aren\u2019t just an accessory, they\u2019re the easiest way to switch up an entire look in seconds.
+    'Choker': """Hey stunner! Isn\u2019t there something irresistibly bold about a choker sitting right at the base of your throat? Snug, striking, and impossible to ignore, a choker set instantly becomes the focal point of your entire look.
+Ishhaara's chokers for women whether it be a Kundan choker set, bridal choker necklace, or a sleek velvet-base choker offer a dramatic finish to any outfit. Pair these chokers and instantly command attention wherever you go. So, grab this chance and quickly check out the standout features of Ishhaara's choker.
+Product Specification
+Material: Skin Friendly | Hypoallergenic
+Craftsmanship: Ethically Handmade
+Waterproof: Retains Colour and Brilliance
+Key Highlights
+1. Snug, Flattering Fit: Ishhaara's chokers are designed to sit perfectly at the collarbone, framing the neckline and drawing the eye upward for an instantly elegant silhouette.
+2. Bridal-Ready Grandeur: From Kundan choker sets to Polki bridal chokers, each piece is crafted to be the centrepiece of a bridal or festive ensemble.
+3. Layer-Friendly Design: Ishhaara's chokers pair beautifully with a longer necklace underneath, letting you build a dramatic layered look in seconds.
+4. Versatile Styling: Whether it's a traditional choker set or a western-inspired velvet choker, each design transitions easily from daytime events to evening celebrations.
+Styling Inspiration
+1. Pair a Kundan choker with a deep-neck blouse and silk saree for a regal bridal look.
+2. Layer a delicate pendant necklace beneath a statement choker for added depth.
+3. Style a sleek choker with an off-shoulder western outfit for a chic, modern edge.
+Care Label
+1. Store the choker in an air-tight jewellery box or sealed pouch.
+2. Keep it away from body sprays, body lotions, or perfumes.
+3. Avoid using detergents, soaps, or toothpaste to clean your choker.
+4. Clean your choker after every use with a soft brush.""",
+
+    'Pendant': """Hello lovely! Isn\u2019t it wonderful how one delicate pendant can effortlessly complete an entire outfit? A pendant necklace isn\u2019t about doing the most, it\u2019s about doing the right amount, subtle, meaningful, and endlessly wearable.
+Ishhaara's pendant necklaces whether it be a stone-studded pendant, an evil eye pendant, or a dainty AD pendant offer a refined finish for everyday wear or evening dressing. So, grab this chance and quickly check out the standout features of Ishhaara's pendant necklace.
+Product Specification
+Material: Skin Friendly | Hypoallergenic
+Craftsmanship: Ethically Handmade
+Waterproof: Retains Colour and Brilliance
+Key Highlights
+1. Everyday Elegance: Ishhaara's pendant necklaces are lightweight and designed for daily wear, adding a subtle sparkle without ever feeling like too much.
+2. Symbolic Charm: Many of our pendants carry meaningful motifs like the evil eye, heart, or initial, making them a thoughtful gift as much as a style statement.
+3. Easy Layering: A single pendant necklace pairs effortlessly with chokers or longer chains, letting you build a personalised layered look.
+4. Day-to-Night Versatility: From office wear to evening dinners, Ishhaara's pendant necklaces make the transition without missing a beat.
+Styling Inspiration
+1. Wear a single pendant close to the collarbone with a simple crew-neck top for understated elegance.
+2. Layer a pendant necklace with a choker for a multi-dimensional look.
+3. Pick a gemstone pendant to complement your outfit's colour palette for a coordinated finish.
+Care Label
+1. Store the pendant in an air-tight jewellery box or sealed pouch.
+2. Keep it away from body sprays, body lotions, or perfumes.
+3. Avoid using detergents, soaps, or toothpaste to clean your pendant.
+4. Clean your pendant after every use with a soft brush.""",
+
+    'Earring': """Hey gorgeous! Don\u2019t you think your face glows differently the moment the right pair of earrings catches the light? Earrings aren\u2019t just an accessory, they\u2019re the easiest way to switch up an entire look in seconds.
 Ishhaara's earrings for women whether it be gold studs, jhumkas, hoops, danglers, or chandbalis offer a stunning finish to any outfit. Pair these earrings and instantly elevate your everyday or festive look. So, grab this chance and quickly check out the standout features of Ishhaara's earrings.
 Product Specification
 Material: Skin Friendly | Hypoallergenic
@@ -251,30 +347,196 @@ Care Label
 3. Avoid using detergents, soaps, or toothpaste to clean your earrings.
 4. Clean your earrings after every use with a soft brush.""",
 
-    'Hand accessories': """Hey gorgeous! Are you ready to add a whimsical statement to your \u2018Solah Shringar\u2019? Powerful and graceful a charm it can add, isn't it? From statement handcuffs, delicate bracelets, and traditional bangles to stunning Chooda and Kaleera, Ishhaara\u2019s studio has everything you need to add that \u2018wow\u2019 factor.
-So, if you\u2019re someone who loves making a grand entrance wherever you go, you need to explore these premium pieces. Let\u2019s dive in and discover what makes these hand accessories a must-have!
+    'Ear Cuff': """Hey edgy soul! Who says you need a piercing to make a statement on your ear? An ear cuff clips on, wraps around, and instantly gives your look a contemporary, no-fuss edge.
+Ishhaara's ear cuffs whether it be a delicate crawler-style cuff or a bold statement earcuff offer a striking finish without committing to another piercing. So, grab this chance and quickly check out the standout features of Ishhaara's ear cuffs.
 Product Specification
 Material: Skin Friendly | Hypoallergenic
 Craftsmanship: Ethically Handmade
 Waterproof: Retains Colour and Brilliance
 Key Highlights
-1. Subtle Yet Impactful Piece: For those who love subtle elegance, Ishhaara's hand accessories from oxidised handcuffs to sleek bangles can instantly add the right amount of sparkle. Letting you bring a refined and eye-catching appeal.
-2. Boosts Confidence: Ishhaara\u2019s premium handcrafted hand accessories whether it be a bridal Chooda or gold bangles will not only complete your whole look. But, also boosts confidence and lets you bring a poised appeal wherever you go.
-3. Cultural Connection: Ishhaara\u2019s hand accessories from bridal Chooda to bridal Kaleera will not only complete your traditional look but also carry cultural significance, letting you feel connected to your roots.
-4. Personalised Touch: Ishhaara\u2019s customisable option on hand accessories like oxidised handcuffs, layered silver bracelets, etc. will beautifully reflect your unique style and add unexpected flair to your accessory collection.
-5. Bollywood Glamour: Ishhaara\u2019s every piece of hand accessories from bangles, and bracelets to gold handcuffs reflects Bollywood\u2019s iconic style. Perfect for adding a touch of luxury and sophistication to even the simplest outfits.
-6. Perfect for Every Occasion: Ishhaara\u2019s every piece of artificial bangles, artificial handcuffs, artificial bracelets, etc are suitable for wide festivities from weddings to casual get-togethers. Making it a favourite choice in your jewellery box.
+1. No Piercing Needed: Ishhaara's ear cuffs clip comfortably onto the ear, giving you the look of multiple piercings without any commitment.
+2. Contemporary Edge: Designed for the modern, fashion-forward wearer, our earcuffs add an unexpected, edgy detail to any outfit.
+3. Layer with Studs: Pair an ear cuff with a classic stud on the lobe for a stacked, multi-piercing illusion.
+4. Adjustable Comfort: Every earcuff is designed with a flexible fit that comfortably hugs the ear's curve without pinching.
 Styling Inspiration
-1. Opt for mixing different textures and widths of different bangles and bracelets. This will create a perfect layered look.
-2. Look for complementing your handcuffs with your outfit style. For instance, if you are wearing a solid-coloured dress, opt for silver or gold bangles.
-3. Consider wearing a striking accessory on your favourite hand. For instance, if you work mostly with your right hand, pair a stunning oxidised bracelet with your dominant hand for a bolder look.
+1. Stack an ear cuff above a simple stud for an effortlessly edgy everyday look.
+2. Pair a statement earcuff solo on one ear for an asymmetric, fashion-forward finish.
+3. Style with sleek, pulled-back hair to let the earcuff's detailing take centre stage.
 Care Label
-1. Store the hand accessories in an air-tight jewellery box or sealed pouch.
+1. Store the ear cuff in an air-tight jewellery box or sealed pouch.
 2. Keep it away from body sprays, body lotions, or perfumes.
-3. Avoid using detergents, soaps, or toothpaste to clean your hand accessories.
-4. Clean your hand accessories after every use with a soft brush.""",
+3. Avoid using detergents, soaps, or toothpaste to clean your ear cuff.
+4. Clean your ear cuff after every use with a soft brush.""",
 
-    'Rings': """Howdy, partners! Are you passionate about elevating your style with stunning rings? Isn\u2019t it incredible how these glamorous accessories can add elegance, flair, and trendiness to any outfit? Whether you love adding gold rings, traditional rings, statement rings, or oxidised rings, Ishhaara's treasure trove uncovers a wide variety of choices.
+    'Maang Tikka': """Hey bride-to-be (or just in the mood to glow)! Isn\u2019t a maang tikka the single most striking way to frame your face for a festive occasion? Resting right on the centre parting, it draws every eye straight to you.
+Ishhaara's maang tikkas whether it be a Kundan teeka, a Polki mang tikka, or a delicate everyday tikka offer a stunning finish for weddings, festivals, and celebrations. So, grab this chance and quickly check out the standout features of Ishhaara's maang tikka.
+Product Specification
+Material: Skin Friendly | Hypoallergenic
+Craftsmanship: Ethically Handmade
+Waterproof: Retains Colour and Brilliance
+Key Highlights
+1. Bridal Centrepiece: Ishhaara's maang tikkas are crafted to be the crowning detail of a bridal or festive look, sitting elegantly along the centre parting.
+2. Adjustable Fit: Every tikka comes with an adjustable chain or hook, ensuring a comfortable, secure fit across different hairstyles.
+3. Premium Craftsmanship: From Kundan to Polki to Meenakari, our tikkas are handcrafted using premium materials for long-lasting shine.
+4. Versatile Pairing: A maang tikka pairs beautifully with matching earrings and a choker for a complete bridal jewellery set.
+Styling Inspiration
+1. Wear a Kundan maang tikka with a centre-parted bridal hairstyle for a timeless regal look.
+2. Pair with a matching choker and jhumkas for a coordinated festive ensemble.
+3. Opt for a delicate tikka with a sleek bun for an elegant, understated finish at smaller celebrations.
+Care Label
+1. Store the maang tikka in an air-tight jewellery box or sealed pouch.
+2. Keep it away from body sprays, body lotions, or perfumes.
+3. Avoid using detergents, soaps, or toothpaste to clean your maang tikka.
+4. Clean your maang tikka after every use with a soft brush.""",
+
+    'Mathapatti': """Hey gorgeous bride! Isn\u2019t a mathapatti the most breathtaking way to crown your bridal look? Spreading gracefully across the forehead and into the hairline, it turns your entire hairstyle into a jewel in itself.
+Ishhaara's mathapattis whether it be a Kundan matha patti, a Polki bridal set with side passa, or a Meenakari head piece offer full bridal grandeur for weddings and grand celebrations. So, grab this chance and quickly check out the standout features of Ishhaara's mathapatti.
+Product Specification
+Material: Skin Friendly | Hypoallergenic
+Craftsmanship: Ethically Handmade
+Waterproof: Retains Colour and Brilliance
+Key Highlights
+1. Full Bridal Coverage: Ishhaara's mathapattis are designed with multiple connected chains that elegantly cover the forehead and hairline for maximum bridal impact.
+2. Adjustable Framework: Every mathapatti comes with adjustable hooks and chains so it sits securely and comfortably across different hairstyles.
+3. Heritage Craftsmanship: Inspired by Rajasthani and Maharashtrian bridal traditions, our mathapattis are handcrafted with Kundan, Polki, or Meenakari detailing.
+4. Statement Centrepiece: Designed to be the crowning glory of a bridal look, pairing beautifully with a matching maang tikka, choker, and jhumkas.
+Styling Inspiration
+1. Pair a mathapatti with a centre-parted bridal hairstyle and a matching maang tikka for a regal look.
+2. Style with a heavy lehenga or bridal saree to balance the intricate headpiece detailing.
+3. Complete the ensemble with matching jhumkas and a choker for a full bridal jewellery set.
+Care Label
+1. Store the mathapatti in an air-tight jewellery box or sealed pouch.
+2. Keep it away from body sprays, body lotions, or perfumes.
+3. Avoid using detergents, soaps, or toothpaste to clean your mathapatti.
+4. Clean your mathapatti after every use with a soft brush.""",
+
+    'Nath': """Hey beautiful! Isn\u2019t a nath one of the most timeless symbols of bridal and festive jewellery? Whether clipped on or chain-linked to the hair, a nath instantly elevates a traditional look with quiet grandeur.
+Ishhaara's naths whether it be a Maharashtrian nath, a Kashmiri-style nose ring, or a delicate everyday nath pin offer an authentic finish for weddings, festivals, and cultural celebrations. So, grab this chance and quickly check out the standout features of Ishhaara's nath.
+Product Specification
+Material: Skin Friendly | Hypoallergenic
+Craftsmanship: Ethically Handmade
+Waterproof: Retains Colour and Brilliance
+Key Highlights
+1. No-Piercing Option: Many of Ishhaara's naths come as clip-on styles, so you can wear the look without a nose piercing.
+2. Cultural Authenticity: From Maharashtrian nauvari-style naths to Kashmiri and Rajasthani designs, each piece stays true to traditional craftsmanship.
+3. Lightweight Comfort: Designed to sit comfortably for hours, even through long wedding functions and celebrations.
+4. Chain-Linked Elegance: Several designs connect via a fine chain to the hair, adding a graceful, secure drape alongside the nose ring.
+Styling Inspiration
+1. Pair a Maharashtrian nath with a nauvari saree and matching bangles for an authentic traditional look.
+2. Style a delicate nath pin for everyday festive wear without an elaborate hair chain.
+3. Coordinate your nath with a matching maang tikka and jhumkas for a complete bridal ensemble.
+Care Label
+1. Store the nath in an air-tight jewellery box or sealed pouch.
+2. Keep it away from body sprays, body lotions, or perfumes.
+3. Avoid using detergents, soaps, or toothpaste to clean your nath.
+4. Clean your nath after every use with a soft brush.""",
+
+    'Bangles': """Hey gorgeous! Isn\u2019t there something so satisfying about the gentle jingle of a stack of bangles on your wrist? Bangles aren\u2019t just jewellery, they're rhythm, tradition, and effortless glamour rolled into one.
+Ishhaara's bangles whether it be a classic gold-finish bangle, an oxidised kada, or a Kundan kangan offer a timeless finish for everyday wear or festive dressing. So, grab this chance and quickly check out the standout features of Ishhaara's bangles.
+Product Specification
+Material: Skin Friendly | Hypoallergenic
+Craftsmanship: Ethically Handmade
+Waterproof: Retains Colour and Brilliance
+Key Highlights
+1. Perfectly Stackable: Ishhaara's bangles are designed to be mixed, matched, and stacked, letting you build your own signature wrist stack.
+2. Broad Statement Kadas: For a bolder look, our kada-style bangles make a striking standalone statement.
+3. Festive & Everyday Fit: Available in a range of sizes and finishes, our bangles transition easily from daily wear to wedding season.
+4. Cultural Craftsmanship: Whether Kundan, Meenakari, or oxidised, every bangle is handcrafted to reflect authentic Indian jewellery traditions.
+Styling Inspiration
+1. Stack multiple bangles of varying widths and finishes for a rich, layered wrist look.
+2. Pair a single broad kada with a solid-coloured outfit for a striking minimalist statement.
+3. Match your bangle finish to your other jewellery pieces for a cohesive festive look.
+Care Label
+1. Store the bangles in an air-tight jewellery box or sealed pouch.
+2. Keep it away from body sprays, body lotions, or perfumes.
+3. Avoid using detergents, soaps, or toothpaste to clean your bangles.
+4. Clean your bangles after every use with a soft brush.""",
+
+    'Kada / Handcuff': """Hey bold soul! Isn\u2019t a kada or handcuff bracelet the ultimate way to make a wrist statement that can\u2019t be ignored? Broad, sculptural, and unapologetically striking, it's the piece that finishes the look.
+Ishhaara's kadas and handcuff bracelets whether it be an oxidised handcuff, an AD-studded kada, or a sleek open-cuff design offer a bold finish for festive dressing or fusion styling. So, grab this chance and quickly check out the standout features of Ishhaara's kada / handcuff.
+Product Specification
+Material: Skin Friendly | Hypoallergenic
+Craftsmanship: Ethically Handmade
+Waterproof: Retains Colour and Brilliance
+Key Highlights
+1. Adjustable Open Cuff: Ishhaara's handcuff bracelets and kadas feature an open-cuff design that adjusts comfortably to most wrist sizes.
+2. Bold Statement Wrist Piece: Designed to be worn solo, each kada or handcuff makes a striking impact without needing any other wrist jewellery.
+3. Oxidised & AD Detailing: From oxidised silver finishes to AD stonework, our designs suit both ethnic and fusion styling.
+4. Bollywood-Inspired Glamour: Reflecting the iconic statement jewellery seen on the red carpet, our kadas and handcuffs bring instant drama to any outfit.
+Styling Inspiration
+1. Wear a single oxidised handcuff with a solid-coloured kurta for an eye-catching fusion look.
+2. Pair an AD kada with a lehenga for a bold bridal-adjacent statement.
+3. Style with rolled-up sleeves so the sculptural detailing of the cuff stays visible.
+Care Label
+1. Store the kada / handcuff in an air-tight jewellery box or sealed pouch.
+2. Keep it away from body sprays, body lotions, or perfumes.
+3. Avoid using detergents, soaps, or toothpaste to clean your kada / handcuff.
+4. Clean your kada / handcuff after every use with a soft brush.""",
+
+    'Bracelet': """Hey lovely! Isn\u2019t a delicate bracelet the easiest way to add a touch of sparkle to your everyday wrist? Light, dainty, and endlessly stackable, it's the accessory that quietly does the most.
+Ishhaara's bracelets whether it be a crystal-studded bracelet, a stone bracelet, or a fine chain-link design offer a versatile finish for both western and ethnic styling. So, grab this chance and quickly check out the standout features of Ishhaara's bracelet.
+Product Specification
+Material: Skin Friendly | Hypoallergenic
+Craftsmanship: Ethically Handmade
+Waterproof: Retains Colour and Brilliance
+Key Highlights
+1. Delicate, Everyday Wear: Ishhaara's bracelets are lightweight and comfortable enough for all-day wear, whether at work or a night out.
+2. Crystal & Stone Detailing: Featuring crystal and stone embellishments, each bracelet adds a subtle sparkle without overwhelming the look.
+3. Stackable with Bangles: Our bracelets pair beautifully alongside bangles and kadas for a rich, layered wrist stack.
+4. Western-Ethnic Fusion: Versatile enough to style with both western outfits and ethnic wear, making it a year-round staple.
+Styling Inspiration
+1. Stack a delicate bracelet alongside your bangles for a fusion wrist look.
+2. Wear a crystal bracelet solo with a western dress for understated evening glam.
+3. Match a stone bracelet to your outfit's accent colour for a coordinated finish.
+Care Label
+1. Store the bracelet in an air-tight jewellery box or sealed pouch.
+2. Keep it away from body sprays, body lotions, or perfumes.
+3. Avoid using detergents, soaps, or toothpaste to clean your bracelet.
+4. Clean your bracelet after every use with a soft brush.""",
+
+    'Hathphool / Hand Harness': """Hey gorgeous! Are you ready to add a whimsical statement to your \u2018Solah Shringar\u2019? A hathphool, connecting a ring to a wrist chain across the back of the hand, is one of the most graceful pieces in bridal jewellery.
+Ishhaara's hathphools and hand harnesses whether it be a Kundan hathphool, a delicate chain-link hand harness, or a statement bridal piece offer a stunning finish for weddings and festive occasions. So, grab this chance and quickly check out the standout features of Ishhaara's hathphool / hand harness.
+Product Specification
+Material: Skin Friendly | Hypoallergenic
+Craftsmanship: Ethically Handmade
+Waterproof: Retains Colour and Brilliance
+Key Highlights
+1. Graceful Hand Coverage: Ishhaara's hathphools connect a ring to the wrist via delicate chains, elegantly covering the back of the hand.
+2. Bridal Signature Piece: A must-have for the complete Solah Shringar bridal look, adding an extra layer of intricate detailing.
+3. Adjustable, Comfortable Fit: Designed with adjustable rings and chain lengths to comfortably fit most hand sizes.
+4. Cultural Connection: Rooted in Indian bridal tradition, our hathphools carry deep cultural significance while looking effortlessly elegant.
+Styling Inspiration
+1. Pair a Kundan hathphool with your bridal Chooda for a complete traditional hand look.
+2. Wear a delicate hand harness with a fitted sleeve outfit to let the detailing stand out.
+3. Match your hathphool's finish to your other bridal jewellery for a coordinated ensemble.
+Care Label
+1. Store the hathphool / hand harness in an air-tight jewellery box or sealed pouch.
+2. Keep it away from body sprays, body lotions, or perfumes.
+3. Avoid using detergents, soaps, or toothpaste to clean your hathphool / hand harness.
+4. Clean your hathphool / hand harness after every use with a soft brush.""",
+
+    'Brooch': """Hey stylish soul! Isn\u2019t a brooch the smallest accessory with the biggest impact? Pinned onto a blazer, saree, or dupatta, it instantly signals intention and polish.
+Ishhaara's brooches whether it be a classic blazer brooch, a statement saree pin, or a brooch for men offer a refined finishing touch to any outfit. So, grab this chance and quickly check out the standout features of Ishhaara's brooch.
+Product Specification
+Material: Skin Friendly | Hypoallergenic
+Craftsmanship: Ethically Handmade
+Waterproof: Retains Colour and Brilliance
+Key Highlights
+1. Pins Onto Any Fabric: Ishhaara's brooches feature a secure pin-back that attaches easily to blazers, sarees, dupattas, or lapels.
+2. Unisex Styling: From blazer brooches for men to statement pieces for sarees, our designs suit every wardrobe.
+3. Instant Finishing Touch: A single brooch can elevate a plain outfit into a polished, intentional look in seconds.
+4. Versatile Placement: Wear it on a lapel, a saree pallu, a dupatta, or even as a hairpin alternative.
+Styling Inspiration
+1. Pin a classic brooch onto a blazer lapel for a sharp, professional finish.
+2. Use a statement brooch to secure a saree pallu for an elegant, functional detail.
+3. Style a brooch on a dupatta corner for a subtle festive touch.
+Care Label
+1. Store the brooch in an air-tight jewellery box or sealed pouch.
+2. Keep it away from body sprays, body lotions, or perfumes.
+3. Avoid using detergents, soaps, or toothpaste to clean your brooch.
+4. Clean your brooch after every use with a soft brush.""",
+
+    'Ring': """Howdy, partners! Are you passionate about elevating your style with stunning rings? Isn\u2019t it incredible how these glamorous accessories can add elegance, flair, and trendiness to any outfit? Whether you love adding gold rings, traditional rings, statement rings, or oxidised rings, Ishhaara's treasure trove uncovers a wide variety of choices.
 These rings are perfect for transforming any look into something extraordinary and are essential additions to your jewellery box. Ready to find the perfect piece? Dive in and explore the details now!
 Product Specification
 Material: Skin Friendly | Hypoallergenic
@@ -287,7 +549,7 @@ Key Highlights
 4. Free Size: Ishhaara\u2019s every type of artificial ring for women whether it be engagement rings or stainless steel rings is curated to fit every finger size. Ensuring you create a perfect look with a fully comfortable accessory.
 5. Gemstone Setting: Ishhaara\u2019s artificial rings for girls are made in various styles and settings such as prongs, bezels, or channel settings. This ensures you make a vibrantly visual appeal wherever you go.""",
 
-    'Hair accessories': """Hey beautiful! Isn\u2019t it amazing how the right hair accessory can transform your entire look in seconds? A hairpin, clip, or hair band isn\u2019t just functional. It is a styling statement that ties your whole appearance together effortlessly.
+    'Hair Accessories': """Hey beautiful! Isn\u2019t it amazing how the right hair accessory can transform your entire look in seconds? A hairpin, clip, or hair band isn\u2019t just functional. It is a styling statement that ties your whole appearance together effortlessly.
 Ishhaara's hair accessories for women whether it be a pearl hairpin, kundan maang tikka, juda pin, or floral hair vine offer a stunning finish to any hairstyle. Pair these pieces and instantly elevate your everyday or festive look. So, grab this chance and quickly check out the standout features of Ishhaara's hair accessories.
 Product Specification
 Material: Skin Friendly | Hypoallergenic
@@ -423,7 +685,7 @@ def call_groq_with_backoff(payload, headers, sid):
     raise last_exc or RuntimeError('Groq request failed after retries')
 
 # ── Groq: generate product fields ─────────────────────────────────────────────
-def generate_product_details(image_paths, sku, sid):
+def generate_product_details(image_paths, sku, sid, category=None):
     settings = load_settings()
     groq_key = settings.get('groq_api_key') or os.environ.get('GROQ_API_KEY', '')
 
@@ -442,12 +704,21 @@ def generate_product_details(image_paths, sku, sid):
         mime = {'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png','webp':'image/webp'}.get(ext,'image/jpeg')
         vendor = settings.get('product_vendor') or os.environ.get('PRODUCT_VENDOR', 'the brand')
 
+        category_block = ''
+        if category:
+            hint = CATEGORY_TITLE_HINTS.get(category, '')
+            category_block = f"""
+THE SELLER HAS ALREADY IDENTIFIED THE CATEGORY AS: "{category}".
+{hint}
+Do NOT override this with a different jewellery type guessed from the photo — ground the title in "{category}" above everything else. If the image looks ambiguous, still trust the seller-provided category."""
+
         prompt = f"""You are an expert jewellery copywriter for {vendor}, an Indian fashion jewellery brand.
 The SKU is {sku}. Study the product image carefully — it is a piece of jewellery.
+{category_block}
 
 IMPORTANT RULES:
 - Title must name the jewellery type specifically (e.g. "Kundan Choker Necklace Set", "Oxidised Jhumka Earrings", "Meenakari Bangle", "Temple Jewellery Maang Tikka"). Never use clothing terms.
-- Use Indian jewellery vocabulary where relevant: Kundan, Polki, Meenakari, Jadau, Oxidised, Temple, Antique, Filigree, Jhumka, Chandbali, Maang Tikka, Matha Patti, Kamarband, Bajuband, Haathphool, Choker, Layered, Statement, etc.
+- Use Indian jewellery vocabulary where relevant: Kundan, Polki, Meenakari, Jadau, Oxidised, Temple, Antique, Filigree, Jhumka, Chandbali, Maang Tikka, Matha Patti, Nath, Hathphool, Kamarband, Bajuband, Choker, Layered, Statement, etc.
 - Tags must be jewellery-only: piece type, style, occasion (wedding, festive, bridal, casual, ethnic), finish (gold-plated, silver-plated, antique, oxidised), and stone if visible.
 - Description must focus on jewellery: metal finish, stone/bead type, craftsmanship technique, and occasion suitability. No clothing references.
 
@@ -706,6 +977,11 @@ def index():
 def get_colors():
     return jsonify([c[0] for c in BRAND_COLORS])
 
+# ── NEW: return the jewellery category list + tag presets ─────────────────────
+@app.route('/tag_presets')
+def get_tag_presets():
+    return jsonify({'categories': CATEGORIES, 'presets': TAG_PRESETS})
+
 @app.route('/upload', methods=['POST'])
 def upload():
     files = request.files.getlist('images')
@@ -848,7 +1124,7 @@ def handle_start_upload(data):
                 if missing:
                     raise FileNotFoundError(f'Image(s) not found: {[p.name for p in missing]}')
 
-                details = generate_product_details(image_paths, sku, sid)
+                details = generate_product_details(image_paths, sku, sid, category=category)
                 result  = create_shopify_product(
                     image_paths, sku, selling_price, details, sid,
                     manual_title=manual_title, category=category,
