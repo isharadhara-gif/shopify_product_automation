@@ -565,6 +565,7 @@ input:focus{outline:none;border-color:var(--accent);background:rgba(124,109,250,
 
     <div class="side-guide">
       <div class="g-block"><strong>File naming</strong>Files: <code>SKU_Cost.jpg</code><br>Folders: <code>SKU_Cost/</code> → one product.</div>
+      <div class="g-block"><strong>Category</strong>Pick the exact jewellery category per item — it grounds both the AI title and the description template so pieces are never mistitled.</div>
       <div class="g-block"><strong>Colors</strong>Click the color selector per item. Combine with Sizes for variant grids.</div>
       <div class="g-block"><strong>Shortcuts</strong><code>⌘↵</code> upload · <code>1 2 3</code> tabs · <code>Esc</code> close picker</div>
     </div>
@@ -577,7 +578,7 @@ input:focus{outline:none;border-color:var(--accent);background:rgba(124,109,250,
       <div class="command-bar">
         <div>
           <div class="page-title">Upload products</div>
-          <div class="page-sub">Drop images · pick colors · list everywhere</div>
+          <div class="page-sub">Drop images · pick category & colors · list everywhere</div>
         </div>
         <div class="cb-spacer"></div>
         <div class="cb-status">
@@ -619,10 +620,8 @@ input:focus{outline:none;border-color:var(--accent);background:rgba(124,109,250,
         <div class="divider"></div>
         <span class="toolbar-label">Bulk fill</span>
         <input id="bulk-cp" type="number" class="item-input mono-in narrow" placeholder="Cost ₹">
-        <select id="bulk-category" class="item-input" style="width:130px">
+        <select id="bulk-category" class="item-input" style="width:160px" onchange="onBulkCategoryChange()">
           <option value="">Category…</option>
-          <option>Necklace</option><option>Earrings</option><option>Hand accessories</option>
-          <option>Rings</option><option>Hair accessories</option>
         </select>
         <input id="bulk-tags" type="text" class="item-input tags-input" placeholder="Tags">
         <input id="bulk-hs" type="text" class="item-input mono-in narrow" placeholder="HS code">
@@ -767,7 +766,7 @@ input:focus{outline:none;border-color:var(--accent);background:rgba(124,109,250,
           1. Groq key → <a href="https://console.groq.com" target="_blank">console.groq.com</a><br>
           2. Shopify token → Admin → Settings → Apps → Develop apps<br>
           3. Scopes: <code>write_products</code>, <code>write_inventory</code>, <code>write_publications</code><br>
-          4. Drop images · set prices · pick colors · Upload all<br>
+          4. Drop images · pick category · set prices · pick colors · Upload all<br>
           5. Auto-published to every connected sales channel
         </p>
       </div>
@@ -801,6 +800,50 @@ const BRAND_COLORS=[
   {n:'Light Beige',h:'#f0e1c8'},{n:'Light Teal',h:'#64c8c3'},{n:'Light Violet',h:'#d2a5ff'},
   {n:'Multicolor',h:'linear-gradient(135deg,#dc3232,#e6c832,#32a046,#3259c8,#9650dc)'},
 ];
+
+// ── Category presets (auto-loaded from server) ────────────────────────────────
+let CATEGORIES=[];   // list of category names, populated on boot
+let TAG_PRESETS={};  // category name -> comma-joined tag preset string
+
+function _categoryOptionsHtml(selected){
+  return '<option value="">No category template</option>'+
+    CATEGORIES.map(c=>`<option value="${c}"${c===selected?' selected':''}>${c}</option>`).join('');
+}
+
+function populateCategorySelects(){
+  const bulkSel=document.getElementById('bulk-category');
+  if(bulkSel){
+    const cur=bulkSel.value;
+    bulkSel.innerHTML='<option value="">Category…</option>'+CATEGORIES.map(c=>`<option value="${c}">${c}</option>`).join('');
+    bulkSel.value=cur;
+  }
+  // refresh any already-rendered per-item selects
+  document.querySelectorAll('.cat-select').forEach(sel=>{
+    const cur=sel.value;
+    sel.innerHTML=_categoryOptionsHtml(cur);
+  });
+}
+
+async function loadCategoryData(){
+  try{
+    const res=await fetch('/tag_presets');
+    const data=await res.json();
+    CATEGORIES=data.categories||[];
+    TAG_PRESETS=data.presets||{};
+  }catch(e){
+    CATEGORIES=['Necklace','Choker','Pendant','Earring','Ear Cuff','Maang Tikka','Mathapatti','Nath',
+      'Bangles','Kada / Handcuff','Bracelet','Hathphool / Hand Harness','Brooch','Ring','Hair Accessories'];
+  }
+  populateCategorySelects();
+}
+
+function onBulkCategoryChange(){
+  const cat=document.getElementById('bulk-category').value;
+  const tagsInput=document.getElementById('bulk-tags');
+  if(cat&&TAG_PRESETS[cat]){
+    tagsInput.value=TAG_PRESETS[cat];
+  }
+}
 
 // ── Color picker (single portal, never rebuilds queue DOM) ────────────────────
 let _cpActiveId=null;
@@ -1127,6 +1170,7 @@ function _variantPillHtml(item){
   const extra=item.images.length>1?`${item.images[0].name} +${item.images.length-1}`:item.images[0].name;
   return`<span class="sku-txt">${item.sku||'(no SKU)'}</span>
     <span class="file-txt">${extra}</span>
+    ${item.category?`<span class="variant-pill" style="background:rgba(56,189,248,.15);color:var(--accent3);border-color:rgba(56,189,248,.3)">${item.category}</span>`:''}
     ${v>1?`<span class="variant-pill">${v} variants</span>`:''}
     ${item.sku&&dups.has(item.sku.trim())?'<span class="dup-pill">duplicate SKU</span>':''}`;
 }
@@ -1199,9 +1243,8 @@ function buildQueueItemHtml(item,dups){
           oninput="onField('${item.id}','title',this.value)" ${locked?'disabled':''}>
       </div>
       <div class="item-inputs">
-        <select class="item-input" onchange="onField('${item.id}','category',this.value)" ${locked?'disabled':''}>
-          <option value="">No category template</option>
-          ${['Necklace','Earrings','Hand accessories','Rings','Hair accessories'].map(c=>`<option value="${c}"${item.category===c?' selected':''}>${c}</option>`).join('')}
+        <select class="item-input cat-select" onchange="onCategoryChange('${item.id}',this.value)" ${locked?'disabled':''}>
+          ${_categoryOptionsHtml(item.category)}
         </select>
         <input class="item-input tags-input" placeholder="Tags" value="${item.tags}"
           oninput="onField('${item.id}','tags',this.value)" ${locked?'disabled':''}>
@@ -1219,6 +1262,7 @@ function buildQueueItemHtml(item,dups){
         <input class="item-input mono-in variant-input" placeholder="Sizes e.g. 2.4,2.6,2.8" value="${item.sizes}"
           oninput="onField('${item.id}','sizes',this.value)" ${locked?'disabled':''}>
         ${!locked?`<button class="preset-btn" onclick="applyBangleSizes('${item.id}')">📏 Bangle sizes</button>`:''}
+        ${!locked&&item.category&&TAG_PRESETS[item.category]?`<button class="preset-btn" onclick="applyTagPreset('${item.id}')">🏷️ Preset tags</button>`:''}
       </div>
       <div class="item-meta" id="imeta-${item.id}">${metaHtml(item,sp)}</div>
       ${item.status==='failed'&&item.error?`<div class="item-error-msg">⚠ ${item.error}</div>`:''}
@@ -1255,6 +1299,33 @@ function onField(id,field,val){
     }
   }
   updateStats();
+}
+
+// Category change: grounds both the AI title-generation prompt and the
+// static description template. Auto-fills tag preset when tags are empty.
+function onCategoryChange(id,val){
+  const item=queue.find(q=>q.id==id);if(!item)return;
+  item.category=val;
+  const el=document.getElementById('iname-'+id);if(el)el.innerHTML=_variantPillHtml(item);
+  if(val&&TAG_PRESETS[val]&&!item.tags){
+    item.tags=TAG_PRESETS[val];
+    const tagsInp=document.querySelector(`#qi-${id} input.tags-input`);
+    if(tagsInp)tagsInp.value=item.tags;
+  }
+  // re-render this card only, so the preset-tags button appears/disappears correctly
+  const cardWrap=document.getElementById('qi-'+id);
+  if(cardWrap){
+    const dups=dupSkus();
+    cardWrap.outerHTML=buildQueueItemHtml(item,dups);
+  }
+}
+
+function applyTagPreset(id){
+  const item=queue.find(q=>q.id==id);if(!item||!item.category)return;
+  const preset=TAG_PRESETS[item.category];if(!preset)return;
+  item.tags=preset;
+  const inp=document.querySelector(`#qi-${id} input.tags-input`);if(inp)inp.value=preset;
+  toast(`Tag preset applied for ${item.category}`,'success');
 }
 
 function applyBangleSizes(id){
@@ -1588,6 +1659,7 @@ document.addEventListener('keydown',e=>{
 });
 
 loadSettingsForm();
+loadCategoryData();
 updateStats();
 setHistoryFilter('all');
 </script>
