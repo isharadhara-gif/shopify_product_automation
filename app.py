@@ -256,7 +256,7 @@ CATEGORY_TITLE_HINTS = {
     'Bangles':                  'This is a set of BANGLES (closed-circle wrist jewellery, worn stacked). Title must include "Bangle" or "Bangles" or "Kangan".',
     'Kada / Handcuff':          'This is a KADA / HANDCUFF BRACELET (a broad, often open-cuff, statement wrist piece). Title must include "Kada" or "Handcuff Bracelet".',
     'Bracelet':                 'This is a BRACELET (a delicate chain-link or beaded wrist piece, not a broad cuff). Title must include "Bracelet".',
-    'Hathphool / Hand Harness': 'This is a HATHPHOOL / HAND HARNESS (a ring-to-wrist piece connected by chains across the back of the hand). Title must include "Hathphool" or "Hand Harness".',
+    'Hathphool / Hand Harness': 'This is a HATHPHOOL (a ring-to-wrist piece connected by chains across the back of the hand). Title must include "Hathphool" only — do NOT use the words "Hand Harness" anywhere in the title, even though that is the category name.',
     'Brooch':                   'This is a BROOCH (a pin-back accessory for blazers, sarees, or dupattas). Title must include "Brooch".',
     'Ring':                     'This is a RING (finger jewellery). Title must include "Ring".',
     'Hair Accessories':         'This is a HAIR ACCESSORY (hairpin, clip, juda pin, or hair vine). Title must include the specific accessory type, e.g. "Hair Pin", "Juda Pin", "Hair Vine".',
@@ -638,6 +638,18 @@ def slugify(text):
     text = re.sub(r'-+', '-', text)
     return text.strip('-') or f'product-{int(time.time())}'
 
+def _strip_phrase(text, phrase):
+    """Remove *phrase* (case-insensitive, whole-word) from *text* and tidy up
+    any leftover double spaces or stray connector words/punctuation left behind
+    (e.g. "Kundan Hathphool Hand Harness with Pearls" -> "Kundan Hathphool with Pearls")."""
+    if not text:
+        return text
+    cleaned = re.sub(re.escape(phrase), '', text, flags=re.IGNORECASE)
+    cleaned = re.sub(r'\s{2,}', ' ', cleaned)          # collapse double spaces
+    cleaned = re.sub(r'\s+([,\-])', r'\1', cleaned)    # trailing space before , or -
+    cleaned = re.sub(r'^[\s,\-]+|[\s,\-]+$', '', cleaned)  # trim stray leading/trailing junk
+    return cleaned.strip() or text
+
 def calc_sp(cp: float, markup: float = 4.0) -> int:
     raw = cp * markup
     tiers = []
@@ -746,6 +758,8 @@ Respond ONLY with a valid JSON object (no markdown, no extra text):
         content = resp.json()['choices'][0]['message']['content'].strip()
         content = content.replace('```json','').replace('```','').strip()
         result = json.loads(content)
+        if category == 'Hathphool / Hand Harness' and result.get('title'):
+            result['title'] = _strip_phrase(result['title'], 'Hand Harness')
         result['handle'] = slugify(result.get('handle', result.get('title', sku)))
         log(sid, f'✅ Title: {result.get("title")}', 'success')
         return result
