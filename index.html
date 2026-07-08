@@ -243,6 +243,21 @@ select.item-input option{background:#12142c;color:var(--text)}
 .item-input.mono-in{font-family:var(--mono);font-size:11.5px}
 .item-input.invalid{border-color:var(--red)!important;background:rgba(248,113,113,.06)}
 
+/* ── AI title button / badge ── */
+.ai-btn{
+  font-size:10.5px;font-weight:600;padding:6px 11px;border-radius:var(--r-xs);
+  background:linear-gradient(135deg,rgba(124,109,250,.18),rgba(56,189,248,.12));
+  color:var(--accent2);border:1px solid rgba(124,109,250,.35);cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;transition:all .15s;white-space:nowrap;
+}
+.ai-btn:hover{border-color:var(--accent);background:rgba(124,109,250,.28);color:#fff}
+.ai-btn:disabled{opacity:.6;cursor:wait;transform:none}
+.ai-badge{
+  font-size:9px;font-weight:800;padding:2px 7px;border-radius:99px;letter-spacing:.5px;
+  background:rgba(124,109,250,.18);color:var(--accent2);border:1px solid rgba(124,109,250,.35);
+  display:inline-flex;align-items:center;gap:3px;
+}
+
 /* ── Queue header ── */
 .queue-header{display:flex;align-items:center;margin:24px 0 12px;flex-wrap:wrap;gap:10px}
 .queue-title{font-size:16px;font-weight:700;color:rgba(255,255,255,.85)}
@@ -283,17 +298,20 @@ select.item-input option{background:#12142c;color:var(--text)}
 .thumb-wrap{position:relative;width:56px;height:56px;flex-shrink:0}
 .thumb{
   width:56px;height:56px;object-fit:cover;border-radius:10px;display:block;
-  border:1px solid var(--glass-border);background:rgba(255,255,255,.04);
+  border:1px solid var(--glass-border);background:rgba(255,255,255,.04);cursor:zoom-in;
+  transition:filter .12s;
 }
+.thumb:hover{filter:brightness(1.15)}
 .thumb-wrap.cover .thumb{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),0 0 10px rgba(124,109,250,.3)}
 .cover-tag{
   position:absolute;left:3px;bottom:3px;font-size:7.5px;font-weight:800;letter-spacing:.5px;
   background:var(--accent);color:#fff;padding:1px 4px;border-radius:3px;
+  pointer-events:none;
 }
 .thumb-remove,.thumb-cover{
   position:absolute;width:18px;height:18px;border-radius:50%;
   font-size:11px;line-height:17px;text-align:center;cursor:pointer;border:none;
-  opacity:0;transition:opacity .12s;
+  opacity:0;transition:opacity .12s;z-index:2;
 }
 .thumb-wrap:hover .thumb-remove,.thumb-wrap:hover .thumb-cover{opacity:1}
 .thumb-remove{top:-5px;right:-5px;background:var(--red);color:#fff}
@@ -307,6 +325,29 @@ select.item-input option{background:#12142c;color:var(--text)}
 }
 .thumb-add:hover{border-color:var(--accent);color:var(--accent);background:rgba(124,109,250,.1)}
 .img-count-badge{font-size:10px;color:var(--muted);margin-top:5px;text-align:center}
+
+/* ── Image preview lightbox ── */
+.preview-modal{
+  position:fixed;inset:0;z-index:10000;
+  background:rgba(4,4,14,.88);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  display:none;align-items:center;justify-content:center;padding:40px;cursor:zoom-out;
+}
+.preview-modal.visible{display:flex;animation:fadein .15s ease}
+.preview-modal img{
+  max-width:90vw;max-height:88vh;border-radius:14px;
+  box-shadow:0 20px 80px rgba(0,0,0,.6);border:1px solid var(--glass-border-hi);
+  cursor:default;
+}
+.preview-modal-close{
+  position:absolute;top:22px;right:26px;width:38px;height:38px;border-radius:50%;
+  background:var(--glass-hi);border:1px solid var(--glass-border-hi);color:#fff;
+  font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+}
+.preview-modal-close:hover{background:rgba(124,109,250,.3)}
+.preview-modal-name{
+  position:absolute;bottom:22px;left:0;right:0;text-align:center;
+  font-family:var(--mono);font-size:12px;color:var(--muted);
+}
 
 /* ── Item fields ── */
 .item-info{min-width:0}
@@ -531,6 +572,13 @@ input:focus{outline:none;border-color:var(--accent);background:rgba(124,109,250,
   </div>
 </div>
 
+<!-- Image preview lightbox -->
+<div class="preview-modal" id="preview-modal" onclick="closePreview(event)">
+  <button class="preview-modal-close" onclick="closePreview(event)">✕</button>
+  <img id="preview-modal-img" src="" alt="">
+  <div class="preview-modal-name" id="preview-modal-name"></div>
+</div>
+
 <div class="toast-stack" id="toast-stack"></div>
 
 <div class="app">
@@ -568,8 +616,10 @@ input:focus{outline:none;border-color:var(--accent);background:rgba(124,109,250,
     <div class="side-guide">
       <div class="g-block"><strong>File naming</strong>Files: <code>SKU_Cost.jpg</code><br>Folders: <code>SKU_Cost/</code> → one product.</div>
       <div class="g-block"><strong>Category</strong>Pick the exact jewellery category per item — it grounds both the AI title and the description template so pieces are never mistitled.</div>
+      <div class="g-block"><strong>AI titles</strong>Click <code>✨ AI Title</code> on any item to preview (and edit) the Groq-written title before it's ever sent to Shopify.</div>
+      <div class="g-block"><strong>Preview</strong>Click any thumbnail to view it full-size.</div>
       <div class="g-block"><strong>Colors</strong>Click the color selector per item. Combine with Sizes for variant grids.</div>
-      <div class="g-block"><strong>Shortcuts</strong><code>⌘↵</code> upload · <code>1 2 3</code> tabs · <code>Esc</code> close picker</div>
+      <div class="g-block"><strong>Shortcuts</strong><code>⌘↵</code> upload · <code>1 2 3</code> tabs · <code>Esc</code> close picker/preview</div>
     </div>
   </aside>
 
@@ -651,6 +701,8 @@ input:focus{outline:none;border-color:var(--accent);background:rgba(124,109,250,
         </select>
         <input id="bulk-sizes" type="text" class="item-input mono-in variant-input" placeholder="Sizes 2.4,2.6,2.8">
         <button class="btn btn-ghost btn-sm" onclick="bulkApply()">Apply all</button>
+        <div class="divider"></div>
+        <button class="btn btn-ghost btn-sm" onclick="generateAllTitles()">✨ AI title all</button>
         <div class="divider"></div>
         <span class="toolbar-label">Speed</span>
         <select id="concurrency" class="item-input" style="width:118px">
@@ -1138,7 +1190,7 @@ async function handleEntries(entries){
 
   results.forEach(({file,parsed,thumb})=>{
     let item=queue.find(q=>q.groupKey===parsed.groupKey&&q.status==='pending');
-    if(item){item.images.push({file,thumb,name:file.name});}
+    if(item){item.images.push({file,thumb,name:file.name});item.serverFilenames=null;}
     else{
       queue.push({
         id:'itm'+Date.now()+'r'+Math.floor(Math.random()*1000000),
@@ -1146,7 +1198,8 @@ async function handleEntries(entries){
         title:'',category:'',tags:'',weight:'',hscode:'',origin:'',qty:'',
         colors:'',sizes:'',
         images:[{file,thumb,name:file.name}],
-        status:'pending',error:null
+        status:'pending',error:null,
+        serverFilenames:null,aiGenerated:false
       });
     }
   });
@@ -1211,11 +1264,34 @@ function thumbsHtml(item,locked){
   const id=item.id;
   return item.images.map((img,i)=>`
     <div class="thumb-wrap${i===0?' cover':''}">
-      <img class="thumb" src="${img.thumb}" title="${img.name}" alt="" loading="lazy">
+      <img class="thumb" src="${img.thumb}" title="Click to preview · ${img.name}" alt=""
+        loading="lazy" onclick="event.stopPropagation();openPreview('${id}',${i})">
       ${i===0?'<span class="cover-tag">COVER</span>':''}
-      ${!locked&&i>0?`<button class="thumb-cover" title="Make cover" onclick="makeCover('${id}',${i})">★</button>`:''}
-      ${!locked?`<button class="thumb-remove" title="Remove" onclick="removeImage('${id}',${i})">×</button>`:''}
+      ${!locked&&i>0?`<button class="thumb-cover" title="Make cover" onclick="event.stopPropagation();makeCover('${id}',${i})">★</button>`:''}
+      ${!locked?`<button class="thumb-remove" title="Remove" onclick="event.stopPropagation();removeImage('${id}',${i})">×</button>`:''}
     </div>`).join('')+(!locked?`<button class="thumb-add" title="Add images" onclick="addImages('${id}')">+</button>`:'');
+}
+
+// ── Image preview lightbox ────────────────────────────────────────────────────
+function openPreview(itemId,idx){
+  const item=queue.find(q=>q.id==itemId);if(!item)return;
+  const img=item.images[idx];if(!img)return;
+  const modal=document.getElementById('preview-modal');
+  const modalImg=document.getElementById('preview-modal-img');
+  if(modalImg.dataset.blobUrl){URL.revokeObjectURL(modalImg.dataset.blobUrl);}
+  const url=URL.createObjectURL(img.file);
+  modalImg.src=url;
+  modalImg.dataset.blobUrl=url;
+  document.getElementById('preview-modal-name').textContent=`${item.sku||'(no SKU)'} · ${img.name}`;
+  modal.classList.add('visible');
+}
+function closePreview(e){
+  if(e&&e.target&&e.target.id!=='preview-modal'&&!e.target.classList.contains('preview-modal-close'))return;
+  const modal=document.getElementById('preview-modal');
+  const modalImg=document.getElementById('preview-modal-img');
+  if(!modal.classList.contains('visible'))return;
+  if(modalImg.dataset.blobUrl){URL.revokeObjectURL(modalImg.dataset.blobUrl);delete modalImg.dataset.blobUrl;}
+  modal.classList.remove('visible');modalImg.src='';
 }
 
 function buildQueueItemHtml(item,dups){
@@ -1241,8 +1317,10 @@ function buildQueueItemHtml(item,dups){
           oninput="onField('${item.id}','sku',this.value)" ${locked?'disabled':''}>
         <input class="item-input mono-in narrow${!item.costPrice?' invalid':''}" placeholder="Cost ₹" value="${item.costPrice}" type="number"
           oninput="onField('${item.id}','costPrice',this.value)" ${locked?'disabled':''}>
-        <input class="item-input title-input" placeholder="Custom title (blank = AI writes it)" value="${item.title}"
+        <input class="item-input title-input" id="title-input-${item.id}" placeholder="Custom title (blank = AI writes it)" value="${item.title}"
           oninput="onField('${item.id}','title',this.value)" ${locked?'disabled':''}>
+        ${!locked?`<button class="ai-btn" id="ai-btn-${item.id}" onclick="generateTitle('${item.id}')" title="Preview an AI-written title from the photo before uploading">✨ AI Title</button>`:''}
+        ${item.aiGenerated?`<span class="ai-badge" id="ai-badge-${item.id}">✨ AI</span>`:''}
       </div>
       <div class="item-inputs">
         <select class="item-input cat-select" onchange="onCategoryChange('${item.id}',this.value)" ${locked?'disabled':''}>
@@ -1289,6 +1367,11 @@ function onField(id,field,val){
   if(field==='sku'||field==='sizes'){
     const el=document.getElementById('iname-'+id);
     if(el)el.innerHTML=_variantPillHtml(item);
+  }
+  if(field==='title'){
+    item.aiGenerated=false;
+    const badge=document.getElementById('ai-badge-'+id);
+    if(badge)badge.remove();
   }
   if(field==='costPrice'||field==='sku'){
     const sp=item.costPrice?calcSP(parseFloat(item.costPrice),getMarkup()):null;
@@ -1358,6 +1441,7 @@ function _patchThumbStack(id){
 function makeCover(id,idx){
   const item=queue.find(q=>q.id==id);if(!item||!item.images[idx])return;
   const[img]=item.images.splice(idx,1);item.images.unshift(img);
+  item.serverFilenames=null;
   _patchThumbStack(id);toast('Cover updated','success');
 }
 
@@ -1371,6 +1455,7 @@ function addImages(id){
     const files=[...inp.files];
     const newImgs=await Promise.all(files.map(async f=>({file:f,thumb:await fileToThumb(f),name:f.name})));
     item.images.push(...newImgs);
+    item.serverFilenames=null;
     _patchThumbStack(id);
     updateStats();
   };
@@ -1380,6 +1465,7 @@ function addImages(id){
 function removeImage(id,idx){
   const item=queue.find(q=>q.id==id);if(!item)return;
   item.images.splice(idx,1);
+  item.serverFilenames=null;
   if(!item.images.length){queue=queue.filter(q=>q.id!=id);renderQueue();updateStats();return;}
   _patchThumbStack(id);updateStats();
 }
@@ -1391,6 +1477,58 @@ function retryFailed(){
   let n=0;queue.forEach(q=>{if(q.status==='failed'){q.status='pending';q.error=null;n++;}});
   renderQueue();
   if(n){toast(`Re-queued ${n} item(s)`,'success');uploadAll();}else toast('No failed items','error');
+}
+
+// ── AI title preview (calls /generate_title BEFORE the real Shopify upload) ──
+// Uploads the images once (cached on the item), asks Groq for a title/tags
+// preview, then fills the (still editable) title input so the seller can
+// check it — and change it — before ever creating the Shopify listing.
+async function ensureUploaded(item){
+  if(item.serverFilenames&&item.serverFilenames.length===item.images.length)return item.serverFilenames;
+  const fd=new FormData();
+  item.images.forEach(img=>fd.append('images',img.file));
+  fd.append('sku',(item.sku||'PREVIEW').trim()||'PREVIEW');
+  const res=await fetch('/upload',{method:'POST',body:fd});
+  const data=await res.json();
+  if(!res.ok)throw new Error(data.error||'Upload failed');
+  item.serverFilenames=data.filenames;
+  return data.filenames;
+}
+
+async function generateTitle(id){
+  const item=queue.find(q=>q.id==id);if(!item)return;
+  if(!item.images.length){toast('Add an image first','error');return;}
+  const btn=document.getElementById('ai-btn-'+id);
+  if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Thinking…';}
+  try{
+    const filenames=await ensureUploaded(item);
+    const res=await fetch('/generate_title',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({filenames,sku:item.sku||'PREVIEW',category:item.category,socket_id:socket.id})
+    });
+    const data=await res.json();
+    if(!res.ok)throw new Error(data.error||'Failed to generate title');
+    item.title=data.title||item.title;
+    item.aiGenerated=true;
+    if(!item.tags&&data.tags)item.tags=data.tags;
+    const cardWrap=document.getElementById('qi-'+id);
+    if(cardWrap){const dups=dupSkus();cardWrap.outerHTML=buildQueueItemHtml(item,dups);}
+    toast(`AI title ready: "${item.title}"`,'success');
+  }catch(e){
+    toast('AI title failed: '+e.message,'error');
+    if(btn){btn.disabled=false;btn.innerHTML='✨ AI Title';}
+  }finally{
+    updateStats();
+  }
+}
+
+async function generateAllTitles(){
+  const targets=queue.filter(q=>q.status==='pending'&&q.images.length&&!q.title);
+  if(!targets.length){toast('No items need titles','error');return;}
+  toast(`Generating ${targets.length} title(s)…`,'success');
+  for(const item of targets){
+    await generateTitle(item.id);
+  }
 }
 
 // ── Bulk apply ────────────────────────────────────────────────────────────────
@@ -1489,14 +1627,9 @@ async function uploadAll(){
 async function uploadOne(item){
   item.status='uploading';renderQueue();
   try{
-    const fd=new FormData();
-    item.images.forEach(img=>fd.append('images',img.file));
-    fd.append('sku',item.sku);
-    const res=await fetch('/upload',{method:'POST',body:fd});
-    const data=await res.json();
-    if(!res.ok)throw new Error(data.error||'Upload failed');
+    const filenames=await ensureUploaded(item);
     socket.emit('start_upload',{
-      filenames:data.filenames,sku:item.sku,cost_price:item.costPrice,
+      filenames,sku:item.sku,cost_price:item.costPrice,
       markup:getMarkup(),title:item.title,category:item.category,
       tags:item.tags,weight_g:item.weight||null,hs_code:item.hscode,
       country_of_origin:item.origin,inventory_qty:item.qty||null,
@@ -1653,7 +1786,7 @@ async function loadSettingsForm(){
 document.addEventListener('keydown',e=>{
   const typing=document.activeElement&&['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName);
   if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();uploadAll();return;}
-  if(e.key==='Escape'){cpClose();return;}
+  if(e.key==='Escape'){cpClose();closePreview();return;}
   if(typing)return;
   if(e.key==='1')showPanel('upload');
   if(e.key==='2')showPanel('history');
