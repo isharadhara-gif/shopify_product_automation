@@ -263,7 +263,7 @@ CATEGORY_TITLE_HINTS = {
 }
 
 CATEGORY_DESCRIPTIONS = {
-    'Necklace': """Hello lovely souls! Don\u2019t you agree that your look is never complete without a breathtaking necklace? A necklace set isn\u2019t just an accessory. It is the star of the show, ensuring you make a lasting impression every time you step out of your house.
+    'Necklace': """Hello lovely souls! Don't you agree that your look is never complete without a breathtaking necklace? A necklace set isn't just an accessory. It is the star of the show, ensuring you make a lasting impression every time you step out of your house.
 Ishhaara's necklaces for women whether it be a gold choker necklace set, pearl necklace, silver necklace set, or long necklace offer a phenomenal look. Pair these necklace sets and instantly make a wonderful appeal wherever you go. So, grab this chance and quickly check out the standout features of Ishhaara's necklace.
 Product Specification
 Material: Skin Friendly | Hypoallergenic
@@ -284,7 +284,7 @@ Care Label
 3. Avoid using detergents, soaps, or toothpaste to clean your necklace.
 4. Clean your necklace after every use with a soft brush.""",
 
-    'Choker': """Hey stunner! Isn\u2019t there something irresistibly bold about a choker sitting right at the base of your throat? Snug, striking, and impossible to ignore, a choker set instantly becomes the focal point of your entire look.
+    'Choker': """Hey stunner! Isn't there something irresistibly bold about a choker sitting right at the base of your throat? Snug, striking, and impossible to ignore, a choker set instantly becomes the focal point of your entire look.
 Ishhaara's chokers for women whether it be a Kundan choker set, bridal choker necklace, or a sleek velvet-base choker offer a dramatic finish to any outfit. Pair these chokers and instantly command attention wherever you go. So, grab this chance and quickly check out the standout features of Ishhaara's choker.
 Product Specification
 Material: Skin Friendly | Hypoallergenic
@@ -305,7 +305,7 @@ Care Label
 3. Avoid using detergents, soaps, or toothpaste to clean your choker.
 4. Clean your choker after every use with a soft brush.""",
 
-    'Pendant': """Hello lovely! Isn\u2019t it wonderful how one delicate pendant can effortlessly complete an entire outfit? A pendant necklace isn\u2019t about doing the most, it\u2019s about doing the right amount, subtle, meaningful, and endlessly wearable.
+    'Pendant': """Hello lovely! Isn't it wonderful how one delicate pendant can effortlessly complete an entire outfit? A pendant necklace isn't about doing the most, it's about doing the right amount, subtle, meaningful, and endlessly wearable.
 Ishhaara's pendant necklaces whether it be a stone-studded pendant, an evil eye pendant, or a dainty AD pendant offer a refined finish for everyday wear or evening dressing. So, grab this chance and quickly check out the standout features of Ishhaara's pendant necklace.
 Product Specification
 Material: Skin Friendly | Hypoallergenic
@@ -326,7 +326,7 @@ Care Label
 3. Avoid using detergents, soaps, or toothpaste to clean your pendant.
 4. Clean your pendant after every use with a soft brush.""",
 
-    'Earring': """Hey gorgeous! Don\u2019t you think your face glows differently the moment the right pair of earrings catches the light? Earrings aren\u2019t just an accessory, they\u2019re the easiest way to switch up an entire look in seconds.
+    'Earring': """Hey gorgeous! Don't you think your face glows differently the moment the right pair of earrings catches the light? Earrings aren't just an accessory, they're the easiest way to switch up an entire look in seconds.
 Ishhaara's earrings for women whether it be gold studs, jhumkas, hoops, danglers, or chandbalis offer a stunning finish to any outfit. Pair these earrings and instantly elevate your everyday or festive look. So, grab this chance and quickly check out the standout features of Ishhaara's earrings.
 Product Specification
 Material: Skin Friendly | Hypoallergenic
@@ -368,7 +368,7 @@ Care Label
 3. Avoid using detergents, soaps, or toothpaste to clean your ear cuff.
 4. Clean your ear cuff after every use with a soft brush.""",
 
-    'Maang Tikka': """Hey bride-to-be (or just in the mood to glow)! Isn\u2019t a maang tikka the single most striking way to frame your face for a festive occasion? Resting right on the centre parting, it draws every eye straight to you.
+    'Maang Tikka': """Hey bride-to-be (or just in the mood to glow)! Isn't a maang tikka the single most striking way to frame your face for a festive occasion? Resting right on the centre parting, it draws every eye straight to you.
 Ishhaara's maang tikkas whether it be a Kundan teeka, a Polki mang tikka, or a delicate everyday tikka offer a stunning finish for weddings, festivals, and celebrations. So, grab this chance and quickly check out the standout features of Ishhaara's maang tikka.
 Product Specification
 Material: Skin Friendly | Hypoallergenic
@@ -389,7 +389,7 @@ Care Label
 3. Avoid using detergents, soaps, or toothpaste to clean your maang tikka.
 4. Clean your maang tikka after every use with a soft brush.""",
 
-    'Mathapatti': """Hey gorgeous bride! Isn\u2019t a mathapatti the most breathtaking way to crown your bridal look? Spreading gracefully across the forehead and into the hairline, it turns your entire hairstyle into a jewel in itself.
+    'Mathapatti': """Hey gorgeous bride! Isn't a mathapatti the most breathtaking way to crown your bridal look? Spreading gracefully across the forehead and into the hairline, it turns your entire hairstyle into a jewel in itself.
 Ishhaara's mathapattis whether it be a Kundan matha patti, a Polki bridal set with side passa, or a Meenakari head piece offer full bridal grandeur for weddings and grand celebrations. So, grab this chance and quickly check out the standout features of Ishhaara's mathapatti.
 Product Specification
 Material: Skin Friendly | Hypoallergenic
@@ -410,7 +410,7 @@ Care Label
 3. Avoid using detergents, soaps, or toothpaste to clean your mathapatti.
 4. Clean your mathapatti after every use with a soft brush.""",
 
-    'Nath': """Hey beautiful! Isn\u2019t a nath one of the most timeless symbols of bridal and festive jewellery? Whether clipped on or chain-linked to the hair, a nath instantly elevates a traditional look with quiet grandeur.
+    'Nath': """Hey beautiful! Isn't a nath one of the most timeless symbols of bridal and festive jewellery? Whether clipped on or chain-linked to the hair, a nath instantly elevates a traditional look with quiet grandeur.
 Ishhaara's naths whether it be a Maharashtrian nath, a Kashmiri-style nose ring, or a delicate everyday nath pin offer an authentic finish for weddings, festivals, and cultural celebrations. So, grab this chance and quickly check out the standout features of Ishhaara's nath.
 Product Specification
 Material: Skin Friendly | Hypoallergenic
@@ -431,7 +431,7 @@ Care Label
 3. Avoid using detergents, soaps, or toothpaste to clean your nath.
 4. Clean your nath after every use with a soft brush.""",
 
-    'Bangles': """Hey gorgeous! Isn\u2019t there something so satisfying about the gentle jingle of a stack of bangles on your wrist? Bangles aren\u2019t just jewellery, they're rhythm, tradition, and effortless glamour rolled into one.
+    'Bangles': """Hey gorgeous! Isn't there something so satisfying about the gentle jingle of a stack of bangles on your wrist? Bangles aren't just jewellery, they're rhythm, tradition, and effortless glamour rolled into one.
 Ishhaara's bangles whether it be a classic gold-finish bangle, an oxidised kada, or a Kundan kangan offer a timeless finish for everyday wear or festive dressing. So, grab this chance and quickly check out the standout features of Ishhaara's bangles.
 Product Specification
 Material: Skin Friendly | Hypoallergenic
@@ -452,7 +452,7 @@ Care Label
 3. Avoid using detergents, soaps, or toothpaste to clean your bangles.
 4. Clean your bangles after every use with a soft brush.""",
 
-    'Kada / Handcuff': """Hey bold soul! Isn\u2019t a kada or handcuff bracelet the ultimate way to make a wrist statement that can\u2019t be ignored? Broad, sculptural, and unapologetically striking, it's the piece that finishes the look.
+    'Kada / Handcuff': """Hey bold soul! Isn't a kada or handcuff bracelet the ultimate way to make a wrist statement that can't be ignored? Broad, sculptural, and unapologetically striking, it's the piece that finishes the look.
 Ishhaara's kadas and handcuff bracelets whether it be an oxidised handcuff, an AD-studded kada, or a sleek open-cuff design offer a bold finish for festive dressing or fusion styling. So, grab this chance and quickly check out the standout features of Ishhaara's kada / handcuff.
 Product Specification
 Material: Skin Friendly | Hypoallergenic
@@ -473,7 +473,7 @@ Care Label
 3. Avoid using detergents, soaps, or toothpaste to clean your kada / handcuff.
 4. Clean your kada / handcuff after every use with a soft brush.""",
 
-    'Bracelet': """Hey lovely! Isn\u2019t a delicate bracelet the easiest way to add a touch of sparkle to your everyday wrist? Light, dainty, and endlessly stackable, it's the accessory that quietly does the most.
+    'Bracelet': """Hey lovely! Isn't a delicate bracelet the easiest way to add a touch of sparkle to your everyday wrist? Light, dainty, and endlessly stackable, it's the accessory that quietly does the most.
 Ishhaara's bracelets whether it be a crystal-studded bracelet, a stone bracelet, or a fine chain-link design offer a versatile finish for both western and ethnic styling. So, grab this chance and quickly check out the standout features of Ishhaara's bracelet.
 Product Specification
 Material: Skin Friendly | Hypoallergenic
@@ -494,7 +494,7 @@ Care Label
 3. Avoid using detergents, soaps, or toothpaste to clean your bracelet.
 4. Clean your bracelet after every use with a soft brush.""",
 
-    'Hathphool / Hand Harness': """Hey gorgeous! Are you ready to add a whimsical statement to your \u2018Solah Shringar\u2019? A hathphool, connecting a ring to a wrist chain across the back of the hand, is one of the most graceful pieces in bridal jewellery.
+    'Hathphool / Hand Harness': """Hey gorgeous! Are you ready to add a whimsical statement to your 'Solah Shringar'? A hathphool, connecting a ring to a wrist chain across the back of the hand, is one of the most graceful pieces in bridal jewellery.
 Ishhaara's hathphools and hand harnesses whether it be a Kundan hathphool, a delicate chain-link hand harness, or a statement bridal piece offer a stunning finish for weddings and festive occasions. So, grab this chance and quickly check out the standout features of Ishhaara's hathphool / hand harness.
 Product Specification
 Material: Skin Friendly | Hypoallergenic
@@ -515,7 +515,7 @@ Care Label
 3. Avoid using detergents, soaps, or toothpaste to clean your hathphool / hand harness.
 4. Clean your hathphool / hand harness after every use with a soft brush.""",
 
-    'Brooch': """Hey stylish soul! Isn\u2019t a brooch the smallest accessory with the biggest impact? Pinned onto a blazer, saree, or dupatta, it instantly signals intention and polish.
+    'Brooch': """Hey stylish soul! Isn't a brooch the smallest accessory with the biggest impact? Pinned onto a blazer, saree, or dupatta, it instantly signals intention and polish.
 Ishhaara's brooches whether it be a classic blazer brooch, a statement saree pin, or a brooch for men offer a refined finishing touch to any outfit. So, grab this chance and quickly check out the standout features of Ishhaara's brooch.
 Product Specification
 Material: Skin Friendly | Hypoallergenic
@@ -536,7 +536,7 @@ Care Label
 3. Avoid using detergents, soaps, or toothpaste to clean your brooch.
 4. Clean your brooch after every use with a soft brush.""",
 
-    'Ring': """Howdy, partners! Are you passionate about elevating your style with stunning rings? Isn\u2019t it incredible how these glamorous accessories can add elegance, flair, and trendiness to any outfit? Whether you love adding gold rings, traditional rings, statement rings, or oxidised rings, Ishhaara's treasure trove uncovers a wide variety of choices.
+    'Ring': """Howdy, partners! Are you passionate about elevating your style with stunning rings? Isn't it incredible how these glamorous accessories can add elegance, flair, and trendiness to any outfit? Whether you love adding gold rings, traditional rings, statement rings, or oxidised rings, Ishhaara's treasure trove uncovers a wide variety of choices.
 These rings are perfect for transforming any look into something extraordinary and are essential additions to your jewellery box. Ready to find the perfect piece? Dive in and explore the details now!
 Product Specification
 Material: Skin Friendly | Hypoallergenic
@@ -545,11 +545,11 @@ Waterproof: Retains Colour and Brilliance
 Key Highlights
 1. Timeless Finish: Ishhaara's artificial rings come in various finishes from polished, matte, brushed or hammered texture. Allowing you to bring a glittery shine to your overall look.
 2. Meaningful Piece: Ishhaara's every piece of ring is crafted from precious or semi-precious stones that hold symbolic meanings like love, commitment, friendship, or personal achievements. Making a perfect gift or passing it down to heirlooms.
-3. Full Versatility: Ishhaara\u2019s every piece of ring whether it be silver rings, gold rings, Kundan rings, or Polki rings gives you full flexibility of wearing it alone or stacking with other rings. Perfect for adding a layered chic style that defines your personality.
-4. Free Size: Ishhaara\u2019s every type of artificial ring for women whether it be engagement rings or stainless steel rings is curated to fit every finger size. Ensuring you create a perfect look with a fully comfortable accessory.
-5. Gemstone Setting: Ishhaara\u2019s artificial rings for girls are made in various styles and settings such as prongs, bezels, or channel settings. This ensures you make a vibrantly visual appeal wherever you go.""",
+3. Full Versatility: Ishhaara's every piece of ring whether it be silver rings, gold rings, Kundan rings, or Polki rings gives you full flexibility of wearing it alone or stacking with other rings. Perfect for adding a layered chic style that defines your personality.
+4. Free Size: Ishhaara's every type of artificial ring for women whether it be engagement rings or stainless steel rings is curated to fit every finger size. Ensuring you create a perfect look with a fully comfortable accessory.
+5. Gemstone Setting: Ishhaara's artificial rings for girls are made in various styles and settings such as prongs, bezels, or channel settings. This ensures you make a vibrantly visual appeal wherever you go.""",
 
-    'Hair Accessories': """Hey beautiful! Isn\u2019t it amazing how the right hair accessory can transform your entire look in seconds? A hairpin, clip, or hair band isn\u2019t just functional. It is a styling statement that ties your whole appearance together effortlessly.
+    'Hair Accessories': """Hey beautiful! Isn't it amazing how the right hair accessory can transform your entire look in seconds? A hairpin, clip, or hair band isn't just functional. It is a styling statement that ties your whole appearance together effortlessly.
 Ishhaara's hair accessories for women whether it be a pearl hairpin, kundan maang tikka, juda pin, or floral hair vine offer a stunning finish to any hairstyle. Pair these pieces and instantly elevate your everyday or festive look. So, grab this chance and quickly check out the standout features of Ishhaara's hair accessories.
 Product Specification
 Material: Skin Friendly | Hypoallergenic
@@ -1103,6 +1103,31 @@ def delete_history_row(idx):
         HISTORY_FILE.write_text(json.dumps(rows, indent=2))
         return jsonify({'ok':True})
     return jsonify({'ok':False}), 404
+
+# ── NEW: preview an AI-generated title/description/tags for an item BEFORE it
+# is actually created on Shopify. Lets a seller check (and edit) the title
+# that Groq would write, using the already-uploaded (processed) image(s). ────
+@app.route('/generate_title', methods=['POST'])
+def generate_title_route():
+    data = request.get_json(force=True, silent=True) or {}
+    filenames = data.get('filenames') or []
+    sku       = (data.get('sku') or 'PREVIEW').strip().upper() or 'PREVIEW'
+    category  = (data.get('category') or '').strip() or None
+    sid       = (data.get('socket_id') or '').strip() or None
+
+    if not filenames:
+        return jsonify({'error': 'No uploaded images to analyze'}), 400
+
+    image_paths = [UPLOAD_DIR / fn for fn in filenames]
+    missing = [p.name for p in image_paths if not p.exists()]
+    if missing:
+        return jsonify({'error': f'Image(s) not found on server: {missing}'}), 400
+
+    try:
+        details = generate_product_details(image_paths, sku, sid, category=category)
+        return jsonify(details)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 # ── Socket.IO pipeline ────────────────────────────────────────────────────────
 @socketio.on('start_upload')
