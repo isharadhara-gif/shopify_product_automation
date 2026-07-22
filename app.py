@@ -1,9 +1,34 @@
+"""
+Ishhaara Listing Studio — Shopify automation backend
+v2 · Core-tag taxonomy edition
+
+What changed in v2
+──────────────────
+• Tag system rebuilt around the brand's Core Tags Report:
+  9 categories → 63 subcategories → exact per-subcategory tag presets.
+  Tag strings are preserved BYTE-EXACT from the sheet (incl. "Ethinic",
+  "Deisgner Rakhi", "bugadi_earrings" …) because Shopify automated
+  collections match tags literally — normalising the spelling would
+  silently drop products out of live collections.
+• /taxonomy endpoint feeds the new cascading Category → Subcategory UI
+  and the searchable tag picker.
+• Groq title generation is grounded per-SUBCATEGORY (63 hints) so pieces
+  can no longer be mistitled as the wrong jewellery type.
+• All Shopify calls go through a retrying wrapper (429 + 5xx aware,
+  honours Retry-After) — a flaky network no longer kills a batch.
+• /check_skus pre-flight: looks up SKUs in the live store via GraphQL
+  before publishing, so duplicates are caught before they exist.
+• Selling-price tiers unified between backend & frontend (the old code
+  had two different tier tables that could disagree).
+"""
+
 import os, json, time, base64, re, io, csv, random, threading
 from datetime import datetime
 from pathlib import Path
 from flask import Flask, request, jsonify, Response
 from flask_socketio import SocketIO
 from PIL import Image, ImageOps
+import requests
 
 # ── Default catalog values ────────────────────────────────────────────────────
 DEFAULT_HS_CODE = '7117.90'
@@ -13,6 +38,20 @@ DEFAULT_INVENTORY_QTY = 10
 DEFAULT_BANGLE_SIZES = ['2.4', '2.6', '2.8']
 
 TARGET_W, TARGET_H = 1080, 1440
+
+# Selling-price tiers — single source of truth, mirrored in the frontend.
+PRICE_TIERS = [99, 199, 299, 399, 499, 599, 699, 799, 899, 999,
+               1499, 1999, 2499, 2999, 3499, 3999, 4499, 4999,
+               5999, 6999, 7999, 8999, 9999, 12999, 14999, 19999,
+               24999, 29999, 39999, 49999, 99999]
+
+def calc_sp(cp: float, markup: float = 4.0) -> int:
+    """Round CP × markup up to the next 'nice' retail tier."""
+    raw = cp * markup
+    for t in PRICE_TIERS:
+        if t >= raw:
+            return t
+    return int(raw // 1000) * 1000 + 999
 
 # ── Brand color palette (54 colors) ──────────────────────────────────────────
 BRAND_COLORS = [
@@ -74,44 +113,27 @@ BRAND_COLORS = [
 ]
 
 def _nearest_brand_color(r: int, g: int, b: int) -> str:
-    """Return the closest brand color name using squared-Euclidean distance in RGB."""
     best_name, best_d = "Multicolor", float('inf')
-    for name, (cr, cg, cb) in BRAND_COLORS[:-1]:   # skip Multicolor entry
+    for name, (cr, cg, cb) in BRAND_COLORS[:-1]:
         d = (r - cr) ** 2 + (g - cg) ** 2 + (b - cb) ** 2
         if d < best_d:
             best_d, best_name = d, name
     return best_name
 
 
-def _sample_foreground(img: Image.Image, size: int = 120) -> list[tuple[int,int,int]]:
-    """Resize to *size*×*size*, convert to RGB, and return only non-background pixels.
-
-    "Background" = luma > 230 (near-white studio backdrop).
-    Falls back to all pixels when fewer than 50 foreground pixels survive.
-    """
+def _sample_foreground(img: Image.Image, size: int = 120):
     thumb = img.convert("RGB").resize((size, size), Image.LANCZOS)
-    pixels = list(thumb.getdata())                       # list of (R,G,B) tuples
+    pixels = list(thumb.getdata())
     fg = [(r, g, b) for r, g, b in pixels
           if (0.299 * r + 0.587 * g + 0.114 * b) < 230]
     return fg if len(fg) >= 50 else pixels
 
 
-def _kmeans_dominant(pixels: list[tuple[int,int,int]],
-                     k: int = 5, iterations: int = 5,
-                     seed: int = 42) -> tuple[tuple[int,int,int], float]:
-    """Pure-Python mini k-means.
-
-    Returns (dominant_centroid_rgb, dominant_cluster_share).
-    dominant_cluster_share is the fraction of pixels in the largest cluster —
-    used by the caller to decide whether the image is multicolor.
-    """
-    # Deterministic seed: pick k evenly-spaced pixels as initial centers
+def _kmeans_dominant(pixels, k: int = 5, iterations: int = 5):
     step = max(1, len(pixels) // k)
     centers = [pixels[i * step] for i in range(k)]
-
     labels = [0] * len(pixels)
     for _ in range(iterations):
-        # Assignment step
         for i, (r, g, b) in enumerate(pixels):
             best_c, best_d = 0, float('inf')
             for ci, (cr, cg, cb) in enumerate(centers):
@@ -119,8 +141,6 @@ def _kmeans_dominant(pixels: list[tuple[int,int,int]],
                 if d < best_d:
                     best_d, best_c = d, ci
             labels[i] = best_c
-
-        # Update step — recompute centroids
         sums   = [[0, 0, 0] for _ in range(k)]
         counts = [0] * k
         for i, (r, g, b) in enumerate(pixels):
@@ -130,39 +150,22 @@ def _kmeans_dominant(pixels: list[tuple[int,int,int]],
         for c in range(k):
             if counts[c]:
                 centers[c] = (sums[c][0] // counts[c],
-                               sums[c][1] // counts[c],
-                               sums[c][2] // counts[c])
-
-    dominant_c = max(range(k), key=lambda c: (labels.count(c) if c < len(centers) else 0))
-    dominant_share = labels.count(dominant_c) / len(pixels) if pixels else 1.0
-    return centers[dominant_c], dominant_share
+                              sums[c][1] // counts[c],
+                              sums[c][2] // counts[c])
+    dominant_c = max(range(k), key=lambda c: labels.count(c))
+    share = labels.count(dominant_c) / len(pixels) if pixels else 1.0
+    return centers[dominant_c], share
 
 
 def detect_color_from_image(image_path: Path) -> str:
-    """Detect the dominant brand color of the jewellery in *image_path*.
-
-    Algorithm:
-      1. Strip near-white background pixels (studio backdrops).
-      2. Run 5-cluster k-means on a 120×120 thumbnail (pure Pillow, no numpy).
-      3. If the largest cluster holds < 78 % of foreground pixels → "Multicolor".
-      4. Otherwise map the dominant centroid to the nearest brand color by
-         squared RGB distance.
-
-    Returns one of the 54 BRAND_COLORS names.  Never raises — falls back to
-    "Multicolor" on any error.
-    """
     try:
         img = Image.open(image_path)
         img = ImageOps.exif_transpose(img)
-
         pixels = _sample_foreground(img)
         centroid, share = _kmeans_dominant(pixels)
-
-        if share < 0.78:          # no single colour dominates → multicolor product
+        if share < 0.78:
             return "Multicolor"
-
         return _nearest_brand_color(*centroid)
-
     except Exception:
         return "Multicolor"
 
@@ -172,7 +175,6 @@ def process_image(path: Path) -> Path:
     try:
         img = Image.open(path)
         img = ImageOps.exif_transpose(img)
-
         if img.mode in ('RGBA', 'P', 'LA'):
             rgba = img.convert('RGBA')
             background = Image.new('RGB', rgba.size, (255, 255, 255))
@@ -180,7 +182,6 @@ def process_image(path: Path) -> Path:
             img = background
         else:
             img = img.convert('RGB')
-
         target_ratio = TARGET_W / TARGET_H
         w, h = img.size
         ratio = w / h
@@ -192,77 +193,232 @@ def process_image(path: Path) -> Path:
             new_h = max(1, int(w / target_ratio))
             top = (h - new_h) // 2
             img = img.crop((0, top, w, top + new_h))
-
         img = img.resize((TARGET_W, TARGET_H), Image.LANCZOS)
-
         new_path = path.with_suffix('.jpg')
         img.save(new_path, 'JPEG', quality=95, optimize=True, progressive=True)
-
         if new_path != path:
-            try:
-                path.unlink()
-            except Exception:
-                pass
+            try: path.unlink()
+            except Exception: pass
         return new_path
     except Exception:
         return path
 
-# ── Category list, tag presets & description templates ───────────────────────
-# Single source of truth for every jewellery category the studio understands.
-# Used to populate the dropdown selects on the frontend (via /tag_presets),
-# to select the static SEO description template, and to ground the Groq
-# title-generation prompt so it can't mistitle a piece as the wrong type.
-CATEGORIES = [
-    'Necklace', 'Choker', 'Pendant',
-    'Earring', 'Ear Cuff',
-    'Maang Tikka', 'Mathapatti', 'Nath',
-    'Bangles', 'Kada / Handcuff', 'Bracelet', 'Hathphool / Hand Harness',
-    'Brooch', 'Ring', 'Hair Accessories',
-]
+# ══════════════════════════════════════════════════════════════════════════════
+# CORE TAG TAXONOMY — generated verbatim from Ishhaara_Core_Tags_Report_Single_Tags
+# Category → Subcategory → exact tag preset. DO NOT normalise spellings here:
+# Shopify automated collections match these strings literally.
+# ══════════════════════════════════════════════════════════════════════════════
+TAXONOMY = {
+    'Necklaces': {
+        'Choker Necklaces': ['Choker Necklaces', 'PPCOD', 'Ethinic', 'Semi Precious Necklaces'],
+        'Choker Bridal Necklace': ['Choker Necklaces', 'PPCOD', 'Choker Bridal Necklace', 'Ethinic', 'Semi Precious Necklaces'],
+        'Long Necklace': ['Ethinic', 'PPCOD', 'Long Necklace', 'Semi Precious Necklaces', 'Long Bridal Necklace'],
+        'Temple Necklace': ['Ethinic', 'Temple Necklace', 'PPCOD', 'Long Necklace'],
+        'Long Bridal Necklace': ['Long Bridal Necklace', 'Ethinic', 'PPCOD', 'Semi Precious Necklaces', 'Long Necklace'],
+        'Pendant Necklace': ['Pendant Necklace', 'PPCOD', 'Ethinic'],
+        'Pearl Necklace': ['PPCOD', 'Ethinic'],
+        'Groom Necklace': ['Long Necklace', 'Ethinic', 'Groom Necklace', 'PPCOD'],
+        'Oxidised Necklace': ['Oxidised Necklace', 'Ethinic', 'PPCOD'],
+    },
+    'Earrings': {
+        'Dangler Earrings': ['Dangler Earrings', 'PPCOD', 'Western', 'Party Wear Earrings'],
+        'Stud Earrings': ['PPCOD', 'Stud Earrings', 'Western', 'Ethinic'],
+        'Earcuff Earrings': ['Earcuff Earrings', 'PPCOD', 'Western'],
+        'Temple Earrings': ['Ethinic', 'PPCOD', 'Temple Earrings'],
+        'Chandbali Earrings': ['Best Sellers', 'Chandbali Earrings', 'PPCOD', 'Ethinic', 'Kundan Earrings', 'Haldi Jewellery'],
+        'Ear Chain': ['Jhumka Earrings', 'Ethinic', 'PPCOD'],
+        'Hoop Earrings': ['Hoop Earrings', 'Western', 'PPCOD', 'Best Sellers', 'Statement Earrings'],
+        'Jhumka Earrings': ['Jhumka Earrings', 'Ethinic', 'PPCOD'],
+        'Oxidised Earrings': ['Oxidised Earrings', 'PPCOD', 'Ethinic', 'Stud Earrings'],
+        'Kundan Earrings': ['Best Sellers', 'Chandbali Earrings', 'Kundan Earrings', 'PPCOD', 'Ethinic', 'Haldi Jewellery'],
+        'Pearl Earrings': ['Pearl Earrings', 'PPCOD', 'Stud Earrings', 'Western', 'Cocktail'],
+        'Bugadi Earrings': ['bugadi_earrings', 'Ethinic', 'PPCOD', 'Earcuff Earrings', 'alia_bhatt'],
+    },
+    'Hand Accessories': {
+        'Rings': ['PPCOD', 'Best Sellers', 'Ethinic'],
+        'Handcuff Bracelets': ['Handcuff Bracelets', 'PPCOD', 'Western'],
+        'Bangle': ['Bangle', 'Ethinic', 'PPCOD', 'Handmade Jewellery', 'Meenakari Jewellery'],
+        'Chooda': ['PPCOD', 'Ethinic', 'Chooda'],
+        'Bracelet': ['PPCOD', 'Bangle', 'Ethinic'],
+        'Hathphool (Hand Harness)': ['Hand Harness', 'PPCOD', 'Ethinic'],
+        'Kaleera': ['PPCOD', 'Kaleera', 'Ethinic'],
+        'Healing Bracelets': ['PPCOD', 'Bangle', 'Ethinic'],
+        'Oxidised Bangle': ['Oxidised Bangle', 'Handcuff Bracelets', 'Ethinic', 'PPCOD'],
+        'Kashmiri Bangles': ['Bangle', 'Kashmiri Bangles', 'Ethinic', 'PPCOD', 'alia_bhatt', 'New Arrivals'],
+        'Chooda Covers': ['Chooda Cover', 'Ethinic', 'PPCOD'],
+        'Pearl Rings': ['Rings', 'Pearl Rings', 'PPCOD', 'Western', 'Party'],
+    },
+    'Hair Accessories': {
+        'Maangtikas': ['Maangtikas', 'Ethinic', 'PPCOD'],
+        'Hair Adornments': ['Hair Adornments', 'PPCOD', 'Ethinic', 'Hair Clips'],
+        'Hairbands': ['Mehendi Jewellery', 'Ethinic', 'Haldi Jewellery', 'PPCOD', 'Hairbands'],
+        'Mathapatti': ['Mathapatti', 'Ethinic', 'PPCOD'],
+        'Choti': ['Choti', 'Ethinic', 'PPCOD'],
+        'Pasa': ['Pasa', 'Ethinic', 'PPCOD'],
+        'Paranda': ['PPCOD', 'Paranda', 'Ethinic'],
+    },
+    'Other Body Jewellery': {
+        'Nath': ['PPCOD', 'Ethinic', 'Nath'],
+        'Kamarband': ['Kamarband', 'Ethinic', 'PPCOD'],
+        'Facelets': ['PPCOD', 'facelets', 'Ethinic', 'New Arrivals'],
+        'Veil / Bridal Dupatta': ['veil', 'PPCOD', 'Ethinic'],
+        'Payal': ['Payal', 'PPCOD', 'Ethinic'],
+    },
+    'Bags': {
+        'Clutch Bags': ['Ethinic', 'PPCOD', 'Clutch Bags', 'Party Wear Bags'],
+        'Oxidised Bags': ['Oxidised Bags', 'Ethinic', 'PPCOD'],
+        'Party Wear Bags': ['Party Wear Bags', 'Ethinic', 'PPCOD', 'Clutch Bags'],
+        'Sling Bags': ['Ethinic', 'PPCOD', 'Party Wear Bags', 'Clutch Bags'],
+        'Potli Bags': ['Ethinic', 'PPCOD', 'Party Wear Bags', 'Clutch Bags'],
+    },
+    'Men & Groom': {
+        'Brooch': ['Ethinic', 'PPCOD', 'Kalingi'],
+        'Mens Jewellery': ['Mens Jewellery', 'PPCOD', 'Stainless Steel Jewellery', 'Western', 'Statement', 'Rings'],
+        'Kalingi': ['Kalingi', 'Ethinic', 'PPCOD'],
+        'Safa': ['PPCOD', 'Ethinic', 'safa'],
+        'Katar': ['Katar', 'Ethinic', 'PPCOD'],
+    },
+    'Bridal & Wedding Sets': {
+        'Full Bridal Set': ['PPCOD', 'Ethinic', 'Full Bridal Set', 'Kundan Necklace'],
+    },
+    'Gifting & Lifestyle': {
+        'Rakhi (Deisgner Rakhi)': ['PPCOD', 'Ethinic', 'Deisgner Rakhi'],
+        'Organiser': ['Ethinic', 'Organiser', 'PPCOD'],
+        'Wrist Watches': ['Ethinic', 'Organiser', 'PPCOD'],
+        'Shagun Box/Lifafa': ['PPCOD', 'Shagun Box', 'Ethinic'],
+        'Phone Case': ['PPCOD', 'Phone Case', 'Ethinic'],
+        'Hamper': ['Ethinic', 'PPCOD', 'Hamper'],
+        'Letter': ['Letter', 'Ethinic', 'PPCOD'],
+    },
+}
+# Derived lookups ─────────────────────────────────────────────────────────────
+ALL_SUBCATEGORIES = {sub: cat for cat, subs in TAXONOMY.items() for sub in subs}
+ALL_TAGS = sorted({t for subs in TAXONOMY.values() for tags in subs.values() for t in tags},
+                  key=str.lower)
 
-# Tag presets sourced directly from the brand's generalized group-tag sheet.
-# Keyed by the same category names used above so the frontend can pull a
-# ready-made tag string the moment a seller picks a category.
-TAG_PRESETS = {
-    'Necklace':                 'PPCOD, Long Necklace, Statement Necklace, Stone Necklace, Temple Necklace, Ethnic, Sabyasachi',
-    'Choker':                   'PPCOD, Choker Necklaces, Choker Set, Choker Bridal Necklace, Ethnic, New Arrivals',
-    'Pendant':                  'PPCOD, Pendant Necklace, AD Jewellery, Western, New Arrivals',
-    'Earring':                  'PPCOD, COD, Dangler Earrings, Pearl Earrings, Bugadi Earrings, Statement Earrings, Ethnic, Western',
-    'Ear Cuff':                 'PPCOD, Earcuff Earrings, Designer Earcuffs, Ethnic, Sabyasachi, New Arrivals',
-    'Maang Tikka':              'PPCOD, Maangtikas, Tikka, Teeka, Mang Tikka, Ethnic, New Arrivals',
-    'Mathapatti':               'PPCOD, Mathapatti, Matha Patti, Head Jewellery, Passa, Bridal, Ethnic, New Arrivals',
-    'Nath':                     'PPCOD, Nath, Nose Ring, Nathni, Bridal Nath, Ethnic, New Arrivals',
-    'Bangles':                  'PPCOD, Bangle, Bangles, Kada, Kangan, Ethnic, New Arrivals',
-    'Kada / Handcuff':          'PPCOD, Handcuff Bracelets, Kada, AD Jewellery, Ethnic, New Arrivals',
-    'Bracelet':                 'PPCOD, Bracelet, Crystal Bracelets, Stone Bracelets, Western, Ethnic, New Arrivals',
-    'Hathphool / Hand Harness': 'PPCOD, Hand Harness, Hath Phool, Haathphool, Hand Jewellery, Ethnic',
-    'Brooch':                   'PPCOD, Brooch, Brooch for Men, Blazer Brooch, Ethnic, New Arrivals',
-    'Ring':                     'PPCOD, Ring, Rings, Statement Ring, Adjustable Ring, Ethnic, Western, New Arrivals',
-    'Hair Accessories':         'PPCOD, Hair Pin, Hair Clip, Juda Pin, Hair Vine, Ethnic, New Arrivals',
+def preset_tags_for(subcategory: str):
+    cat = ALL_SUBCATEGORIES.get(subcategory)
+    if not cat:
+        return []
+    return TAXONOMY[cat][subcategory]
+
+# ── Per-subcategory title grounding for Groq ─────────────────────────────────
+# The seller picks the subcategory; the model must NEVER override it with a
+# guess from the photo. Specific hints below for pieces that are commonly
+# confused; everything else gets a strict generic hint built at call time.
+SUBCATEGORY_TITLE_HINTS = {
+    # Necklaces
+    'Choker Necklaces':      'This is a CHOKER (short necklace sitting snugly at the base of the throat). Title must include "Choker" — e.g. "Kundan Choker Necklace Set".',
+    'Choker Bridal Necklace':'This is a BRIDAL CHOKER SET. Title must include "Choker" and read bridal — e.g. "Polki Bridal Choker Necklace Set".',
+    'Long Necklace':         'This is a LONG NECKLACE (rani haar / long strand well below the collarbone). Title must include "Long Necklace" or "Rani Haar".',
+    'Temple Necklace':       'This is a TEMPLE NECKLACE (South-Indian temple jewellery motifs: deities, coins, nagas). Title must include "Temple Necklace" or "Temple Jewellery".',
+    'Long Bridal Necklace':  'This is a LONG BRIDAL NECKLACE. Title must include "Long" and "Necklace" and read bridal.',
+    'Pendant Necklace':      'This is a PENDANT NECKLACE (single drop/charm on a slim chain). Title should read like "[Stone/Style] Pendant Necklace".',
+    'Pearl Necklace':        'This is a PEARL NECKLACE (pearl strands or pearl-dominant). Title must include "Pearl Necklace".',
+    'Groom Necklace':        'This is a GROOM NECKLACE (men\'s wedding neckpiece, often pearl mala / dulha haar). Title must include "Groom Necklace" or "Dulha Mala".',
+    'Oxidised Necklace':     'This is an OXIDISED NECKLACE (blackened german-silver finish). Title must include "Oxidised" and "Necklace".',
+    # Earrings
+    'Dangler Earrings':      'These are DANGLER EARRINGS (long drop earrings that swing below the lobe). Title must include "Dangler Earrings" or "Drop Earrings".',
+    'Stud Earrings':         'These are STUD EARRINGS (sit flush on the lobe, no drop). Title must include "Stud Earrings" or "Studs".',
+    'Earcuff Earrings':      'This is an EAR CUFF (wraps the ear cartilage, no piercing needed). Title must include "Ear Cuff" or "Earcuff".',
+    'Temple Earrings':       'These are TEMPLE EARRINGS (South-Indian temple jewellery motifs). Title must include "Temple Earrings" or "Temple Jewellery".',
+    'Chandbali Earrings':    'These are CHANDBALI EARRINGS (crescent-moon shaped). Title must include "Chandbali".',
+    'Ear Chain':             'This is an EAR CHAIN / SUI DHAGA (chain threads through or drapes from the ear, often linking to the hair). Title must include "Ear Chain" or "Sui Dhaga".',
+    'Hoop Earrings':         'These are HOOP EARRINGS (circular hoops). Title must include "Hoop Earrings" or "Hoops".',
+    'Jhumka Earrings':       'These are JHUMKA EARRINGS (dome/bell shaped drops). Title must include "Jhumka" or "Jhumki".',
+    'Oxidised Earrings':     'These are OXIDISED EARRINGS (blackened german-silver finish). Title must include "Oxidised" and "Earrings".',
+    'Kundan Earrings':       'These are KUNDAN EARRINGS (kundan/glass-stone setting). Title must include "Kundan" and "Earrings".',
+    'Pearl Earrings':        'These are PEARL EARRINGS (pearl-dominant). Title must include "Pearl Earrings".',
+    'Bugadi Earrings':       'This is a BUGADI (Maharashtrian upper-ear/helix ornament, worn without lobe piercing). Title must include "Bugadi".',
+    # Hand Accessories
+    'Rings':                 'This is a RING (finger jewellery). Title must include "Ring".',
+    'Pearl Rings':           'This is a PEARL RING. Title must include "Pearl" and "Ring".',
+    'Handcuff Bracelets':    'This is a HANDCUFF / KADA (broad open-cuff statement wrist piece). Title must include "Handcuff Bracelet" or "Kada".',
+    'Bangle':                'This is a set of BANGLES (closed-circle wrist jewellery, worn stacked). Title must include "Bangle", "Bangles" or "Kangan".',
+    'Chooda':                'This is a CHOODA (bridal red-and-white bangle set, Punjabi wedding tradition). Title must include "Chooda" or "Choora".',
+    'Bracelet':              'This is a BRACELET (delicate chain-link or beaded wrist piece, not a broad cuff). Title must include "Bracelet".',
+    'Hathphool (Hand Harness)': 'This is a HATHPHOOL (ring-to-wrist piece connected by chains across the back of the hand). Title must include "Hathphool" only — do NOT use the words "Hand Harness" anywhere in the title.',
+    'Kaleera':               'This is a KALEERA (dangling gold ornaments tied to the bridal chooda). Title must include "Kaleera" or "Kalira".',
+    'Healing Bracelets':     'This is a HEALING BRACELET (gemstone/crystal bead bracelet). Title must include "Bracelet" and name the stone if visible.',
+    'Oxidised Bangle':       'This is an OXIDISED BANGLE (blackened german-silver finish). Title must include "Oxidised" and "Bangle" or "Kada".',
+    'Kashmiri Bangles':      'These are KASHMIRI BANGLES (enamel/meenakari Kashmiri-style). Title must include "Kashmiri" and "Bangle".',
+    'Chooda Covers':         'This is a CHOODA COVER (protective/decorative sleeve worn over the bridal chooda). Title must include "Chooda Cover".',
+    # Hair Accessories
+    'Maangtikas':            'This is a MAANG TIKKA (chain with pendant sitting on the centre parting onto the forehead). Title must include "Maang Tikka" or "Teeka".',
+    'Hair Adornments':       'This is a HAIR ADORNMENT (hairpin, clip, juda pin or hair vine). Title must name the exact type, e.g. "Juda Pin", "Hair Vine", "Hair Clip".',
+    'Hairbands':             'This is a HAIRBAND / HEADBAND. Title must include "Hairband" or "Headband".',
+    'Mathapatti':            'This is a MATHAPATTI (elaborate head jewellery with chains across the forehead into the hairline). Title must include "Mathapatti" or "Matha Patti".',
+    'Choti':                 'This is a CHOTI / JADA (braid ornament running down the plait). Title must include "Choti" or "Jada".',
+    'Pasa':                  'This is a PASA / PASSA (side-of-head ornament worn on one side of the hair). Title must include "Pasa" or "Passa".',
+    'Paranda':               'This is a PARANDA (tasselled braid accessory woven into the plait). Title must include "Paranda".',
+    # Other Body Jewellery
+    'Nath':                  'This is a NATH (nose ring, sometimes chain-linked to the hair). Title must include "Nath" or "Nose Ring".',
+    'Kamarband':             'This is a KAMARBAND (waist belt/chain worn over saree or lehenga). Title must include "Kamarband" or "Waist Belt".',
+    'Facelets':              'This is a FACELET (decorative face chain/jewellery). Title must include "Facelet" or "Face Chain".',
+    'Veil / Bridal Dupatta': 'This is a BRIDAL VEIL / DUPATTA. Title must include "Veil" or "Bridal Dupatta". It is fabric, not metal jewellery — describe embroidery/border work.',
+    'Payal':                 'This is a PAYAL (anklet). Title must include "Payal" or "Anklet".',
+    # Bags
+    'Clutch Bags':           'This is a CLUTCH BAG. Title must include "Clutch". Describe the material and embellishment (embroidered, brocade, stone-studded).',
+    'Oxidised Bags':         'This is an OXIDISED-METAL BAG/CLUTCH. Title must include "Oxidised" and "Bag" or "Clutch".',
+    'Party Wear Bags':       'This is a PARTY WEAR BAG. Title must include "Bag" or "Clutch" and read festive/party.',
+    'Sling Bags':            'This is a SLING BAG (long strap, crossbody). Title must include "Sling Bag".',
+    'Potli Bags':            'This is a POTLI BAG (drawstring pouch bag). Title must include "Potli".',
+    # Men & Groom
+    'Brooch':                'This is a BROOCH (pin-back accessory for blazers, sherwanis, sarees). Title must include "Brooch".',
+    'Mens Jewellery':        'This is MEN\'S JEWELLERY (chain, bracelet, ring or stud for men). Title must name the exact piece and read masculine, e.g. "Men\'s Stainless Steel Chain".',
+    'Kalingi':               'This is a KALINGI (groom\'s turban ornament pinned to the safa). Title must include "Kalingi" or "Sarpech".',
+    'Safa':                  'This is a SAFA (groom\'s turban). Title must include "Safa" or "Turban". It is fabric headwear, not metal jewellery.',
+    'Katar':                 'This is a KATAR (ceremonial groom\'s dagger accessory). Title must include "Katar".',
+    # Bridal & Wedding Sets
+    'Full Bridal Set':       'This is a FULL BRIDAL JEWELLERY SET (necklace + earrings + tikka, possibly more). Title must include "Bridal Set" and name the craft, e.g. "Kundan Full Bridal Jewellery Set".',
+    # Gifting & Lifestyle
+    'Rakhi (Deisgner Rakhi)':'This is a DESIGNER RAKHI (Raksha Bandhan wrist thread). Title must include "Rakhi" (use the correct spelling "Designer Rakhi" in the title).',
+    'Organiser':             'This is a JEWELLERY ORGANISER (storage box/case). Title must include "Organiser" or "Jewellery Box".',
+    'Wrist Watches':         'This is a WRIST WATCH. Title must include "Watch".',
+    'Shagun Box/Lifafa':     'This is a SHAGUN BOX or LIFAFA (gift envelope/box). Title must include "Shagun Box" or "Lifafa".',
+    'Phone Case':            'This is a PHONE CASE. Title must include "Phone Case" and the style, e.g. "Embellished Phone Case".',
+    'Hamper':                'This is a GIFT HAMPER. Title must include "Hamper" and hint at contents/occasion.',
+    'Letter':                'This is a DECORATIVE LETTER / INITIAL piece. Title must include "Letter" or "Initial".',
 }
 
-# Hints fed straight into the Groq prompt so the model grounds the title in
-# the seller-picked category instead of guessing the piece type from the
-# photo alone (which is what was causing mistitled listings).
-CATEGORY_TITLE_HINTS = {
-    'Necklace':                 'This is a NECKLACE (worn around the full neck, longer chain/strand). Use terms like Long Necklace, Statement Necklace, Temple Necklace, Kundan Necklace Set.',
-    'Choker':                   'This is a CHOKER (short necklace sitting snugly at the base of the throat). Title must include "Choker" — e.g. "Kundan Choker Necklace Set", "Bridal Choker Set".',
-    'Pendant':                  'This is a PENDANT NECKLACE (a single drop/charm on a slim chain). Title should read like "[Stone/Style] Pendant Necklace".',
-    'Earring':                  'This is a pair of EARRINGS. Identify the exact earring style shown — studs, jhumkas, danglers, hoops, chandbalis, or bugadi — and name it precisely in the title.',
-    'Ear Cuff':                 'This is an EAR CUFF (clip-on cartilage/ear-wrap piece worn without a piercing). Title must include "Ear Cuff" or "Earcuff".',
-    'Maang Tikka':              'This is a MAANG TIKKA / TEEKA (a chain with a pendant that sits on the centre parting, hanging onto the forehead). Title must include "Maang Tikka" or "Teeka".',
-    'Mathapatti':               'This is a MATHAPATTI / MATHA PATTI (an elaborate head jewellery piece with chains that spread across the forehead and into the hairline, often with a side passa). Title must include "Mathapatti" or "Matha Patti".',
-    'Nath':                     'This is a NATH (a nose ring or nose pin, sometimes chain-linked to the hair). Title must include "Nath" or "Nose Ring".',
-    'Bangles':                  'This is a set of BANGLES (closed-circle wrist jewellery, worn stacked). Title must include "Bangle" or "Bangles" or "Kangan".',
-    'Kada / Handcuff':          'This is a KADA / HANDCUFF BRACELET (a broad, often open-cuff, statement wrist piece). Title must include "Kada" or "Handcuff Bracelet".',
-    'Bracelet':                 'This is a BRACELET (a delicate chain-link or beaded wrist piece, not a broad cuff). Title must include "Bracelet".',
-    'Hathphool / Hand Harness': 'This is a HATHPHOOL (a ring-to-wrist piece connected by chains across the back of the hand). Title must include "Hathphool" only — do NOT use the words "Hand Harness" anywhere in the title, even though that is the category name.',
-    'Brooch':                   'This is a BROOCH (a pin-back accessory for blazers, sarees, or dupattas). Title must include "Brooch".',
-    'Ring':                     'This is a RING (finger jewellery). Title must include "Ring".',
-    'Hair Accessories':         'This is a HAIR ACCESSORY (hairpin, clip, juda pin, or hair vine). Title must include the specific accessory type, e.g. "Hair Pin", "Juda Pin", "Hair Vine".',
+def title_hint_for(category: str, subcategory: str) -> str:
+    hint = SUBCATEGORY_TITLE_HINTS.get(subcategory)
+    if hint:
+        return hint
+    return (f'This is a {subcategory.upper()} from the {category} range. '
+            f'The title must clearly identify the piece as a {subcategory} — never as any other product type.')
+
+# ── SEO description templates ────────────────────────────────────────────────
+# The brand's long-form category copy, keyed by template name. Subcategories
+# map into these via SUBCATEGORY_TEMPLATE_MAP; anything unmapped falls back to
+# the AI-written description.
+SUBCATEGORY_TEMPLATE_MAP = {
+    'Choker Necklaces': 'Choker', 'Choker Bridal Necklace': 'Choker',
+    'Pendant Necklace': 'Pendant',
+    'Long Necklace': 'Necklace', 'Temple Necklace': 'Necklace',
+    'Long Bridal Necklace': 'Necklace', 'Pearl Necklace': 'Necklace',
+    'Groom Necklace': 'Necklace', 'Oxidised Necklace': 'Necklace',
+    'Earcuff Earrings': 'Ear Cuff',
+    'Dangler Earrings': 'Earring', 'Stud Earrings': 'Earring',
+    'Temple Earrings': 'Earring', 'Chandbali Earrings': 'Earring',
+    'Ear Chain': 'Earring', 'Hoop Earrings': 'Earring',
+    'Jhumka Earrings': 'Earring', 'Oxidised Earrings': 'Earring',
+    'Kundan Earrings': 'Earring', 'Pearl Earrings': 'Earring',
+    'Bugadi Earrings': 'Earring',
+    'Rings': 'Ring', 'Pearl Rings': 'Ring',
+    'Handcuff Bracelets': 'Kada / Handcuff',
+    'Bangle': 'Bangles', 'Kashmiri Bangles': 'Bangles', 'Oxidised Bangle': 'Bangles',
+    'Bracelet': 'Bracelet', 'Healing Bracelets': 'Bracelet',
+    'Hathphool (Hand Harness)': 'Hathphool / Hand Harness',
+    'Maangtikas': 'Maang Tikka',
+    'Mathapatti': 'Mathapatti',
+    'Hair Adornments': 'Hair Accessories', 'Hairbands': 'Hair Accessories',
+    'Choti': 'Hair Accessories', 'Pasa': 'Hair Accessories', 'Paranda': 'Hair Accessories',
+    'Nath': 'Nath',
+    'Brooch': 'Brooch',
 }
 
-CATEGORY_DESCRIPTIONS = {
+TEMPLATE_LIBRARY = {
     'Necklace': """Hello lovely souls! Don't you agree that your look is never complete without a breathtaking necklace? A necklace set isn't just an accessory. It is the star of the show, ensuring you make a lasting impression every time you step out of your house.
 Ishhaara's necklaces for women whether it be a gold choker necklace set, pearl necklace, silver necklace set, or long necklace offer a phenomenal look. Pair these necklace sets and instantly make a wonderful appeal wherever you go. So, grab this chance and quickly check out the standout features of Ishhaara's necklace.
 Product Specification
@@ -575,8 +731,10 @@ _SECTION_HEADERS = {'Product Specification', 'Key Highlights', 'Styling Inspirat
 _LABEL_LINE_RE = re.compile(r'^([A-Za-z][A-Za-z \u2019\']{1,30}):\s*(.*)$')
 _NUMBERED_RE = re.compile(r'^(\d+\.\s*[^:]+:)\s*(.*)$')
 
-def template_description_html(category):
-    text = CATEGORY_DESCRIPTIONS.get(category)
+def template_description_html(subcategory):
+    """Rich SEO template for the subcategory, or None → AI description fallback."""
+    key = SUBCATEGORY_TEMPLATE_MAP.get(subcategory)
+    text = TEMPLATE_LIBRARY.get(key) if key else None
     if not text:
         return None
     paragraphs = [p.strip() for p in text.split('\n') if p.strip()]
@@ -586,13 +744,16 @@ def template_description_html(category):
             html_parts.append(f'<p><strong>{p}</strong></p>'); continue
         m = _NUMBERED_RE.match(p)
         if m:
-            html_parts.append(f'<p><strong>{m.group(1)}</strong> {m.group(2)}'); continue
+            html_parts.append(f'<p><strong>{m.group(1)}</strong> {m.group(2)}</p>'); continue
         m = _LABEL_LINE_RE.match(p)
         if m:
             html_parts.append(f'<p><strong>{m.group(1)}:</strong> {m.group(2)}</p>'); continue
         html_parts.append(f'<p>{p}</p>')
     return ''.join(html_parts)
 
+# ══════════════════════════════════════════════════════════════════════════════
+# Flask app
+# ══════════════════════════════════════════════════════════════════════════════
 def random_digits(n=10):
     return ''.join(str(random.randint(0, 9)) for _ in range(n))
 
@@ -608,10 +769,9 @@ SETTINGS_FILE = Path('settings.json')
 
 MAX_CONCURRENT = 3
 upload_semaphore = threading.Semaphore(MAX_CONCURRENT)
+HISTORY_LOCK = threading.Lock()
 
-import requests
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── Persistence helpers ───────────────────────────────────────────────────────
 def load_settings():
     if SETTINGS_FILE.exists():
         try: return json.loads(SETTINGS_FILE.read_text())
@@ -625,8 +785,9 @@ def load_history():
     return []
 
 def append_history(row):
-    h = load_history(); h.insert(0, row); h = h[:500]
-    HISTORY_FILE.write_text(json.dumps(h, indent=2))
+    with HISTORY_LOCK:
+        h = load_history(); h.insert(0, row); h = h[:1000]
+        HISTORY_FILE.write_text(json.dumps(h, indent=2))
 
 def log(sid, msg, level='info'):
     socketio.emit('log', {'msg': msg, 'level': level}, to=sid)
@@ -638,31 +799,51 @@ def slugify(text):
     text = re.sub(r'-+', '-', text)
     return text.strip('-') or f'product-{int(time.time())}'
 
+def sanitize_sku(sku: str) -> str:
+    return re.sub(r'[^A-Z0-9\-\.]', '', (sku or '').strip().upper())
+
 def _strip_phrase(text, phrase):
-    """Remove *phrase* (case-insensitive, whole-word) from *text* and tidy up
-    any leftover double spaces or stray connector words/punctuation left behind
-    (e.g. "Kundan Hathphool Hand Harness with Pearls" -> "Kundan Hathphool with Pearls")."""
+    """Remove *phrase* (case-insensitive) from *text*, tidying leftover joins."""
     if not text:
         return text
     cleaned = re.sub(re.escape(phrase), '', text, flags=re.IGNORECASE)
-    cleaned = re.sub(r'\s{2,}', ' ', cleaned)          # collapse double spaces
-    cleaned = re.sub(r'\s+([,\-])', r'\1', cleaned)    # trailing space before , or -
-    cleaned = re.sub(r'^[\s,\-]+|[\s,\-]+$', '', cleaned)  # trim stray leading/trailing junk
+    cleaned = re.sub(r'\s{2,}', ' ', cleaned)
+    cleaned = re.sub(r'\s+([,\-])', r'\1', cleaned)
+    cleaned = re.sub(r'^[\s,\-]+|[\s,\-]+$', '', cleaned)
     return cleaned.strip() or text
 
-def calc_sp(cp: float, markup: float = 4.0) -> int:
-    raw = cp * markup
-    tiers = []
-    for base in range(1, 100):
-        for exp in (1, 2, 3, 4, 5):
-            tiers.append(base * (10 ** exp) - 1)
-    tiers = sorted(set(tiers))
-    for t in tiers:
-        if t >= raw:
-            return t
-    base = int(raw)
-    remainder = base % 1000
-    return base - remainder + 999 if remainder < 999 else base + 999
+# ── Shopify request wrapper — retries on 429 & 5xx, honours Retry-After ──────
+SHOPIFY_MAX_RETRIES = 4
+
+def shopify_request(method, url, sid=None, **kwargs):
+    kwargs.setdefault('timeout', 30)
+    last_exc = None
+    for attempt in range(SHOPIFY_MAX_RETRIES):
+        try:
+            resp = requests.request(method, url, **kwargs)
+            if resp.status_code == 429 or resp.status_code >= 500:
+                retry_after = resp.headers.get('Retry-After')
+                try:    delay = float(retry_after) if retry_after else 1.5 * (2 ** attempt)
+                except Exception: delay = 1.5 * (2 ** attempt)
+                if attempt < SHOPIFY_MAX_RETRIES - 1:
+                    if sid:
+                        log(sid, f'⏳ Shopify busy (HTTP {resp.status_code}) — retrying in {delay:.0f}s', 'muted')
+                    time.sleep(delay)
+                    continue
+            return resp
+        except requests.exceptions.RequestException as e:
+            last_exc = e
+            if attempt < SHOPIFY_MAX_RETRIES - 1:
+                time.sleep(1.5 * (2 ** attempt))
+                continue
+    raise last_exc or RuntimeError('Shopify request failed after retries')
+
+def shopify_credentials():
+    settings = load_settings()
+    store = (settings.get('shopify_store') or os.environ.get('SHOPIFY_STORE', '')) \
+        .replace('https://', '').replace('http://', '').rstrip('/')
+    token = settings.get('shopify_token') or os.environ.get('SHOPIFY_TOKEN', '')
+    return store, token
 
 # ── Groq rate limiting / retry ────────────────────────────────────────────────
 GROQ_CALL_LOCK = threading.Lock()
@@ -680,11 +861,11 @@ def call_groq_with_backoff(payload, headers, sid):
             GROQ_LAST_CALL_AT[0] = time.time()
         try:
             resp = requests.post('https://api.groq.com/openai/v1/chat/completions',
-                                  headers=headers, json=payload, timeout=30)
+                                 headers=headers, json=payload, timeout=30)
             if resp.status_code == 429:
                 retry_after = resp.headers.get('Retry-After')
                 try:    delay = float(retry_after) if retry_after else 2 ** (attempt + 1)
-                except: delay = 2 ** (attempt + 1)
+                except Exception: delay = 2 ** (attempt + 1)
                 log(sid, f'⏳ Groq rate limit — retrying in {delay:.0f}s (attempt {attempt+1}/{GROQ_MAX_RETRIES})', 'muted')
                 time.sleep(delay); last_exc = requests.exceptions.HTTPError('429'); continue
             resp.raise_for_status()
@@ -696,8 +877,8 @@ def call_groq_with_backoff(payload, headers, sid):
             continue
     raise last_exc or RuntimeError('Groq request failed after retries')
 
-# ── Groq: generate product fields ─────────────────────────────────────────────
-def generate_product_details(image_paths, sku, sid, category=None):
+# ── Groq: generate product fields (grounded per subcategory) ─────────────────
+def generate_product_details(image_paths, sku, sid, category=None, subcategory=None):
     settings = load_settings()
     groq_key = settings.get('groq_api_key') or os.environ.get('GROQ_API_KEY', '')
 
@@ -707,42 +888,47 @@ def generate_product_details(image_paths, sku, sid, category=None):
         return {'title': sku, 'description': '', 'handle': slug,
                 'seo_title': sku, 'seo_description': '', 'alt_text': sku, 'tags': ''}
 
-    log(sid, f'🤖 Generating product content via Groq for {sku}…')
+    log(sid, f'🤖 Writing product content via Groq for {sku}…')
     try:
         image_path = image_paths[0]
-        img_bytes = image_path.read_bytes()
-        b64 = base64.b64encode(img_bytes).decode()
+        b64 = base64.b64encode(image_path.read_bytes()).decode()
         ext = image_path.suffix.lower().lstrip('.')
         mime = {'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png','webp':'image/webp'}.get(ext,'image/jpeg')
         vendor = settings.get('product_vendor') or os.environ.get('PRODUCT_VENDOR', 'the brand')
 
-        category_block = ''
-        if category:
-            hint = CATEGORY_TITLE_HINTS.get(category, '')
-            category_block = f"""
-THE SELLER HAS ALREADY IDENTIFIED THE CATEGORY AS: "{category}".
+        grounding = ''
+        if subcategory:
+            hint = title_hint_for(category or ALL_SUBCATEGORIES.get(subcategory, ''), subcategory)
+            preset = ', '.join(preset_tags_for(subcategory))
+            grounding = f"""
+THE SELLER HAS ALREADY CLASSIFIED THIS PIECE:
+  Category:    {category or ALL_SUBCATEGORIES.get(subcategory, '—')}
+  Subcategory: {subcategory}
 {hint}
-Do NOT override this with a different jewellery type guessed from the photo — ground the title in "{category}" above everything else. If the image looks ambiguous, still trust the seller-provided category."""
+Do NOT override this with a different product type guessed from the photo — ground the title in the seller's subcategory above everything else. If the image looks ambiguous, still trust the classification.
+The store's core tags for this subcategory are: {preset}. Your "tags" field should ADD descriptive tags (style, occasion, finish, stone) — do not repeat the core tags."""
+        elif category:
+            grounding = f'\nTHE SELLER HAS CLASSIFIED THIS PIECE UNDER: "{category}". Ground the title in that category.'
 
         prompt = f"""You are an expert jewellery copywriter for {vendor}, an Indian fashion jewellery brand.
-The SKU is {sku}. Study the product image carefully — it is a piece of jewellery.
-{category_block}
+The SKU is {sku}. Study the product image carefully.
+{grounding}
 
 IMPORTANT RULES:
-- Title must name the jewellery type specifically (e.g. "Kundan Choker Necklace Set", "Oxidised Jhumka Earrings", "Meenakari Bangle", "Temple Jewellery Maang Tikka"). Never use clothing terms.
-- Use Indian jewellery vocabulary where relevant: Kundan, Polki, Meenakari, Jadau, Oxidised, Temple, Antique, Filigree, Jhumka, Chandbali, Maang Tikka, Matha Patti, Nath, Hathphool, Kamarband, Bajuband, Choker, Layered, Statement, etc.
-- Tags must be jewellery-only: piece type, style, occasion (wedding, festive, bridal, casual, ethnic), finish (gold-plated, silver-plated, antique, oxidised), and stone if visible.
-- Description must focus on jewellery: metal finish, stone/bead type, craftsmanship technique, and occasion suitability. No clothing references.
+- Title must name the product type specifically (e.g. "Kundan Choker Necklace Set", "Oxidised Jhumka Earrings", "Meenakari Bangle"). Never use clothing terms.
+- Use Indian jewellery vocabulary where relevant: Kundan, Polki, Meenakari, Jadau, Oxidised, Temple, Antique, Filigree, Jhumka, Chandbali, Maang Tikka, Matha Patti, Nath, Hathphool, Kamarband, Choker, Layered, Statement, etc.
+- Tags must describe the product only: style, occasion (wedding, festive, bridal, haldi, mehendi, casual), finish (gold-plated, silver-plated, antique, oxidised), and stone/material if visible.
+- Description must cover: product type and style, metal finish and stones/beads, craftsmanship and occasion. No clothing references.
 
 Respond ONLY with a valid JSON object (no markdown, no extra text):
 {{
-  "title": "Specific jewellery name using Indian jewellery terms, 4-8 words",
-  "description": "2-3 sentence HTML description covering: jewellery type and style, metal finish and stones/beads, craftsmanship and occasion. Use <strong> tags on key feature labels only.",
+  "title": "Specific product name using Indian jewellery terms, 4-8 words",
+  "description": "2-3 sentence HTML description. Use <strong> tags on key feature labels only.",
   "handle": "url-slug-from-title-lowercase-hyphens",
   "seo_title": "Buy [Title] Online - {vendor} (max 60 chars)",
   "seo_description": "Buy [Title] from {vendor}. Shop handcrafted Indian jewellery online. (max 160 chars)",
   "alt_text": "{vendor} [Title] — handcrafted Indian jewellery",
-  "tags": "comma-separated jewellery tags: piece type, style, occasion, finish, stone/material"
+  "tags": "comma-separated descriptive tags: style, occasion, finish, stone/material"
 }}"""
 
         headers = {'Authorization': f'Bearer {groq_key}', 'Content-Type': 'application/json'}
@@ -756,9 +942,9 @@ Respond ONLY with a valid JSON object (no markdown, no extra text):
         }
         resp = call_groq_with_backoff(payload, headers, sid)
         content = resp.json()['choices'][0]['message']['content'].strip()
-        content = content.replace('```json','').replace('```','').strip()
+        content = content.replace('```json', '').replace('```', '').strip()
         result = json.loads(content)
-        if category == 'Hathphool / Hand Harness' and result.get('title'):
+        if subcategory == 'Hathphool (Hand Harness)' and result.get('title'):
             result['title'] = _strip_phrase(result['title'], 'Hand Harness')
         result['handle'] = slugify(result.get('handle', result.get('title', sku)))
         log(sid, f'✅ Title: {result.get("title")}', 'success')
@@ -769,15 +955,29 @@ Respond ONLY with a valid JSON object (no markdown, no extra text):
         return {'title': sku, 'description': '', 'handle': slug,
                 'seo_title': sku, 'seo_description': '', 'alt_text': sku, 'tags': ''}
 
+def merged_tags(subcategory, manual_tags, ai_tags):
+    """Core preset tags first (exact strings), then manual/AI extras, deduped
+    case-insensitively while preserving original casing & order."""
+    ordered = []
+    seen = set()
+    def add_all(source):
+        for t in source:
+            t = t.strip()
+            if t and t.lower() not in seen:
+                seen.add(t.lower()); ordered.append(t)
+    add_all(preset_tags_for(subcategory) if subcategory else [])
+    add_all((manual_tags or '').split(','))
+    add_all((ai_tags or '').split(','))
+    return ', '.join(ordered)
+
 # ── Shopify: publish to all sales channels ────────────────────────────────────
 def publish_to_all_channels(base_url, headers, product_id, sid):
-    store_host = base_url.split('/admin/api/')[0].replace('https://','')
+    store_host = base_url.split('/admin/api/')[0].replace('https://', '')
     api_version = base_url.split('/admin/api/')[1]
     gql_url = f'https://{store_host}/admin/api/{api_version}/graphql.json'
-    gql_headers = {k: v for k, v in headers.items()}
     try:
         pub_query = '{ publications(first: 25) { edges { node { id name } } } }'
-        r = requests.post(gql_url, headers=gql_headers, json={'query': pub_query}, timeout=30)
+        r = shopify_request('POST', gql_url, sid=sid, headers=headers, json={'query': pub_query})
         r.raise_for_status()
         data = r.json()
         if 'errors' in data:
@@ -793,12 +993,13 @@ def publish_to_all_channels(base_url, headers, product_id, sid):
           }
         }"""
         variables = {'id': gid, 'input': [{'publicationId': p['node']['id']} for p in pubs]}
-        r2 = requests.post(gql_url, headers=gql_headers,
-                            json={'query': mutation, 'variables': variables}, timeout=30)
+        r2 = shopify_request('POST', gql_url, sid=sid, headers=headers,
+                             json={'query': mutation, 'variables': variables})
         r2.raise_for_status()
         result = r2.json()
-        errs = result.get('data',{}).get('publishablePublish',{}).get('userErrors',[])
-        if errs: log(sid, f'⚠️ Channel publish errors: {errs}', 'error')
+        errs = result.get('data', {}).get('publishablePublish', {}).get('userErrors', [])
+        if errs:
+            log(sid, f'⚠️ Channel publish errors: {errs}', 'error')
         else:
             names = ', '.join(p['node']['name'] for p in pubs)
             log(sid, f'✅ Published to all sales channels ({names})', 'success')
@@ -806,21 +1007,21 @@ def publish_to_all_channels(base_url, headers, product_id, sid):
         log(sid, f'⚠️ Could not publish to all sales channels: {e}', 'error')
 
 def set_inventory_item_details(base_url, headers, inventory_item_id, hs_code_clean,
-                                country_of_origin, cost_price, sid, label=''):
+                               country_of_origin, cost_price, sid, label=''):
     cost_payload = {}
     if cost_price not in (None, '', 0):
         cost_payload['cost'] = str(cost_price)
     for attempt in range(2):
         try:
-            resp = requests.put(
+            resp = shopify_request('PUT',
                 f'{base_url}/inventory_items/{inventory_item_id}.json',
-                headers=headers,
+                sid=sid, headers=headers,
                 json={'inventory_item': {
                     'id': inventory_item_id,
                     'harmonized_system_code': hs_code_clean,
                     'country_code_of_origin': country_of_origin,
                     **cost_payload,
-                }}, timeout=30)
+                }})
             if resp.ok:
                 saved = resp.json().get('inventory_item', {})
                 ok = (saved.get('harmonized_system_code') == hs_code_clean and
@@ -839,43 +1040,42 @@ def set_inventory_item_details(base_url, headers, inventory_item_id, hs_code_cle
 
 # ── Shopify: create product ───────────────────────────────────────────────────
 def create_shopify_product(image_paths, sku, selling_price, details, sid,
-                            manual_title=None, category=None, manual_tags=None,
-                            weight_g=None, hs_code=None, country_of_origin=None,
-                            inventory_qty=None, cost_price=None,
-                            colors=None, sizes=None):
+                           manual_title=None, category=None, subcategory=None,
+                           manual_tags=None, weight_g=None, hs_code=None,
+                           country_of_origin=None, inventory_qty=None,
+                           cost_price=None, colors=None, sizes=None):
     settings = load_settings()
-    store = (settings.get('shopify_store') or os.environ.get('SHOPIFY_STORE','')).replace('https://','').replace('http://','').rstrip('/')
-    token = settings.get('shopify_token') or os.environ.get('SHOPIFY_TOKEN','')
-    vendor = settings.get('product_vendor') or os.environ.get('PRODUCT_VENDOR','')
-    p_type = settings.get('product_type') or os.environ.get('PRODUCT_TYPE','')
+    store, token = shopify_credentials()
+    vendor = settings.get('product_vendor') or os.environ.get('PRODUCT_VENDOR', '')
+    p_type = settings.get('product_type') or os.environ.get('PRODUCT_TYPE', '')
 
     if not store or not token:
-        raise ValueError('Shopify store or token not configured')
+        raise ValueError('Shopify store or token not configured — open Settings')
 
     base_url = f'https://{store}/admin/api/2024-01'
     headers  = {'X-Shopify-Access-Token': token, 'Content-Type': 'application/json'}
 
-    title        = manual_title or details.get('title', sku)
-    template_desc = template_description_html(category)
-    description  = template_desc if template_desc else details.get('description', '')
-    handle       = details.get('handle', slugify(title))
-    seo_title    = details.get('seo_title', f'Buy {title} Online - {vendor}')
-    seo_desc     = details.get('seo_description', '')
-    tags         = (manual_tags or '').strip() or details.get('tags', '')
+    title         = manual_title or details.get('title', sku)
+    template_desc = template_description_html(subcategory)
+    description   = template_desc if template_desc else details.get('description', '')
+    handle        = details.get('handle', slugify(title))
+    seo_title     = details.get('seo_title', f'Buy {title} Online - {vendor}')
+    seo_desc      = details.get('seo_description', '')
+    tags          = merged_tags(subcategory, manual_tags, details.get('tags', ''))
 
-    weight_g = weight_g if weight_g not in (None,'',0) else settings.get('default_weight_g', DEFAULT_WEIGHT_G)
+    weight_g = weight_g if weight_g not in (None, '', 0) else settings.get('default_weight_g', DEFAULT_WEIGHT_G)
     try:    weight_g = float(weight_g)
-    except: weight_g = DEFAULT_WEIGHT_G
+    except Exception: weight_g = DEFAULT_WEIGHT_G
 
     hs_code_raw   = (hs_code or '').strip() or settings.get('default_hs_code', DEFAULT_HS_CODE)
-    hs_code_clean = re.sub(r'[^0-9]','',hs_code_raw) or re.sub(r'[^0-9]','',DEFAULT_HS_CODE)
+    hs_code_clean = re.sub(r'[^0-9]', '', hs_code_raw) or re.sub(r'[^0-9]', '', DEFAULT_HS_CODE)
 
     country_of_origin = (country_of_origin or '').strip().upper() or \
         (settings.get('default_country_of_origin') or DEFAULT_COUNTRY_OF_ORIGIN).upper()
 
-    inventory_qty = inventory_qty if inventory_qty not in (None,'') else settings.get('default_inventory_qty', DEFAULT_INVENTORY_QTY)
+    inventory_qty = inventory_qty if inventory_qty not in (None, '') else settings.get('default_inventory_qty', DEFAULT_INVENTORY_QTY)
     try:    inventory_qty = int(inventory_qty)
-    except: inventory_qty = DEFAULT_INVENTORY_QTY
+    except Exception: inventory_qty = DEFAULT_INVENTORY_QTY
 
     compare_at_price = int(round(selling_price * 2))
     title_slug       = slugify(title)
@@ -900,25 +1100,23 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid,
         'inventory_quantity': inventory_qty,
     }
 
-    options = []
-    variants = []
-
+    options, variants = [], []
     if colors and sizes:
-        options = [{'name':'Color','values':colors},{'name':'Size','values':sizes}]
+        options = [{'name': 'Color', 'values': colors}, {'name': 'Size', 'values': sizes}]
         idx = 1
         for c in colors:
             for s in sizes:
-                variants.append({**base_variant,'option1':c,'option2':s,'sku':f'{sku}.{idx}'}); idx+=1
+                variants.append({**base_variant, 'option1': c, 'option2': s, 'sku': f'{sku}.{idx}'}); idx += 1
     elif colors:
-        options = [{'name':'Color','values':colors}]
+        options = [{'name': 'Color', 'values': colors}]
         for idx, c in enumerate(colors, 1):
-            variants.append({**base_variant,'option1':c,'sku':f'{sku}.{idx}'})
+            variants.append({**base_variant, 'option1': c, 'sku': f'{sku}.{idx}'})
     elif sizes:
-        options = [{'name':'Size','values':sizes}]
+        options = [{'name': 'Size', 'values': sizes}]
         for idx, s in enumerate(sizes, 1):
-            variants.append({**base_variant,'option1':s,'sku':f'{sku}.{idx}'})
+            variants.append({**base_variant, 'option1': s, 'sku': f'{sku}.{idx}'})
     else:
-        variants = [{**base_variant,'sku':sku}]
+        variants = [{**base_variant, 'sku': sku}]
 
     product_payload = {
         'title': title, 'body_html': description, 'vendor': vendor,
@@ -930,11 +1128,11 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid,
     if options:
         product_payload['options'] = options
 
-    resp = requests.post(f'{base_url}/products.json', headers=headers,
-                          json={'product': product_payload}, timeout=30)
+    resp = shopify_request('POST', f'{base_url}/products.json', sid=sid, headers=headers,
+                           json={'product': product_payload})
     if not resp.ok:
         try:    shopify_errors = resp.json().get('errors')
-        except: shopify_errors = resp.text[:500]
+        except Exception: shopify_errors = resp.text[:500]
         log(sid, f'❌ Shopify rejected product (HTTP {resp.status_code}): {shopify_errors}', 'error')
         raise ValueError(f'Shopify {resp.status_code}: {shopify_errors}')
 
@@ -944,9 +1142,9 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid,
     log(sid, f'✅ Product created — ID {product_id} | MRP ₹{compare_at_price} → SP ₹{selling_price} | Qty {inventory_qty}{variant_note}', 'success')
 
     for v in product['variants']:
-        label = f'[{v.get("title",v.get("sku",""))}] ' if options else ''
+        label = f'[{v.get("title", v.get("sku", ""))}] ' if options else ''
         set_inventory_item_details(base_url, headers, v['inventory_item_id'],
-                                    hs_code_clean, country_of_origin, cost_price, sid, label=label)
+                                   hs_code_clean, country_of_origin, cost_price, sid, label=label)
 
     publish_to_all_channels(base_url, headers, product_id, sid)
 
@@ -955,28 +1153,32 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid,
         log(sid, f'🖼️ Uploading image {i}/{total}…')
         img_b64 = base64.b64encode(img_path.read_bytes()).decode()
         ext = img_path.suffix.lower() or '.jpg'
-        img_filename = f'{base_image_name}{("-"+str(i)) if total>1 else ""}{ext}'
-        img_alt = alt_text if i==1 else f'{alt_text} - view {i}'
-        img_resp = requests.post(
-            f'{base_url}/products/{product_id}/images.json', headers=headers,
-            json={'image':{'attachment':img_b64,'filename':img_filename,'alt':img_alt}}, timeout=60)
+        img_filename = f'{base_image_name}{("-"+str(i)) if total > 1 else ""}{ext}'
+        img_alt = alt_text if i == 1 else f'{alt_text} - view {i}'
+        img_resp = shopify_request('POST',
+            f'{base_url}/products/{product_id}/images.json', sid=sid, headers=headers,
+            json={'image': {'attachment': img_b64, 'filename': img_filename, 'alt': img_alt}},
+            timeout=60)
         if img_resp.ok: log(sid, f'✅ Image {i}/{total} uploaded', 'success')
-        else:           log(sid, f'⚠️ Image {i}/{total} failed: {img_resp.text}', 'error')
+        else:           log(sid, f'⚠️ Image {i}/{total} failed: {img_resp.text[:200]}', 'error')
 
     shopify_url = f'https://{store}/admin/products/{product_id}'
-    return {'product_id':product_id,'shopify_url':shopify_url,'handle':handle,
-            'title':title,'compare_at_price':compare_at_price,
-            'hs_code':hs_code_clean,'country_of_origin':country_of_origin,
-            'variant_count':len(variants),'detected_color':colors[0] if colors else None}
+    return {'product_id': product_id, 'shopify_url': shopify_url, 'handle': handle,
+            'title': title, 'compare_at_price': compare_at_price,
+            'hs_code': hs_code_clean, 'country_of_origin': country_of_origin,
+            'tags': tags, 'variant_count': len(variants),
+            'detected_color': colors[0] if colors else None}
 
-# ── Routes ────────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# Routes
+# ══════════════════════════════════════════════════════════════════════════════
 @app.route('/')
 def index():
     settings = load_settings()
-    has_groq    = bool(settings.get('groq_api_key')    or os.environ.get('GROQ_API_KEY'))
-    has_shopify = bool(settings.get('shopify_store')   or os.environ.get('SHOPIFY_STORE'))
-    shopify_store = settings.get('shopify_store') or os.environ.get('SHOPIFY_STORE','')
-    with open('index.html','r') as f:
+    has_groq    = bool(settings.get('groq_api_key')  or os.environ.get('GROQ_API_KEY'))
+    has_shopify = bool(settings.get('shopify_store') or os.environ.get('SHOPIFY_STORE'))
+    shopify_store = settings.get('shopify_store') or os.environ.get('SHOPIFY_STORE', '')
+    with open('index.html', 'r') as f:
         html = f.read()
     html = (html
         .replace('{% if has_groq %}ok{% else %}warn{% endif %}',    'ok' if has_groq else 'warn')
@@ -986,37 +1188,94 @@ def index():
         .replace('{{ shopify_store }}', shopify_store))
     return html
 
-# ── NEW: return the full color list so the frontend can show it ───────────────
+@app.route('/taxonomy')
+def get_taxonomy():
+    """Full Core-Tag taxonomy for the cascading pickers + tag search."""
+    return jsonify({
+        'categories': list(TAXONOMY.keys()),
+        'taxonomy':   TAXONOMY,
+        'all_tags':   ALL_TAGS,
+    })
+
+# Backward-compatible endpoint (old clients) — flat subcategory list + presets
+@app.route('/tag_presets')
+def get_tag_presets():
+    flat = {}
+    for cat, subs in TAXONOMY.items():
+        for sub, tags in subs.items():
+            flat[sub] = ', '.join(tags)
+    return jsonify({'categories': list(flat.keys()), 'presets': flat,
+                    'taxonomy': TAXONOMY})
+
 @app.route('/colors')
 def get_colors():
     return jsonify([c[0] for c in BRAND_COLORS])
 
-# ── NEW: return the jewellery category list + tag presets ─────────────────────
-@app.route('/tag_presets')
-def get_tag_presets():
-    return jsonify({'categories': CATEGORIES, 'presets': TAG_PRESETS})
+@app.route('/status')
+def get_status():
+    settings = load_settings()
+    return jsonify({
+        'groq':    bool(settings.get('groq_api_key')  or os.environ.get('GROQ_API_KEY')),
+        'shopify': bool(settings.get('shopify_store') or os.environ.get('SHOPIFY_STORE')),
+    })
 
 @app.route('/upload', methods=['POST'])
 def upload():
     files = request.files.getlist('images')
     if not files:
         if 'image' in request.files: files = [request.files['image']]
-        else: return jsonify({'error':'No image file(s)'}), 400
+        else: return jsonify({'error': 'No image file(s)'}), 400
 
-    sku = request.form.get('sku','').strip().upper()
-    if not sku: return jsonify({'error':'SKU required'}), 400
-
+    sku = sanitize_sku(request.form.get('sku', '')) or 'PREVIEW'
     saved = []
     ts = int(time.time() * 1000)
     for idx, file in enumerate(files):
-        ext = Path(file.filename).suffix.lower() or '.jpg'
-        filename = f'{sku}_{ts}_{idx}{ext}'
+        ext = Path(file.filename or '').suffix.lower()
+        if ext not in ('.jpg', '.jpeg', '.png', '.webp', ''):
+            ext = '.jpg'
+        filename = f'{sku}_{ts}_{idx}{ext or ".jpg"}'
         save_path = UPLOAD_DIR / filename
         file.save(save_path)
         processed_path = process_image(save_path)
         saved.append(processed_path.name)
 
-    return jsonify({'filenames':saved,'sku':sku})
+    return jsonify({'filenames': saved, 'sku': sku})
+
+# ── Pre-flight duplicate check against the live store ────────────────────────
+@app.route('/check_skus', methods=['POST'])
+def check_skus():
+    data = request.get_json(force=True, silent=True) or {}
+    skus = [sanitize_sku(s) for s in (data.get('skus') or []) if s]
+    skus = [s for s in dict.fromkeys(skus) if s]
+    if not skus:
+        return jsonify({'existing': {}})
+    store, token = shopify_credentials()
+    if not store or not token:
+        return jsonify({'existing': {}, 'error': 'Shopify not configured'}), 400
+
+    gql_url = f'https://{store}/admin/api/2024-01/graphql.json'
+    headers = {'X-Shopify-Access-Token': token, 'Content-Type': 'application/json'}
+    existing = {}
+    try:
+        for i in range(0, len(skus), 30):
+            batch = skus[i:i+30]
+            # Match both plain SKUs and generated variant SKUs like ABC.1
+            q = ' OR '.join(f'sku:{s}*' for s in batch)
+            query = ('{ productVariants(first: 100, query: "%s") '
+                     '{ edges { node { sku product { title } } } } }' % q)
+            r = shopify_request('POST', gql_url, headers=headers, json={'query': query}, timeout=20)
+            r.raise_for_status()
+            edges = r.json().get('data', {}).get('productVariants', {}).get('edges', [])
+            wanted = {s.upper() for s in batch}
+            for e in edges:
+                node_sku = (e['node'].get('sku') or '').upper()
+                base = node_sku.split('.')[0]
+                for cand in (node_sku, base):
+                    if cand in wanted and cand not in existing:
+                        existing[cand] = e['node'].get('product', {}).get('title', '')
+        return jsonify({'existing': existing})
+    except Exception as e:
+        return jsonify({'existing': existing, 'error': str(e)}), 200
 
 @app.route('/history')
 def history():
@@ -1027,93 +1286,95 @@ def history_csv():
     rows = load_history()
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow(['Timestamp','SKU','Title','Images','Variants','Cost Price','Selling Price',
-                      'Compare At (MRP)','HS Code','Country of Origin','Detected Color','Status','Shopify URL','Error'])
+    writer.writerow(['Timestamp', 'SKU', 'Title', 'Category', 'Subcategory', 'Images', 'Variants',
+                     'Cost Price', 'Selling Price', 'Compare At (MRP)', 'HS Code',
+                     'Country of Origin', 'Tags', 'Status', 'Shopify URL', 'Error'])
     for r in rows:
-        writer.writerow([r.get('timestamp'),r.get('sku'),r.get('title'),r.get('image_count',1),
-                          r.get('variant_count',1),r.get('cost_price'),r.get('selling_price'),
-                          r.get('compare_at_price'),r.get('hs_code'),r.get('country_of_origin'),
-                          r.get('detected_color',''),r.get('status'),r.get('shopify_url'),r.get('error')])
+        writer.writerow([r.get('timestamp'), r.get('sku'), r.get('title'),
+                         r.get('category', ''), r.get('subcategory', ''),
+                         r.get('image_count', 1), r.get('variant_count', 1),
+                         r.get('cost_price'), r.get('selling_price'),
+                         r.get('compare_at_price'), r.get('hs_code'),
+                         r.get('country_of_origin'), r.get('tags', ''),
+                         r.get('status'), r.get('shopify_url'), r.get('error')])
     return Response(buf.getvalue(), mimetype='text/csv',
-                     headers={'Content-Disposition':'attachment; filename=upload_history.csv'})
+                    headers={'Content-Disposition': 'attachment; filename=upload_history.csv'})
+
+@app.route('/history/<int:idx>', methods=['DELETE'])
+def delete_history_row(idx):
+    with HISTORY_LOCK:
+        rows = load_history()
+        if 0 <= idx < len(rows):
+            rows.pop(idx)
+            HISTORY_FILE.write_text(json.dumps(rows, indent=2))
+            return jsonify({'ok': True})
+    return jsonify({'ok': False}), 404
 
 @app.route('/get_settings')
 def get_settings_route():
     settings = load_settings()
     out = {
-        'shopify_store':  settings.get('shopify_store')  or os.environ.get('SHOPIFY_STORE',''),
-        'shopify_token':  settings.get('shopify_token')  or os.environ.get('SHOPIFY_TOKEN',''),
-        'groq_api_key':   settings.get('groq_api_key')   or os.environ.get('GROQ_API_KEY',''),
-        'product_vendor': settings.get('product_vendor') or os.environ.get('PRODUCT_VENDOR',''),
-        'product_type':   settings.get('product_type')   or os.environ.get('PRODUCT_TYPE',''),
+        'shopify_store':  settings.get('shopify_store')  or os.environ.get('SHOPIFY_STORE', ''),
+        'shopify_token':  settings.get('shopify_token')  or os.environ.get('SHOPIFY_TOKEN', ''),
+        'groq_api_key':   settings.get('groq_api_key')   or os.environ.get('GROQ_API_KEY', ''),
+        'product_vendor': settings.get('product_vendor') or os.environ.get('PRODUCT_VENDOR', ''),
+        'product_type':   settings.get('product_type')   or os.environ.get('PRODUCT_TYPE', ''),
         'default_markup': settings.get('default_markup', 4),
         'default_hs_code':  settings.get('default_hs_code', DEFAULT_HS_CODE),
         'default_weight_g': settings.get('default_weight_g', DEFAULT_WEIGHT_G),
         'default_country_of_origin': settings.get('default_country_of_origin', DEFAULT_COUNTRY_OF_ORIGIN),
-        'default_inventory_qty':  settings.get('default_inventory_qty', DEFAULT_INVENTORY_QTY),
-        'default_bangle_sizes':   settings.get('default_bangle_sizes', DEFAULT_BANGLE_SIZES),
+        'default_inventory_qty': settings.get('default_inventory_qty', DEFAULT_INVENTORY_QTY),
+        'default_bangle_sizes':  settings.get('default_bangle_sizes', DEFAULT_BANGLE_SIZES),
     }
     return jsonify(out)
 
 @app.route('/save_settings', methods=['POST'])
 def save_settings_route():
     data = request.get_json()
-    current = load_settings(); current.update(data)
+    current = load_settings(); current.update(data or {})
     SETTINGS_FILE.write_text(json.dumps(current, indent=2))
-    return jsonify({'ok':True})
+    return jsonify({'ok': True})
 
 @app.route('/test_shopify', methods=['POST'])
 def test_shopify():
-    settings = load_settings()
-    store = (settings.get('shopify_store') or '').replace('https://','').replace('http://','').rstrip('/')
-    token = settings.get('shopify_token') or ''
+    store, token = shopify_credentials()
     if not store or not token:
-        return jsonify({'ok':False,'error':'Store URL and token both required'}), 400
+        return jsonify({'ok': False, 'error': 'Store URL and token both required'}), 400
     try:
-        r = requests.get(f'https://{store}/admin/api/2024-01/shop.json',
-                          headers={'X-Shopify-Access-Token':token}, timeout=15)
+        r = shopify_request('GET', f'https://{store}/admin/api/2024-01/shop.json',
+                            headers={'X-Shopify-Access-Token': token}, timeout=15)
         if r.ok:
-            shop = r.json().get('shop',{})
-            return jsonify({'ok':True,'shop_name':shop.get('name'),'domain':shop.get('myshopify_domain')})
-        return jsonify({'ok':False,'error':f'HTTP {r.status_code}: {r.text[:200]}'}), 400
+            shop = r.json().get('shop', {})
+            return jsonify({'ok': True, 'shop_name': shop.get('name'), 'domain': shop.get('myshopify_domain')})
+        return jsonify({'ok': False, 'error': f'HTTP {r.status_code}: {r.text[:200]}'}), 400
     except Exception as e:
-        return jsonify({'ok':False,'error':str(e)}), 400
+        return jsonify({'ok': False, 'error': str(e)}), 400
 
 @app.route('/test_groq', methods=['POST'])
 def test_groq():
     settings = load_settings()
     key = settings.get('groq_api_key') or ''
-    if not key: return jsonify({'ok':False,'error':'Groq key required'}), 400
+    if not key: return jsonify({'ok': False, 'error': 'Groq key required'}), 400
     try:
         r = requests.post('https://api.groq.com/openai/v1/chat/completions',
-                           headers={'Authorization':f'Bearer {key}','Content-Type':'application/json'},
-                           json={'model':'meta-llama/llama-4-scout-17b-16e-instruct',
-                                 'messages':[{'role':'user','content':'Say OK'}],'max_tokens':5},
-                           timeout=20)
-        if r.ok: return jsonify({'ok':True})
-        return jsonify({'ok':False,'error':f'HTTP {r.status_code}: {r.text[:200]}'}), 400
+                          headers={'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'},
+                          json={'model': 'meta-llama/llama-4-scout-17b-16e-instruct',
+                                'messages': [{'role': 'user', 'content': 'Say OK'}], 'max_tokens': 5},
+                          timeout=20)
+        if r.ok: return jsonify({'ok': True})
+        return jsonify({'ok': False, 'error': f'HTTP {r.status_code}: {r.text[:200]}'}), 400
     except Exception as e:
-        return jsonify({'ok':False,'error':str(e)}), 400
+        return jsonify({'ok': False, 'error': str(e)}), 400
 
-@app.route('/history/<int:idx>', methods=['DELETE'])
-def delete_history_row(idx):
-    rows = load_history()
-    if 0 <= idx < len(rows):
-        rows.pop(idx)
-        HISTORY_FILE.write_text(json.dumps(rows, indent=2))
-        return jsonify({'ok':True})
-    return jsonify({'ok':False}), 404
-
-# ── NEW: preview an AI-generated title/description/tags for an item BEFORE it
-# is actually created on Shopify. Lets a seller check (and edit) the title
-# that Groq would write, using the already-uploaded (processed) image(s). ────
+# ── AI title preview (before anything touches Shopify) ────────────────────────
 @app.route('/generate_title', methods=['POST'])
 def generate_title_route():
     data = request.get_json(force=True, silent=True) or {}
-    filenames = data.get('filenames') or []
-    sku       = (data.get('sku') or 'PREVIEW').strip().upper() or 'PREVIEW'
-    category  = (data.get('category') or '').strip() or None
-    sid       = (data.get('socket_id') or '').strip() or None
+    filenames   = data.get('filenames') or []
+    sku         = sanitize_sku(data.get('sku') or 'PREVIEW') or 'PREVIEW'
+    category    = (data.get('category') or '').strip() or None
+    subcategory = (data.get('subcategory') or '').strip() or None
+    sid         = (data.get('socket_id') or '').strip() or None
 
     if not filenames:
         return jsonify({'error': 'No uploaded images to analyze'}), 400
@@ -1124,7 +1385,8 @@ def generate_title_route():
         return jsonify({'error': f'Image(s) not found on server: {missing}'}), 400
 
     try:
-        details = generate_product_details(image_paths, sku, sid, category=category)
+        details = generate_product_details(image_paths, sku, sid,
+                                           category=category, subcategory=subcategory)
         return jsonify(details)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1134,11 +1396,12 @@ def generate_title_route():
 def handle_start_upload(data):
     sid = request.sid
     filenames       = data.get('filenames') or ([data['filename']] if data.get('filename') else [])
-    sku             = (data.get('sku') or '').upper()
+    sku             = sanitize_sku(data.get('sku') or '')
     cost_price      = float(data.get('cost_price', 0) or 0)
     markup          = float(data.get('markup', 4) or 4)
     manual_title    = (data.get('title') or '').strip() or None
     category        = (data.get('category') or '').strip() or None
+    subcategory     = (data.get('subcategory') or '').strip() or None
     manual_tags     = (data.get('tags') or '').strip() or None
     weight_g        = data.get('weight_g')
     hs_code         = (data.get('hs_code') or '').strip() or None
@@ -1147,14 +1410,15 @@ def handle_start_upload(data):
     colors          = data.get('colors') or []
     sizes           = data.get('sizes') or []
     if isinstance(colors, str): colors = [c.strip() for c in colors.split(',') if c.strip()]
-    if isinstance(sizes,  str): sizes  = [s.strip() for s in sizes.split(',')  if s.strip()]
+    if isinstance(sizes, str):  sizes  = [s.strip() for s in sizes.split(',')  if s.strip()]
 
     selling_price    = calc_sp(cost_price, markup)
     compare_at_price = int(round(selling_price * 2))
     image_paths      = [UPLOAD_DIR / fn for fn in filenames]
     timestamp        = datetime.now().isoformat()
 
-    log(sid, f'▶ {sku} | {len(filenames)} image(s) | CP: ₹{cost_price} → SP: ₹{selling_price} (MRP ₹{compare_at_price})')
+    sub_note = f' | {subcategory}' if subcategory else ''
+    log(sid, f'▶ {sku}{sub_note} | {len(filenames)} image(s) | CP ₹{cost_price} → SP ₹{selling_price} (MRP ₹{compare_at_price})')
 
     def run():
         with upload_semaphore:
@@ -1163,38 +1427,46 @@ def handle_start_upload(data):
                 if missing:
                     raise FileNotFoundError(f'Image(s) not found: {[p.name for p in missing]}')
 
-                details = generate_product_details(image_paths, sku, sid, category=category)
+                details = generate_product_details(image_paths, sku, sid,
+                                                   category=category, subcategory=subcategory)
                 result  = create_shopify_product(
                     image_paths, sku, selling_price, details, sid,
-                    manual_title=manual_title, category=category,
+                    manual_title=manual_title, category=category, subcategory=subcategory,
                     manual_tags=manual_tags, weight_g=weight_g, hs_code=hs_code,
                     country_of_origin=country_of_origin, inventory_qty=inventory_qty,
                     cost_price=cost_price, colors=colors, sizes=sizes)
 
-                row = {'timestamp':timestamp,'sku':sku,'title':result.get('title'),
-                       'handle':result.get('handle'),'cost_price':cost_price,
-                       'selling_price':selling_price,'compare_at_price':result.get('compare_at_price'),
-                       'hs_code':result.get('hs_code'),'country_of_origin':result.get('country_of_origin'),
-                       'detected_color':result.get('detected_color'),
-                       'variant_count':result.get('variant_count',1),
-                       'status':'success','shopify_url':result['shopify_url'],'error':None,
-                       'image_count':len(filenames)}
+                row = {'timestamp': timestamp, 'sku': sku, 'title': result.get('title'),
+                       'handle': result.get('handle'),
+                       'category': category, 'subcategory': subcategory,
+                       'cost_price': cost_price, 'selling_price': selling_price,
+                       'compare_at_price': result.get('compare_at_price'),
+                       'hs_code': result.get('hs_code'),
+                       'country_of_origin': result.get('country_of_origin'),
+                       'tags': result.get('tags'),
+                       'detected_color': result.get('detected_color'),
+                       'variant_count': result.get('variant_count', 1),
+                       'status': 'success', 'shopify_url': result['shopify_url'],
+                       'error': None, 'image_count': len(filenames)}
                 append_history(row)
                 log(sid, f'🎉 Done! {result["shopify_url"]}', 'success')
                 socketio.emit('product_done', {
-                    'sku':sku,'title':result.get('title'),
-                    'selling_price':selling_price,'compare_at_price':result.get('compare_at_price'),
-                    'shopify_url':result['shopify_url'],'detected_color':result.get('detected_color'),
-                    'status':'success'
+                    'sku': sku, 'title': result.get('title'),
+                    'selling_price': selling_price,
+                    'compare_at_price': result.get('compare_at_price'),
+                    'shopify_url': result['shopify_url'],
+                    'detected_color': result.get('detected_color'),
+                    'status': 'success'
                 }, to=sid)
             except Exception as e:
                 log(sid, f'❌ Failed for {sku}: {e}', 'error')
-                append_history({'timestamp':timestamp,'sku':sku,'title':manual_title,
-                                'cost_price':cost_price,'selling_price':selling_price,
-                                'compare_at_price':compare_at_price,
-                                'status':'failed','shopify_url':None,'error':str(e),
-                                'image_count':len(filenames)})
-                socketio.emit('product_done',{'sku':sku,'status':'failed','error':str(e)}, to=sid)
+                append_history({'timestamp': timestamp, 'sku': sku, 'title': manual_title,
+                                'category': category, 'subcategory': subcategory,
+                                'cost_price': cost_price, 'selling_price': selling_price,
+                                'compare_at_price': compare_at_price,
+                                'status': 'failed', 'shopify_url': None, 'error': str(e),
+                                'image_count': len(filenames)})
+                socketio.emit('product_done', {'sku': sku, 'status': 'failed', 'error': str(e)}, to=sid)
             finally:
                 for p in image_paths:
                     try: p.unlink()
@@ -1204,4 +1476,12 @@ def handle_start_upload(data):
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    socketio.run(app, host='0.0.0.0', port=port, debug=False)
+    print(f'💎 Ishhaara Listing Studio v2 — http://localhost:{port}')
+    print(f'   Taxonomy: {len(TAXONOMY)} categories · {len(ALL_SUBCATEGORIES)} subcategories · {len(ALL_TAGS)} core tags')
+    try:
+        # flask-socketio ≥ 5.3 requires this flag to use the built-in server
+        socketio.run(app, host='0.0.0.0', port=port, debug=False,
+                     allow_unsafe_werkzeug=True)
+    except TypeError:
+        # older flask-socketio versions don't know the kwarg
+        socketio.run(app, host='0.0.0.0', port=port, debug=False)
