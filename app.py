@@ -12,8 +12,12 @@ What changed in v2
   silently drop products out of live collections.
 • /taxonomy endpoint feeds the new cascading Category → Subcategory UI
   and the searchable tag picker.
-• Groq title generation is grounded per-SUBCATEGORY (63 hints) so pieces
-  can no longer be mistitled as the wrong jewellery type.
+• Groq/AI integration removed. Product names are entered by the operator;
+  the URL handle, SEO title, meta description and image alt text are all
+  derived deterministically from that manual name.
+• Everything is editable before upload: the tags field is prefilled with
+  the core preset (and used verbatim at publish), and selling price / MRP
+  can be overridden per item — auto-calculated values are only defaults.
 • All Shopify calls go through a retrying wrapper (429 + 5xx aware,
   honours Retry-After) — a flaky network no longer kills a batch.
 • /check_skus pre-flight: looks up SKUs in the live store via GraphQL
@@ -24,6 +28,7 @@ What changed in v2
 
 import os, json, time, base64, re, io, csv, random, threading
 from datetime import datetime
+from html import escape as html_escape
 from pathlib import Path
 from flask import Flask, request, jsonify, Response
 from flask_socketio import SocketIO
@@ -301,92 +306,6 @@ def preset_tags_for(subcategory: str):
     if not cat:
         return []
     return TAXONOMY[cat][subcategory]
-
-# ── Per-subcategory title grounding for Groq ─────────────────────────────────
-# The seller picks the subcategory; the model must NEVER override it with a
-# guess from the photo. Specific hints below for pieces that are commonly
-# confused; everything else gets a strict generic hint built at call time.
-SUBCATEGORY_TITLE_HINTS = {
-    # Necklaces
-    'Choker Necklaces':      'This is a CHOKER (short necklace sitting snugly at the base of the throat). Title must include "Choker" — e.g. "Kundan Choker Necklace Set".',
-    'Choker Bridal Necklace':'This is a BRIDAL CHOKER SET. Title must include "Choker" and read bridal — e.g. "Polki Bridal Choker Necklace Set".',
-    'Long Necklace':         'This is a LONG NECKLACE (rani haar / long strand well below the collarbone). Title must include "Long Necklace" or "Rani Haar".',
-    'Temple Necklace':       'This is a TEMPLE NECKLACE (South-Indian temple jewellery motifs: deities, coins, nagas). Title must include "Temple Necklace" or "Temple Jewellery".',
-    'Long Bridal Necklace':  'This is a LONG BRIDAL NECKLACE. Title must include "Long" and "Necklace" and read bridal.',
-    'Pendant Necklace':      'This is a PENDANT NECKLACE (single drop/charm on a slim chain). Title should read like "[Stone/Style] Pendant Necklace".',
-    'Pearl Necklace':        'This is a PEARL NECKLACE (pearl strands or pearl-dominant). Title must include "Pearl Necklace".',
-    'Groom Necklace':        'This is a GROOM NECKLACE (men\'s wedding neckpiece, often pearl mala / dulha haar). Title must include "Groom Necklace" or "Dulha Mala".',
-    'Oxidised Necklace':     'This is an OXIDISED NECKLACE (blackened german-silver finish). Title must include "Oxidised" and "Necklace".',
-    # Earrings
-    'Dangler Earrings':      'These are DANGLER EARRINGS (long drop earrings that swing below the lobe). Title must include "Dangler Earrings" or "Drop Earrings".',
-    'Stud Earrings':         'These are STUD EARRINGS (sit flush on the lobe, no drop). Title must include "Stud Earrings" or "Studs".',
-    'Earcuff Earrings':      'This is an EAR CUFF (wraps the ear cartilage, no piercing needed). Title must include "Ear Cuff" or "Earcuff".',
-    'Temple Earrings':       'These are TEMPLE EARRINGS (South-Indian temple jewellery motifs). Title must include "Temple Earrings" or "Temple Jewellery".',
-    'Chandbali Earrings':    'These are CHANDBALI EARRINGS (crescent-moon shaped). Title must include "Chandbali".',
-    'Ear Chain':             'This is an EAR CHAIN / SUI DHAGA (chain threads through or drapes from the ear, often linking to the hair). Title must include "Ear Chain" or "Sui Dhaga".',
-    'Hoop Earrings':         'These are HOOP EARRINGS (circular hoops). Title must include "Hoop Earrings" or "Hoops".',
-    'Jhumka Earrings':       'These are JHUMKA EARRINGS (dome/bell shaped drops). Title must include "Jhumka" or "Jhumki".',
-    'Oxidised Earrings':     'These are OXIDISED EARRINGS (blackened german-silver finish). Title must include "Oxidised" and "Earrings".',
-    'Kundan Earrings':       'These are KUNDAN EARRINGS (kundan/glass-stone setting). Title must include "Kundan" and "Earrings".',
-    'Pearl Earrings':        'These are PEARL EARRINGS (pearl-dominant). Title must include "Pearl Earrings".',
-    'Bugadi Earrings':       'This is a BUGADI (Maharashtrian upper-ear/helix ornament, worn without lobe piercing). Title must include "Bugadi".',
-    # Hand Accessories
-    'Rings':                 'This is a RING (finger jewellery). Title must include "Ring".',
-    'Pearl Rings':           'This is a PEARL RING. Title must include "Pearl" and "Ring".',
-    'Handcuff Bracelets':    'This is a HANDCUFF / KADA (broad open-cuff statement wrist piece). Title must include "Handcuff Bracelet" or "Kada".',
-    'Bangle':                'This is a set of BANGLES (closed-circle wrist jewellery, worn stacked). Title must include "Bangle", "Bangles" or "Kangan".',
-    'Chooda':                'This is a CHOODA (bridal red-and-white bangle set, Punjabi wedding tradition). Title must include "Chooda" or "Choora".',
-    'Bracelet':              'This is a BRACELET (delicate chain-link or beaded wrist piece, not a broad cuff). Title must include "Bracelet".',
-    'Hathphool (Hand Harness)': 'This is a HATHPHOOL (ring-to-wrist piece connected by chains across the back of the hand). Title must include "Hathphool" only — do NOT use the words "Hand Harness" anywhere in the title.',
-    'Kaleera':               'This is a KALEERA (dangling gold ornaments tied to the bridal chooda). Title must include "Kaleera" or "Kalira".',
-    'Healing Bracelets':     'This is a HEALING BRACELET (gemstone/crystal bead bracelet). Title must include "Bracelet" and name the stone if visible.',
-    'Oxidised Bangle':       'This is an OXIDISED BANGLE (blackened german-silver finish). Title must include "Oxidised" and "Bangle" or "Kada".',
-    'Kashmiri Bangles':      'These are KASHMIRI BANGLES (enamel/meenakari Kashmiri-style). Title must include "Kashmiri" and "Bangle".',
-    'Chooda Covers':         'This is a CHOODA COVER (protective/decorative sleeve worn over the bridal chooda). Title must include "Chooda Cover".',
-    # Hair Accessories
-    'Maangtikas':            'This is a MAANG TIKKA (chain with pendant sitting on the centre parting onto the forehead). Title must include "Maang Tikka" or "Teeka".',
-    'Hair Adornments':       'This is a HAIR ADORNMENT (hairpin, clip, juda pin or hair vine). Title must name the exact type, e.g. "Juda Pin", "Hair Vine", "Hair Clip".',
-    'Hairbands':             'This is a HAIRBAND / HEADBAND. Title must include "Hairband" or "Headband".',
-    'Mathapatti':            'This is a MATHAPATTI (elaborate head jewellery with chains across the forehead into the hairline). Title must include "Mathapatti" or "Matha Patti".',
-    'Choti':                 'This is a CHOTI / JADA (braid ornament running down the plait). Title must include "Choti" or "Jada".',
-    'Pasa':                  'This is a PASA / PASSA (side-of-head ornament worn on one side of the hair). Title must include "Pasa" or "Passa".',
-    'Paranda':               'This is a PARANDA (tasselled braid accessory woven into the plait). Title must include "Paranda".',
-    # Other Body Jewellery
-    'Nath':                  'This is a NATH (nose ring, sometimes chain-linked to the hair). Title must include "Nath" or "Nose Ring".',
-    'Kamarband':             'This is a KAMARBAND (waist belt/chain worn over saree or lehenga). Title must include "Kamarband" or "Waist Belt".',
-    'Facelets':              'This is a FACELET (decorative face chain/jewellery). Title must include "Facelet" or "Face Chain".',
-    'Veil / Bridal Dupatta': 'This is a BRIDAL VEIL / DUPATTA. Title must include "Veil" or "Bridal Dupatta". It is fabric, not metal jewellery — describe embroidery/border work.',
-    'Payal':                 'This is a PAYAL (anklet). Title must include "Payal" or "Anklet".',
-    # Bags
-    'Clutch Bags':           'This is a CLUTCH BAG. Title must include "Clutch". Describe the material and embellishment (embroidered, brocade, stone-studded).',
-    'Oxidised Bags':         'This is an OXIDISED-METAL BAG/CLUTCH. Title must include "Oxidised" and "Bag" or "Clutch".',
-    'Party Wear Bags':       'This is a PARTY WEAR BAG. Title must include "Bag" or "Clutch" and read festive/party.',
-    'Sling Bags':            'This is a SLING BAG (long strap, crossbody). Title must include "Sling Bag".',
-    'Potli Bags':            'This is a POTLI BAG (drawstring pouch bag). Title must include "Potli".',
-    # Men & Groom
-    'Brooch':                'This is a BROOCH (pin-back accessory for blazers, sherwanis, sarees). Title must include "Brooch".',
-    'Mens Jewellery':        'This is MEN\'S JEWELLERY (chain, bracelet, ring or stud for men). Title must name the exact piece and read masculine, e.g. "Men\'s Stainless Steel Chain".',
-    'Kalingi':               'This is a KALINGI (groom\'s turban ornament pinned to the safa). Title must include "Kalingi" or "Sarpech".',
-    'Safa':                  'This is a SAFA (groom\'s turban). Title must include "Safa" or "Turban". It is fabric headwear, not metal jewellery.',
-    'Katar':                 'This is a KATAR (ceremonial groom\'s dagger accessory). Title must include "Katar".',
-    # Bridal & Wedding Sets
-    'Full Bridal Set':       'This is a FULL BRIDAL JEWELLERY SET (necklace + earrings + tikka, possibly more). Title must include "Bridal Set" and name the craft, e.g. "Kundan Full Bridal Jewellery Set".',
-    # Gifting & Lifestyle
-    'Rakhi (Deisgner Rakhi)':'This is a DESIGNER RAKHI (Raksha Bandhan wrist thread). Title must include "Rakhi" (use the correct spelling "Designer Rakhi" in the title).',
-    'Organiser':             'This is a JEWELLERY ORGANISER (storage box/case). Title must include "Organiser" or "Jewellery Box".',
-    'Wrist Watches':         'This is a WRIST WATCH. Title must include "Watch".',
-    'Shagun Box/Lifafa':     'This is a SHAGUN BOX or LIFAFA (gift envelope/box). Title must include "Shagun Box" or "Lifafa".',
-    'Phone Case':            'This is a PHONE CASE. Title must include "Phone Case" and the style, e.g. "Embellished Phone Case".',
-    'Hamper':                'This is a GIFT HAMPER. Title must include "Hamper" and hint at contents/occasion.',
-    'Letter':                'This is a DECORATIVE LETTER / INITIAL piece. Title must include "Letter" or "Initial".',
-}
-
-def title_hint_for(category: str, subcategory: str) -> str:
-    hint = SUBCATEGORY_TITLE_HINTS.get(subcategory)
-    if hint:
-        return hint
-    return (f'This is a {subcategory.upper()} from the {category} range. '
-            f'The title must clearly identify the piece as a {subcategory} — never as any other product type.')
 
 # ── SEO description templates ────────────────────────────────────────────────
 # The brand's long-form category copy, keyed by template name. Subcategories
@@ -802,16 +721,6 @@ def slugify(text):
 def sanitize_sku(sku: str) -> str:
     return re.sub(r'[^A-Z0-9\-\.]', '', (sku or '').strip().upper())
 
-def _strip_phrase(text, phrase):
-    """Remove *phrase* (case-insensitive) from *text*, tidying leftover joins."""
-    if not text:
-        return text
-    cleaned = re.sub(re.escape(phrase), '', text, flags=re.IGNORECASE)
-    cleaned = re.sub(r'\s{2,}', ' ', cleaned)
-    cleaned = re.sub(r'\s+([,\-])', r'\1', cleaned)
-    cleaned = re.sub(r'^[\s,\-]+|[\s,\-]+$', '', cleaned)
-    return cleaned.strip() or text
-
 # ── Shopify request wrapper — retries on 429 & 5xx, honours Retry-After ──────
 SHOPIFY_MAX_RETRIES = 4
 
@@ -845,129 +754,63 @@ def shopify_credentials():
     token = settings.get('shopify_token') or os.environ.get('SHOPIFY_TOKEN', '')
     return store, token
 
-# ── Groq rate limiting / retry ────────────────────────────────────────────────
-GROQ_CALL_LOCK = threading.Lock()
-GROQ_LAST_CALL_AT = [0.0]
-GROQ_MIN_INTERVAL = 2.2
-GROQ_MAX_RETRIES = 4
+# ── Deterministic listing copy from the operator's product name ──────────────
+SEO_TITLE_MAX, SEO_DESC_MAX = 60, 160
 
-def call_groq_with_backoff(payload, headers, sid):
-    last_exc = None
-    for attempt in range(GROQ_MAX_RETRIES):
-        with GROQ_CALL_LOCK:
-            wait = GROQ_MIN_INTERVAL - (time.time() - GROQ_LAST_CALL_AT[0])
-            if wait > 0:
-                time.sleep(wait)
-            GROQ_LAST_CALL_AT[0] = time.time()
-        try:
-            resp = requests.post('https://api.groq.com/openai/v1/chat/completions',
-                                 headers=headers, json=payload, timeout=30)
-            if resp.status_code == 429:
-                retry_after = resp.headers.get('Retry-After')
-                try:    delay = float(retry_after) if retry_after else 2 ** (attempt + 1)
-                except Exception: delay = 2 ** (attempt + 1)
-                log(sid, f'⏳ Groq rate limit — retrying in {delay:.0f}s (attempt {attempt+1}/{GROQ_MAX_RETRIES})', 'muted')
-                time.sleep(delay); last_exc = requests.exceptions.HTTPError('429'); continue
-            resp.raise_for_status()
-            return resp
-        except requests.exceptions.RequestException as e:
-            last_exc = e
-            if attempt < GROQ_MAX_RETRIES - 1:
-                time.sleep(2 ** attempt)
-            continue
-    raise last_exc or RuntimeError('Groq request failed after retries')
+def build_copy(title, vendor):
+    """Handle, SEO title, meta description and image alt text — all derived
+    from the manual product name. No AI involved."""
+    vendor_name = (vendor or 'Ishhaara').strip() or 'Ishhaara'
+    title = (title or '').strip()
+    handle = slugify(title)
+    seo_title = f'Buy {title} Online - {vendor_name}'
+    if len(seo_title) > SEO_TITLE_MAX:
+        seo_title = f'Buy {title} Online'
+    if len(seo_title) > SEO_TITLE_MAX:
+        seo_title = title[:SEO_TITLE_MAX].rstrip()
+    seo_description = (f'Buy {title} from {vendor_name}. Shop handcrafted Indian '
+                       f'jewellery online with pan-India delivery.')
+    if len(seo_description) > SEO_DESC_MAX:
+        seo_description = f'Buy {title} from {vendor_name}. Handcrafted Indian jewellery online.'
+    if len(seo_description) > SEO_DESC_MAX:
+        seo_description = seo_description[:SEO_DESC_MAX].rstrip()
+    return {
+        'handle': handle,
+        'seo_title': seo_title,
+        'seo_description': seo_description,
+        'alt_text': f'{vendor_name} {title} - handcrafted Indian jewellery',
+    }
 
-# ── Groq: generate product fields (grounded per subcategory) ─────────────────
-def generate_product_details(image_paths, sku, sid, category=None, subcategory=None):
-    settings = load_settings()
-    groq_key = settings.get('groq_api_key') or os.environ.get('GROQ_API_KEY', '')
+def generic_description_html(title):
+    """Brand-consistent fallback body for subcategories without a template."""
+    safe_title = html_escape(title, quote=False)
+    return (
+        f'<p>{safe_title} — thoughtfully handcrafted by Ishhaara to complete your '
+        'festive, bridal and everyday looks.</p>'
+        '<p><strong>Product Specification</strong></p>'
+        '<p><strong>Material:</strong> Skin Friendly | Hypoallergenic</p>'
+        '<p><strong>Craftsmanship:</strong> Ethically Handmade</p>'
+        '<p><strong>Waterproof:</strong> Retains Colour and Brilliance</p>'
+        '<p><strong>Care Label</strong></p>'
+        '<p>1. Store in an air-tight jewellery box or sealed pouch.</p>'
+        '<p>2. Keep away from body sprays, body lotions and perfumes.</p>'
+        '<p>3. Avoid detergents, soaps or toothpaste while cleaning.</p>'
+        '<p>4. Wipe gently with a soft, dry brush after every use.</p>'
+    )
 
-    if not groq_key:
-        log(sid, 'Groq key not set — using SKU as title', 'muted')
-        slug = slugify(sku)
-        return {'title': sku, 'description': '', 'handle': slug,
-                'seo_title': sku, 'seo_description': '', 'alt_text': sku, 'tags': ''}
-
-    log(sid, f'🤖 Writing product content via Groq for {sku}…')
-    try:
-        image_path = image_paths[0]
-        b64 = base64.b64encode(image_path.read_bytes()).decode()
-        ext = image_path.suffix.lower().lstrip('.')
-        mime = {'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png','webp':'image/webp'}.get(ext,'image/jpeg')
-        vendor = settings.get('product_vendor') or os.environ.get('PRODUCT_VENDOR', 'the brand')
-
-        grounding = ''
-        if subcategory:
-            hint = title_hint_for(category or ALL_SUBCATEGORIES.get(subcategory, ''), subcategory)
-            preset = ', '.join(preset_tags_for(subcategory))
-            grounding = f"""
-THE SELLER HAS ALREADY CLASSIFIED THIS PIECE:
-  Category:    {category or ALL_SUBCATEGORIES.get(subcategory, '—')}
-  Subcategory: {subcategory}
-{hint}
-Do NOT override this with a different product type guessed from the photo — ground the title in the seller's subcategory above everything else. If the image looks ambiguous, still trust the classification.
-The store's core tags for this subcategory are: {preset}. Your "tags" field should ADD descriptive tags (style, occasion, finish, stone) — do not repeat the core tags."""
-        elif category:
-            grounding = f'\nTHE SELLER HAS CLASSIFIED THIS PIECE UNDER: "{category}". Ground the title in that category.'
-
-        prompt = f"""You are an expert jewellery copywriter for {vendor}, an Indian fashion jewellery brand.
-The SKU is {sku}. Study the product image carefully.
-{grounding}
-
-IMPORTANT RULES:
-- Title must name the product type specifically (e.g. "Kundan Choker Necklace Set", "Oxidised Jhumka Earrings", "Meenakari Bangle"). Never use clothing terms.
-- Use Indian jewellery vocabulary where relevant: Kundan, Polki, Meenakari, Jadau, Oxidised, Temple, Antique, Filigree, Jhumka, Chandbali, Maang Tikka, Matha Patti, Nath, Hathphool, Kamarband, Choker, Layered, Statement, etc.
-- Tags must describe the product only: style, occasion (wedding, festive, bridal, haldi, mehendi, casual), finish (gold-plated, silver-plated, antique, oxidised), and stone/material if visible.
-- Description must cover: product type and style, metal finish and stones/beads, craftsmanship and occasion. No clothing references.
-
-Respond ONLY with a valid JSON object (no markdown, no extra text):
-{{
-  "title": "Specific product name using Indian jewellery terms, 4-8 words",
-  "description": "2-3 sentence HTML description. Use <strong> tags on key feature labels only.",
-  "handle": "url-slug-from-title-lowercase-hyphens",
-  "seo_title": "Buy [Title] Online - {vendor} (max 60 chars)",
-  "seo_description": "Buy [Title] from {vendor}. Shop handcrafted Indian jewellery online. (max 160 chars)",
-  "alt_text": "{vendor} [Title] — handcrafted Indian jewellery",
-  "tags": "comma-separated descriptive tags: style, occasion, finish, stone/material"
-}}"""
-
-        headers = {'Authorization': f'Bearer {groq_key}', 'Content-Type': 'application/json'}
-        payload = {
-            'model': 'meta-llama/llama-4-scout-17b-16e-instruct',
-            'messages': [{'role': 'user', 'content': [
-                {'type': 'image_url', 'image_url': {'url': f'data:{mime};base64,{b64}'}},
-                {'type': 'text', 'text': prompt}
-            ]}],
-            'max_tokens': 500,
-        }
-        resp = call_groq_with_backoff(payload, headers, sid)
-        content = resp.json()['choices'][0]['message']['content'].strip()
-        content = content.replace('```json', '').replace('```', '').strip()
-        result = json.loads(content)
-        if subcategory == 'Hathphool (Hand Harness)' and result.get('title'):
-            result['title'] = _strip_phrase(result['title'], 'Hand Harness')
-        result['handle'] = slugify(result.get('handle', result.get('title', sku)))
-        log(sid, f'✅ Title: {result.get("title")}', 'success')
-        return result
-    except Exception as e:
-        log(sid, f'⚠️ Groq error: {e} — using SKU fallback', 'error')
-        slug = slugify(sku)
-        return {'title': sku, 'description': '', 'handle': slug,
-                'seo_title': sku, 'seo_description': '', 'alt_text': sku, 'tags': ''}
-
-def merged_tags(subcategory, manual_tags, ai_tags):
-    """Core preset tags first (exact strings), then manual/AI extras, deduped
-    case-insensitively while preserving original casing & order."""
-    ordered = []
-    seen = set()
-    def add_all(source):
-        for t in source:
-            t = t.strip()
-            if t and t.lower() not in seen:
-                seen.add(t.lower()); ordered.append(t)
-    add_all(preset_tags_for(subcategory) if subcategory else [])
-    add_all((manual_tags or '').split(','))
-    add_all((ai_tags or '').split(','))
+def finalize_tags(subcategory, manual_tags):
+    """The tags field in the UI is prefilled with the core preset and fully
+    editable — so whatever the operator sends is used verbatim (deduped
+    case-insensitively, order preserved). Only if the field arrives empty do
+    we fall back to the subcategory's core preset."""
+    source = [t for t in (manual_tags or '').split(',') if t.strip()]
+    if not source:
+        source = preset_tags_for(subcategory) if subcategory else []
+    ordered, seen = [], set()
+    for t in source:
+        t = t.strip()
+        if t and t.lower() not in seen:
+            seen.add(t.lower()); ordered.append(t)
     return ', '.join(ordered)
 
 # ── Shopify: publish to all sales channels ────────────────────────────────────
@@ -1039,9 +882,10 @@ def set_inventory_item_details(base_url, headers, inventory_item_id, hs_code_cle
         time.sleep(1)
 
 # ── Shopify: create product ───────────────────────────────────────────────────
-def create_shopify_product(image_paths, sku, selling_price, details, sid,
-                           manual_title=None, category=None, subcategory=None,
-                           manual_tags=None, weight_g=None, hs_code=None,
+def create_shopify_product(image_paths, sku, selling_price, sid,
+                           title=None, compare_at_price=None,
+                           category=None, subcategory=None,
+                           tags=None, weight_g=None, hs_code=None,
                            country_of_origin=None, inventory_qty=None,
                            cost_price=None, colors=None, sizes=None):
     settings = load_settings()
@@ -1055,13 +899,14 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid,
     base_url = f'https://{store}/admin/api/2024-01'
     headers  = {'X-Shopify-Access-Token': token, 'Content-Type': 'application/json'}
 
-    title         = manual_title or details.get('title', sku)
+    title         = (title or '').strip() or sku
+    copy          = build_copy(title, vendor)
     template_desc = template_description_html(subcategory)
-    description   = template_desc if template_desc else details.get('description', '')
-    handle        = details.get('handle', slugify(title))
-    seo_title     = details.get('seo_title', f'Buy {title} Online - {vendor}')
-    seo_desc      = details.get('seo_description', '')
-    tags          = merged_tags(subcategory, manual_tags, details.get('tags', ''))
+    description   = template_desc if template_desc else generic_description_html(title)
+    handle        = copy['handle']
+    seo_title     = copy['seo_title']
+    seo_desc      = copy['seo_description']
+    tags          = finalize_tags(subcategory, tags)
 
     weight_g = weight_g if weight_g not in (None, '', 0) else settings.get('default_weight_g', DEFAULT_WEIGHT_G)
     try:    weight_g = float(weight_g)
@@ -1077,10 +922,14 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid,
     try:    inventory_qty = int(inventory_qty)
     except Exception: inventory_qty = DEFAULT_INVENTORY_QTY
 
-    compare_at_price = int(round(selling_price * 2))
+    try:
+        compare_at_price = int(round(float(compare_at_price)))
+        if compare_at_price <= 0: raise ValueError
+    except (TypeError, ValueError):
+        compare_at_price = int(round(selling_price * 2))
     title_slug       = slugify(title)
     base_image_name  = f'ishhaara-{title_slug}-{random_digits(10)}'
-    alt_text         = details.get('alt_text') or f'Ishhaara {title}'
+    alt_text         = copy['alt_text']
 
     colors = [c.strip() for c in (colors or []) if c.strip()]
     sizes  = [s.strip() for s in (sizes  or []) if s.strip()]
@@ -1175,14 +1024,11 @@ def create_shopify_product(image_paths, sku, selling_price, details, sid,
 @app.route('/')
 def index():
     settings = load_settings()
-    has_groq    = bool(settings.get('groq_api_key')  or os.environ.get('GROQ_API_KEY'))
     has_shopify = bool(settings.get('shopify_store') or os.environ.get('SHOPIFY_STORE'))
     shopify_store = settings.get('shopify_store') or os.environ.get('SHOPIFY_STORE', '')
     with open('index.html', 'r') as f:
         html = f.read()
     html = (html
-        .replace('{% if has_groq %}ok{% else %}warn{% endif %}',    'ok' if has_groq else 'warn')
-        .replace('{% if not has_groq %}— not set{% endif %}',       '' if has_groq else '— not set')
         .replace('{% if has_shopify %}ok{% else %}warn{% endif %}', 'ok' if has_shopify else 'warn')
         .replace('{% if not has_shopify %}— not set{% endif %}',    '' if has_shopify else '— not set')
         .replace('{{ shopify_store }}', shopify_store))
@@ -1215,7 +1061,6 @@ def get_colors():
 def get_status():
     settings = load_settings()
     return jsonify({
-        'groq':    bool(settings.get('groq_api_key')  or os.environ.get('GROQ_API_KEY')),
         'shopify': bool(settings.get('shopify_store') or os.environ.get('SHOPIFY_STORE')),
     })
 
@@ -1316,7 +1161,6 @@ def get_settings_route():
     out = {
         'shopify_store':  settings.get('shopify_store')  or os.environ.get('SHOPIFY_STORE', ''),
         'shopify_token':  settings.get('shopify_token')  or os.environ.get('SHOPIFY_TOKEN', ''),
-        'groq_api_key':   settings.get('groq_api_key')   or os.environ.get('GROQ_API_KEY', ''),
         'product_vendor': settings.get('product_vendor') or os.environ.get('PRODUCT_VENDOR', ''),
         'product_type':   settings.get('product_type')   or os.environ.get('PRODUCT_TYPE', ''),
         'default_markup': settings.get('default_markup', 4),
@@ -1350,47 +1194,6 @@ def test_shopify():
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 400
 
-@app.route('/test_groq', methods=['POST'])
-def test_groq():
-    settings = load_settings()
-    key = settings.get('groq_api_key') or ''
-    if not key: return jsonify({'ok': False, 'error': 'Groq key required'}), 400
-    try:
-        r = requests.post('https://api.groq.com/openai/v1/chat/completions',
-                          headers={'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'},
-                          json={'model': 'meta-llama/llama-4-scout-17b-16e-instruct',
-                                'messages': [{'role': 'user', 'content': 'Say OK'}], 'max_tokens': 5},
-                          timeout=20)
-        if r.ok: return jsonify({'ok': True})
-        return jsonify({'ok': False, 'error': f'HTTP {r.status_code}: {r.text[:200]}'}), 400
-    except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 400
-
-# ── AI title preview (before anything touches Shopify) ────────────────────────
-@app.route('/generate_title', methods=['POST'])
-def generate_title_route():
-    data = request.get_json(force=True, silent=True) or {}
-    filenames   = data.get('filenames') or []
-    sku         = sanitize_sku(data.get('sku') or 'PREVIEW') or 'PREVIEW'
-    category    = (data.get('category') or '').strip() or None
-    subcategory = (data.get('subcategory') or '').strip() or None
-    sid         = (data.get('socket_id') or '').strip() or None
-
-    if not filenames:
-        return jsonify({'error': 'No uploaded images to analyze'}), 400
-
-    image_paths = [UPLOAD_DIR / fn for fn in filenames]
-    missing = [p.name for p in image_paths if not p.exists()]
-    if missing:
-        return jsonify({'error': f'Image(s) not found on server: {missing}'}), 400
-
-    try:
-        details = generate_product_details(image_paths, sku, sid,
-                                           category=category, subcategory=subcategory)
-        return jsonify(details)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
 # ── Socket.IO pipeline ────────────────────────────────────────────────────────
 @socketio.on('start_upload')
 def handle_start_upload(data):
@@ -1412,13 +1215,22 @@ def handle_start_upload(data):
     if isinstance(colors, str): colors = [c.strip() for c in colors.split(',') if c.strip()]
     if isinstance(sizes, str):  sizes  = [s.strip() for s in sizes.split(',')  if s.strip()]
 
-    selling_price    = calc_sp(cost_price, markup)
-    compare_at_price = int(round(selling_price * 2))
+    def _num(v):
+        try:
+            n = float(v)
+            return n if n > 0 else None
+        except (TypeError, ValueError):
+            return None
+
+    selling_price    = int(round(_num(data.get('selling_price')) or calc_sp(cost_price, markup)))
+    compare_at_price = int(round(_num(data.get('compare_at_price')) or selling_price * 2))
     image_paths      = [UPLOAD_DIR / fn for fn in filenames]
     timestamp        = datetime.now().isoformat()
 
     sub_note = f' | {subcategory}' if subcategory else ''
     log(sid, f'▶ {sku}{sub_note} | {len(filenames)} image(s) | CP ₹{cost_price} → SP ₹{selling_price} (MRP ₹{compare_at_price})')
+    if not manual_title:
+        log(sid, f'ℹ No product name for {sku} — using the SKU as the title', 'muted')
 
     def run():
         with upload_semaphore:
@@ -1427,12 +1239,11 @@ def handle_start_upload(data):
                 if missing:
                     raise FileNotFoundError(f'Image(s) not found: {[p.name for p in missing]}')
 
-                details = generate_product_details(image_paths, sku, sid,
-                                                   category=category, subcategory=subcategory)
-                result  = create_shopify_product(
-                    image_paths, sku, selling_price, details, sid,
-                    manual_title=manual_title, category=category, subcategory=subcategory,
-                    manual_tags=manual_tags, weight_g=weight_g, hs_code=hs_code,
+                result = create_shopify_product(
+                    image_paths, sku, selling_price, sid,
+                    title=manual_title, compare_at_price=compare_at_price,
+                    category=category, subcategory=subcategory,
+                    tags=manual_tags, weight_g=weight_g, hs_code=hs_code,
                     country_of_origin=country_of_origin, inventory_qty=inventory_qty,
                     cost_price=cost_price, colors=colors, sizes=sizes)
 
