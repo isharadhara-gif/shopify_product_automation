@@ -7,143 +7,132 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
-/* ── Glassmorphism / aurora theme ── */
+/* ══════════════════════════════════════════════════════════════════════════
+   Ishhaara Listing Studio v2 — "velvet tray" theme
+   Warm near-black surfaces · hairline borders · champagne-gold accent.
+   No backdrop-filter anywhere: long queues stay fast.
+   ══════════════════════════════════════════════════════════════════════════ */
 :root{
   color-scheme:dark;
-  --bg0:#06071a;--bg1:#090c24;
-  --glass:rgba(255,255,255,.05);
-  --glass-hi:rgba(255,255,255,.09);
-  --glass-border:rgba(255,255,255,.10);
-  --glass-border-hi:rgba(255,255,255,.20);
-  --accent:#7c6dfa;--accent2:#a78bfa;--accent3:#38bdf8;
-  --glow:rgba(124,109,250,.35);
-  --glow2:rgba(167,139,250,.25);
-  --green:#34d399;--red:#f87171;--yellow:#fbbf24;
-  --text:#f0f0ff;--muted:#8b8fad;--faint:#4a4d6e;
-  --r:16px;--r-sm:10px;--r-xs:7px;
-  --font:'Inter',system-ui,sans-serif;
+  --bg:#0f0d0a;
+  --bg-raise:#151210;
+  --surface:#1a1712;
+  --surface-hi:#211d16;
+  --border:#2b261d;
+  --border-hi:#3d3628;
+  --gold:#d3a84c;
+  --gold-bright:#ecca7d;
+  --gold-dim:rgba(211,168,76,.11);
+  --gold-line:rgba(211,168,76,.38);
+  --ivory:#f2ecdd;
+  --muted:#a2997f;
+  --faint:#5e5643;
+  --green:#63c78f;--green-dim:rgba(99,199,143,.12);
+  --red:#e2695f;--red-dim:rgba(226,105,95,.12);
+  --amber:#dfae52;
+  --r:14px;--r-sm:9px;--r-xs:7px;
+  --font:'Instrument Sans',system-ui,sans-serif;
+  --display:'Fraunces',Georgia,serif;
   --mono:'JetBrains Mono',monospace;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html{scrollbar-color:rgba(124,109,250,.4) transparent}
+html{scrollbar-color:var(--border-hi) transparent}
 ::-webkit-scrollbar{width:6px;height:6px}
 ::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:rgba(124,109,250,.4);border-radius:99px}
+::-webkit-scrollbar-thumb{background:var(--border-hi);border-radius:99px}
+::-webkit-scrollbar-thumb:hover{background:var(--gold-line)}
 
 body{
-  font-family:var(--font);font-size:14px;color:var(--text);
-  min-height:100vh;overflow-x:hidden;
-  background:var(--bg0);
+  font-family:var(--font);font-size:14px;color:var(--ivory);
+  min-height:100vh;overflow-x:hidden;background:var(--bg);
+  -webkit-font-smoothing:antialiased;
 }
-
-/* aurora background */
-body::before{
-  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
-  background:
-    radial-gradient(ellipse 70% 50% at 80% -10%, rgba(100,80,255,.28) 0%, transparent 65%),
-    radial-gradient(ellipse 50% 40% at -10% 60%, rgba(56,189,248,.18) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 50% at 50% 110%, rgba(124,109,250,.15) 0%, transparent 60%);
-}
-
 button,input,select,textarea{font-family:inherit}
-::selection{background:rgba(124,109,250,.35)}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+::selection{background:rgba(211,168,76,.30)}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:4px}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 
-/* ── Glass mixin helpers ── */
-.glass{
-  background:var(--glass);
-  backdrop-filter:blur(20px) saturate(160%);
-  -webkit-backdrop-filter:blur(20px) saturate(160%);
-  border:1px solid var(--glass-border);
+/* ── The gold seam — signature hairline / live batch progress ── */
+#seam{
+  position:fixed;top:0;left:0;right:0;height:2px;z-index:1000;
+  background:linear-gradient(90deg,transparent,var(--gold-line) 30%,var(--gold-line) 70%,transparent);
 }
-.glass-hi{
-  background:var(--glass-hi);
-  backdrop-filter:blur(24px) saturate(180%);
-  -webkit-backdrop-filter:blur(24px) saturate(180%);
-  border:1px solid var(--glass-border-hi);
+#seam .fill{
+  position:absolute;inset:0;width:0%;
+  background:linear-gradient(90deg,var(--gold),var(--gold-bright));
+  box-shadow:0 0 12px rgba(211,168,76,.55);
+  transition:width .35s ease;
 }
 
 /* ── Layout ── */
-.app{position:relative;z-index:1;display:grid;grid-template-columns:260px 1fr;min-height:100vh}
-
-/* ── Sidebar ── */
+.app{position:relative;display:grid;grid-template-columns:252px 1fr;min-height:100vh}
 .sidebar{
-  position:sticky;top:0;height:100vh;overflow:hidden;
-  display:flex;flex-direction:column;gap:18px;padding:22px 16px;
-  border-right:1px solid var(--glass-border);
-  background:rgba(10,12,35,.6);
-  backdrop-filter:blur(30px) saturate(150%);
-  -webkit-backdrop-filter:blur(30px) saturate(150%);
+  position:sticky;top:0;height:100vh;overflow:hidden auto;
+  display:flex;flex-direction:column;gap:18px;padding:24px 16px 18px;
+  border-right:1px solid var(--border);background:var(--bg-raise);
 }
-.main{padding:0 32px 60px;max-width:1240px;width:100%}
+.main{padding:0 30px 60px;max-width:1280px;width:100%}
 
-/* logo */
-.logo{display:flex;align-items:center;gap:12px;padding-bottom:18px;border-bottom:1px solid var(--glass-border)}
-.logo-gem{
-  width:40px;height:40px;flex-shrink:0;border-radius:12px;
-  background:linear-gradient(135deg,#7c6dfa,#a78bfa,#38bdf8);
-  display:grid;place-items:center;font-size:18px;
-  box-shadow:0 4px 20px rgba(124,109,250,.5);
+/* brand */
+.brand{display:flex;align-items:center;gap:12px;padding-bottom:18px;border-bottom:1px solid var(--border)}
+.brand-mark{
+  width:40px;height:40px;flex-shrink:0;border-radius:10px;
+  background:linear-gradient(160deg,#e8c063,#b0812e 60%,#8a6420);
+  display:grid;place-items:center;
+  font-family:var(--display);font-weight:600;font-size:21px;color:#171106;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 3px 14px rgba(211,168,76,.28);
 }
-.logo-text{font-size:15px;font-weight:700;letter-spacing:-.3px;color:var(--text)}
-.logo-sub{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-top:2px}
+.brand-name{font-family:var(--display);font-size:16.5px;font-weight:600;letter-spacing:.4px;color:var(--ivory)}
+.brand-sub{font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:2.2px;margin-top:3px}
 
-/* status */
+/* connection status */
 .status-bar{display:flex;flex-direction:column;gap:8px}
 .status-item{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
-.dot{width:7px;height:7px;border-radius:50%;background:var(--faint);flex-shrink:0;transition:all .3s}
-.dot.ok{background:var(--green);box-shadow:0 0 8px var(--green)}
-.dot.warn{background:var(--yellow);box-shadow:0 0 8px var(--yellow)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--faint);flex-shrink:0;transition:background .3s,box-shadow .3s}
+.dot.ok{background:var(--green);box-shadow:0 0 7px rgba(99,199,143,.6)}
+.dot.warn{background:var(--amber);box-shadow:0 0 7px rgba(223,174,82,.5)}
+.dot.err{background:var(--red);box-shadow:0 0 7px rgba(226,105,95,.6)}
 
 /* mini stats */
 .mini-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.mini-stat{
-  padding:10px 12px;border-radius:var(--r-sm);
-  background:rgba(124,109,250,.08);border:1px solid rgba(124,109,250,.2);
-}
-.mini-stat-val{font-family:var(--mono);font-size:18px;font-weight:700;color:var(--accent2)}
-.mini-stat-label{font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-top:3px}
+.mini-stat{padding:11px 12px;border-radius:var(--r-sm);background:var(--gold-dim);border:1px solid var(--gold-line)}
+.mini-stat-val{font-family:var(--mono);font-size:18px;font-weight:600;color:var(--gold-bright)}
+.mini-stat-label{font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-top:3px}
 
 /* nav */
-.nav{display:flex;flex-direction:column;gap:4px}
+.nav{display:flex;flex-direction:column;gap:3px}
 .nav-btn{
   background:transparent;border:none;color:var(--muted);font-size:13px;font-weight:500;
   padding:10px 12px;border-radius:var(--r-sm);text-align:left;cursor:pointer;
-  display:flex;align-items:center;gap:10px;transition:all .15s;
+  display:flex;align-items:center;gap:10px;transition:background .15s,color .15s;
   border-left:2px solid transparent;
 }
-.nav-btn:hover{background:var(--glass);color:var(--text)}
-.nav-btn.active{
-  background:linear-gradient(90deg,rgba(124,109,250,.15),rgba(124,109,250,.05));
-  color:var(--accent2);border-left-color:var(--accent);
-}
-.nav-kbd{margin-left:auto;font-family:var(--mono);font-size:9.5px;color:var(--faint);border:1px solid rgba(255,255,255,.1);border-radius:4px;padding:1px 5px}
+.nav-btn:hover{background:var(--surface);color:var(--ivory)}
+.nav-btn.active{background:var(--gold-dim);color:var(--gold-bright);border-left-color:var(--gold)}
+.nav-kbd{margin-left:auto;font-family:var(--mono);font-size:9.5px;color:var(--faint);border:1px solid var(--border);border-radius:4px;padding:1px 5px}
 
-.side-guide{margin-top:auto;font-size:11.5px;color:var(--muted);line-height:1.7;border-top:1px solid var(--glass-border);padding-top:16px}
-.side-guide strong{color:rgba(255,255,255,.7);font-weight:600;display:block;margin-bottom:2px}
+.side-guide{margin-top:auto;font-size:11.5px;color:var(--muted);line-height:1.7;border-top:1px solid var(--border);padding-top:16px}
+.side-guide strong{color:var(--ivory);opacity:.75;font-weight:600;display:block;margin-bottom:2px}
 .side-guide .g-block{margin-bottom:12px}
-.side-guide code{font-family:var(--mono);font-size:10.5px;color:var(--accent3)}
+.side-guide code{font-family:var(--mono);font-size:10.5px;color:var(--gold-bright)}
 
 /* ── Command bar ── */
 .command-bar{
   position:sticky;top:0;z-index:40;
   display:flex;align-items:center;gap:14px;flex-wrap:wrap;
-  padding:18px 0 14px;margin-bottom:20px;
-  background:linear-gradient(180deg,rgba(6,7,26,.95) 75%,transparent);
-  border-bottom:1px solid var(--glass-border);
+  padding:20px 0 14px;margin-bottom:20px;
+  background:linear-gradient(180deg,var(--bg) 78%,transparent);
+  border-bottom:1px solid var(--border);
 }
-.page-title{font-size:22px;font-weight:700;letter-spacing:-.5px;
-  background:linear-gradient(90deg,#fff,var(--accent2));
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.page-title{font-family:var(--display);font-size:23px;font-weight:600;letter-spacing:.2px;color:var(--ivory)}
 .page-sub{font-size:12px;color:var(--muted);margin-top:3px}
 .cb-spacer{flex:1}
-.cb-status{display:flex;align-items:center;gap:12px;font-size:12px;color:var(--muted)}
+.cb-status{display:flex;align-items:center;gap:13px;font-size:12px;color:var(--muted)}
 .cb-chip{display:inline-flex;align-items:center;gap:5px}
-.cb-chip .n{font-family:var(--mono);font-weight:700;color:var(--text)}
-.cb-chip.ready .n{color:var(--accent2)}
+.cb-chip .n{font-family:var(--mono);font-weight:600;color:var(--ivory)}
+.cb-chip.ready .n{color:var(--gold-bright)}
 .cb-chip.fail .n{color:var(--red)}
 .cb-chip.done .n{color:var(--green)}
 
@@ -151,162 +140,146 @@ button,input,select,textarea{font-family:inherit}
 .btn{
   padding:9px 18px;border-radius:var(--r-sm);border:1px solid transparent;
   font-size:12.5px;font-weight:600;cursor:pointer;
-  display:inline-flex;align-items:center;gap:7px;transition:all .18s;
+  display:inline-flex;align-items:center;gap:7px;transition:filter .15s,transform .15s,border-color .15s,background .15s;
 }
 .btn-primary{
-  background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;
-  box-shadow:0 4px 20px var(--glow);border:none;
+  background:linear-gradient(160deg,var(--gold-bright),var(--gold) 55%,#b98f36);
+  color:#1b1406;box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 3px 14px rgba(211,168,76,.25);border:none;
 }
-.btn-primary:hover{filter:brightness(1.1);transform:translateY(-1px);box-shadow:0 6px 28px var(--glow)}
+.btn-primary:hover{filter:brightness(1.06);transform:translateY(-1px)}
 .btn-primary:disabled{opacity:.35;cursor:not-allowed;transform:none;box-shadow:none}
-.btn-ghost{background:var(--glass);color:var(--muted);border-color:var(--glass-border)}
-.btn-ghost:hover{background:var(--glass-hi);color:var(--text);border-color:var(--glass-border-hi)}
+.btn-ghost{background:var(--surface);color:var(--muted);border-color:var(--border)}
+.btn-ghost:hover{background:var(--surface-hi);color:var(--ivory);border-color:var(--border-hi)}
 .btn-sm{padding:6px 12px;font-size:11.5px}
-.kbd-hint{font-family:var(--mono);font-size:10px;opacity:.5;font-weight:600}
+.kbd-hint{font-family:var(--mono);font-size:10px;opacity:.55;font-weight:600}
 
 /* ── Panels ── */
 .panel{display:none}
-.panel.active{display:block;animation:fadein .2s ease}
+.panel.active{display:block;animation:fadein .18s ease}
 @keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 
 /* ── Stats row ── */
 .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
 .stat-card{
   border-radius:var(--r);padding:16px 18px;
-  background:var(--glass);border:1px solid var(--glass-border);
-  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
-  transition:border-color .2s;
+  background:var(--surface);border:1px solid var(--border);transition:border-color .2s;
 }
-.stat-card:hover{border-color:var(--glass-border-hi)}
-.stat-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
-.stat-val{font-family:var(--mono);font-size:24px;font-weight:700;margin-top:8px;letter-spacing:-.5px}
+.stat-card:hover{border-color:var(--border-hi)}
+.stat-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1.2px}
+.stat-val{font-family:var(--mono);font-size:23px;font-weight:600;margin-top:8px;letter-spacing:-.5px}
 .stat-card.green .stat-val{color:var(--green)}
 .stat-card.red .stat-val{color:var(--red)}
-.stat-card.purple .stat-val{
-  background:linear-gradient(90deg,var(--accent),var(--accent3));
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text
-}
+.stat-card.gold .stat-val{color:var(--gold-bright)}
 
 /* ── Drop zone ── */
 .upload-zone{
-  border:1.5px dashed rgba(124,109,250,.35);border-radius:var(--r);
-  padding:34px 24px;text-align:center;cursor:pointer;
-  transition:all .2s;
-  background:rgba(124,109,250,.04);
-  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  border:1.5px dashed var(--gold-line);border-radius:var(--r);
+  padding:32px 24px;text-align:center;cursor:pointer;
+  transition:border-color .2s,background .2s;background:var(--gold-dim);
 }
-.upload-zone:hover,.upload-zone.drag{
-  border-color:var(--accent);
-  background:rgba(124,109,250,.10);
-  box-shadow:0 0 40px rgba(124,109,250,.12) inset;
-}
-.upload-text{font-size:17px;font-weight:600;color:rgba(255,255,255,.85)}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--gold);background:rgba(211,168,76,.16)}
+.upload-text{font-family:var(--display);font-size:18px;font-weight:600;color:var(--ivory)}
 .upload-hint{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.6}
-.upload-hint code{font-family:var(--mono);font-size:11px;color:var(--accent3)}
+.upload-hint code{font-family:var(--mono);font-size:11px;color:var(--gold-bright)}
 .zone-btns{display:flex;gap:10px;justify-content:center;margin-top:14px;flex-wrap:wrap}
 
 /* ── Toolbar ── */
 .toolbar{
   margin-top:14px;padding:13px 16px;border-radius:var(--r);
-  background:var(--glass);border:1px solid var(--glass-border);
-  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
-  display:flex;align-items:center;gap:11px;flex-wrap:wrap;
+  background:var(--surface);border:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
 }
-.toolbar-label{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.8px}
-.toolbar .divider{width:1px;height:20px;background:var(--glass-border)}
+.toolbar-label{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:1px}
+.toolbar .divider{width:1px;height:20px;background:var(--border)}
 .chip-radio{
   display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;
-  padding:4px 10px;border-radius:99px;
-  background:rgba(255,255,255,.04);border:1px solid transparent;color:var(--muted);
-  transition:all .12s;
+  padding:4px 11px;border-radius:99px;background:var(--bg-raise);
+  border:1px solid transparent;color:var(--muted);transition:border-color .12s,color .12s,background .12s;
 }
-.chip-radio input{accent-color:var(--accent)}
-.chip-radio:has(input:checked){
-  border-color:rgba(124,109,250,.5);color:var(--accent2);
-  background:rgba(124,109,250,.12);
-}
+.chip-radio input{accent-color:var(--gold)}
+.chip-radio:has(input:checked){border-color:var(--gold-line);color:var(--gold-bright);background:var(--gold-dim)}
 
 /* inputs */
 .item-input{
-  background:rgba(255,255,255,.05);border:1px solid var(--glass-border);
-  border-radius:var(--r-xs);padding:6px 9px;color:var(--text);
+  background:var(--bg-raise);border:1px solid var(--border);
+  border-radius:var(--r-xs);padding:6px 9px;color:var(--ivory);
   font-size:12px;width:110px;transition:border-color .12s,background .12s;
 }
-.item-input:focus{outline:none;border-color:var(--accent);background:rgba(124,109,250,.08)}
+.item-input:focus{outline:none;border-color:var(--gold);background:var(--gold-dim)}
 .item-input::placeholder{color:var(--faint)}
-.item-input.title-input{width:220px}
-.item-input.tags-input{width:190px}
-.item-input.variant-input{width:162px}
-.item-input.narrow{width:84px}
-select.item-input{width:148px;cursor:pointer;color-scheme:dark}
-select.item-input option{background:#12142c;color:var(--text)}
+.item-input.title-input{width:225px}
+.item-input.variant-input{width:150px}
+.item-input.narrow{width:80px}
+select.item-input{cursor:pointer;color-scheme:dark;width:150px}
+select.item-input option{background:#1c1913;color:var(--ivory)}
 .item-input.mono-in{font-family:var(--mono);font-size:11.5px}
-.item-input.invalid{border-color:var(--red)!important;background:rgba(248,113,113,.06)}
+.item-input.invalid{border-color:var(--red)!important;background:var(--red-dim)}
 
 /* ── AI title button / badge ── */
 .ai-btn{
   font-size:10.5px;font-weight:600;padding:6px 11px;border-radius:var(--r-xs);
-  background:linear-gradient(135deg,rgba(124,109,250,.18),rgba(56,189,248,.12));
-  color:var(--accent2);border:1px solid rgba(124,109,250,.35);cursor:pointer;
-  display:inline-flex;align-items:center;gap:6px;transition:all .15s;white-space:nowrap;
+  background:var(--gold-dim);color:var(--gold-bright);
+  border:1px solid var(--gold-line);cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;transition:background .15s,border-color .15s;white-space:nowrap;
 }
-.ai-btn:hover{border-color:var(--accent);background:rgba(124,109,250,.28);color:#fff}
-.ai-btn:disabled{opacity:.6;cursor:wait;transform:none}
+.ai-btn:hover{border-color:var(--gold);background:rgba(211,168,76,.22)}
+.ai-btn:disabled{opacity:.6;cursor:wait}
 .ai-badge{
-  font-size:9px;font-weight:800;padding:2px 7px;border-radius:99px;letter-spacing:.5px;
-  background:rgba(124,109,250,.18);color:var(--accent2);border:1px solid rgba(124,109,250,.35);
+  font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px;letter-spacing:.5px;
+  background:var(--gold-dim);color:var(--gold-bright);border:1px solid var(--gold-line);
   display:inline-flex;align-items:center;gap:3px;
 }
 
 /* ── Queue header ── */
 .queue-header{display:flex;align-items:center;margin:24px 0 12px;flex-wrap:wrap;gap:10px}
-.queue-title{font-size:16px;font-weight:700;color:rgba(255,255,255,.85)}
+.queue-title{font-family:var(--display);font-size:17px;font-weight:600;color:var(--ivory)}
 .queue-filters{display:flex;gap:5px;margin-left:8px}
 .qf{
-  background:transparent;border:1px solid var(--glass-border);color:var(--muted);
+  background:transparent;border:1px solid var(--border);color:var(--muted);
   font-size:11px;font-weight:600;padding:4px 11px;border-radius:99px;cursor:pointer;
-  transition:all .12s;
+  transition:color .12s,border-color .12s,background .12s;
 }
-.qf:hover{color:var(--text);border-color:var(--glass-border-hi)}
-.qf.active{background:rgba(124,109,250,.15);color:var(--accent2);border-color:rgba(124,109,250,.4)}
+.qf:hover{color:var(--ivory);border-color:var(--border-hi)}
+.qf.active{background:var(--gold-dim);color:var(--gold-bright);border-color:var(--gold-line)}
 .qf .c{font-family:var(--mono);font-size:10px;margin-left:3px}
+.sel-note{font-size:11.5px;color:var(--gold-bright)}
 
 /* ── Queue items ── */
 .queue-list{display:flex;flex-direction:column;gap:10px}
-.queue-item{
-  border-radius:var(--r);padding:16px 18px;
-  display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:flex-start;
-  position:relative;overflow:hidden;transition:border-color .2s,box-shadow .2s;
-  background:rgba(255,255,255,.04);border:1px solid var(--glass-border);
-  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+.qcard{
+  border-radius:var(--r);padding:15px 17px;
+  display:grid;grid-template-columns:auto auto 1fr auto;gap:14px;align-items:flex-start;
+  position:relative;overflow:hidden;transition:border-color .2s;
+  background:var(--surface);border:1px solid var(--border);
 }
-.queue-item::before{
+.qcard::before{
   content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
   background:var(--faint);border-radius:0 2px 2px 0;transition:background .2s,box-shadow .2s;
 }
-.queue-item.ready::before{background:var(--accent);box-shadow:0 0 8px var(--accent)}
-.queue-item.uploading{border-color:rgba(124,109,250,.4);box-shadow:0 0 20px rgba(124,109,250,.08)}
-.queue-item.uploading::before{background:var(--accent2);animation:pulse-bar 1.2s ease-in-out infinite alternate}
-@keyframes pulse-bar{from{opacity:.4}to{opacity:1;box-shadow:0 0 12px var(--accent2)}}
-.queue-item.success{border-color:rgba(52,211,153,.25);opacity:.7}
-.queue-item.success::before{background:var(--green)}
-.queue-item.failed{border-color:rgba(248,113,113,.3)}
-.queue-item.failed::before{background:var(--red)}
+.qcard.ready::before{background:var(--gold);box-shadow:0 0 8px rgba(211,168,76,.5)}
+.qcard.uploading{border-color:var(--gold-line)}
+.qcard.uploading::before{background:var(--gold-bright);animation:pulse-bar 1.2s ease-in-out infinite alternate}
+@keyframes pulse-bar{from{opacity:.4}to{opacity:1;box-shadow:0 0 12px var(--gold-bright)}}
+.qcard.success{border-color:rgba(99,199,143,.3);opacity:.72}
+.qcard.success::before{background:var(--green)}
+.qcard.failed{border-color:rgba(226,105,95,.35)}
+.qcard.failed::before{background:var(--red)}
+.qcard.selected{border-color:var(--gold-line);background:var(--surface-hi)}
+
+.sel-box{margin-top:2px;width:15px;height:15px;accent-color:var(--gold);cursor:pointer;flex-shrink:0}
 
 /* ── Thumbnails ── */
 .thumb-stack{display:flex;gap:6px;flex-wrap:wrap;max-width:170px}
-.thumb-wrap{position:relative;width:56px;height:56px;flex-shrink:0}
+.thumb-wrap{position:relative;width:54px;height:54px;flex-shrink:0}
 .thumb{
-  width:56px;height:56px;object-fit:cover;border-radius:10px;display:block;
-  border:1px solid var(--glass-border);background:rgba(255,255,255,.04);cursor:zoom-in;
-  transition:filter .12s;
+  width:54px;height:54px;object-fit:cover;border-radius:9px;display:block;
+  border:1px solid var(--border);background:var(--bg-raise);cursor:zoom-in;transition:filter .12s;
 }
 .thumb:hover{filter:brightness(1.15)}
-.thumb-wrap.cover .thumb{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),0 0 10px rgba(124,109,250,.3)}
+.thumb-wrap.cover .thumb{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
 .cover-tag{
   position:absolute;left:3px;bottom:3px;font-size:7.5px;font-weight:800;letter-spacing:.5px;
-  background:var(--accent);color:#fff;padding:1px 4px;border-radius:3px;
-  pointer-events:none;
+  background:var(--gold);color:#1b1406;padding:1px 4px;border-radius:3px;pointer-events:none;
 }
 .thumb-remove,.thumb-cover{
   position:absolute;width:18px;height:18px;border-radius:50%;
@@ -315,266 +288,275 @@ select.item-input option{background:#12142c;color:var(--text)}
 }
 .thumb-wrap:hover .thumb-remove,.thumb-wrap:hover .thumb-cover{opacity:1}
 .thumb-remove{top:-5px;right:-5px;background:var(--red);color:#fff}
-.thumb-cover{top:-5px;left:-5px;background:var(--accent2);color:#fff}
+.thumb-cover{top:-5px;left:-5px;background:var(--gold);color:#1b1406}
 .thumb-add{
-  width:56px;height:56px;border-radius:10px;
-  border:1.5px dashed rgba(124,109,250,.4);
+  width:54px;height:54px;border-radius:9px;border:1.5px dashed var(--gold-line);
   display:flex;align-items:center;justify-content:center;
-  font-size:22px;color:rgba(124,109,250,.6);cursor:pointer;flex-shrink:0;
-  background:rgba(124,109,250,.05);transition:all .15s;
+  font-size:22px;color:var(--gold-line);cursor:pointer;flex-shrink:0;
+  background:transparent;transition:border-color .15s,color .15s,background .15s;
 }
-.thumb-add:hover{border-color:var(--accent);color:var(--accent);background:rgba(124,109,250,.1)}
+.thumb-add:hover{border-color:var(--gold);color:var(--gold);background:var(--gold-dim)}
 .img-count-badge{font-size:10px;color:var(--muted);margin-top:5px;text-align:center}
 
 /* ── Image preview lightbox ── */
 .preview-modal{
-  position:fixed;inset:0;z-index:10000;
-  background:rgba(4,4,14,.88);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  position:fixed;inset:0;z-index:10000;background:rgba(8,6,3,.9);
   display:none;align-items:center;justify-content:center;padding:40px;cursor:zoom-out;
 }
 .preview-modal.visible{display:flex;animation:fadein .15s ease}
 .preview-modal img{
   max-width:90vw;max-height:88vh;border-radius:14px;
-  box-shadow:0 20px 80px rgba(0,0,0,.6);border:1px solid var(--glass-border-hi);
-  cursor:default;
+  box-shadow:0 20px 80px rgba(0,0,0,.7);border:1px solid var(--border-hi);cursor:default;
 }
 .preview-modal-close{
   position:absolute;top:22px;right:26px;width:38px;height:38px;border-radius:50%;
-  background:var(--glass-hi);border:1px solid var(--glass-border-hi);color:#fff;
+  background:var(--surface-hi);border:1px solid var(--border-hi);color:var(--ivory);
   font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;
 }
-.preview-modal-close:hover{background:rgba(124,109,250,.3)}
-.preview-modal-name{
-  position:absolute;bottom:22px;left:0;right:0;text-align:center;
-  font-family:var(--mono);font-size:12px;color:var(--muted);
-}
+.preview-modal-close:hover{background:var(--gold-dim);border-color:var(--gold-line)}
+.preview-modal-name{position:absolute;bottom:22px;left:0;right:0;text-align:center;font-family:var(--mono);font-size:12px;color:var(--muted)}
 
 /* ── Item fields ── */
 .item-info{min-width:0}
 .item-name{font-size:13px;font-weight:600;display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:2px}
-.item-name .sku-txt{font-family:var(--mono);color:var(--accent2)}
+.item-name .sku-txt{font-family:var(--mono);color:var(--gold-bright)}
 .item-name .file-txt{color:var(--muted);font-weight:400;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px}
 .item-inputs{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center}
 .item-meta{font-size:11.5px;color:var(--muted);margin-top:8px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-family:var(--mono)}
 .item-price{color:var(--green);font-weight:700}
 .item-mrp{color:var(--faint);text-decoration:line-through}
 .item-error-msg{font-size:11px;color:var(--red);margin-top:6px}
-.variant-pill{font-family:var(--font);font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:rgba(124,109,250,.15);color:var(--accent2);border:1px solid rgba(124,109,250,.3)}
-.dup-pill{font-family:var(--font);font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:rgba(251,191,36,.1);color:var(--yellow);border:1px solid rgba(251,191,36,.3)}
-.preset-btn{font-size:10.5px;padding:5px 9px;border-radius:var(--r-xs);background:rgba(255,255,255,.04);color:var(--muted);border:1px solid var(--glass-border);cursor:pointer;transition:all .12s}
-.preset-btn:hover{color:var(--accent2);border-color:rgba(124,109,250,.4);background:rgba(124,109,250,.08)}
+.pill{font-family:var(--font);font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap}
+.pill-sub{background:var(--gold-dim);color:var(--gold-bright);border:1px solid var(--gold-line)}
+.pill-var{background:rgba(99,199,143,.1);color:var(--green);border:1px solid rgba(99,199,143,.3)}
+.pill-dup{background:rgba(223,174,82,.1);color:var(--amber);border:1px solid rgba(223,174,82,.35)}
+.pill-store{background:var(--red-dim);color:var(--red);border:1px solid rgba(226,105,95,.35)}
+.preset-btn{font-size:10.5px;padding:5px 9px;border-radius:var(--r-xs);background:var(--bg-raise);color:var(--muted);border:1px solid var(--border);cursor:pointer;transition:color .12s,border-color .12s,background .12s}
+.preset-btn:hover{color:var(--gold-bright);border-color:var(--gold-line);background:var(--gold-dim)}
 .item-actions{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
 .badge{font-size:10px;font-weight:700;padding:4px 10px;border-radius:99px;white-space:nowrap;letter-spacing:.3px}
-.badge-pending{background:rgba(255,255,255,.07);color:var(--muted)}
-.badge-ready{background:rgba(124,109,250,.2);color:var(--accent2)}
-.badge-running{background:rgba(124,109,250,.2);color:var(--accent2)}
-.badge-success{background:rgba(52,211,153,.15);color:var(--green)}
-.badge-failed{background:rgba(248,113,113,.15);color:var(--red)}
+.badge-pending{background:var(--bg-raise);color:var(--muted);border:1px solid var(--border)}
+.badge-ready{background:var(--gold-dim);color:var(--gold-bright);border:1px solid var(--gold-line)}
+.badge-running{background:var(--gold-dim);color:var(--gold-bright);border:1px solid var(--gold-line)}
+.badge-success{background:var(--green-dim);color:var(--green);border:1px solid rgba(99,199,143,.3)}
+.badge-failed{background:var(--red-dim);color:var(--red);border:1px solid rgba(226,105,95,.3)}
 .remove-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;line-height:1;padding:2px 4px}
 .remove-btn:hover{color:var(--red)}
 
-/* ── Progress ── */
-.progress-wrap{margin:4px 0 12px;background:rgba(255,255,255,.06);border-radius:99px;height:5px;overflow:hidden;display:none}
-.progress-bar{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent3));width:0%;transition:width .3s ease}
+/* progress under queue header */
 .progress-label{font-size:11px;color:var(--muted);margin-bottom:10px;display:none;font-family:var(--mono)}
 
 /* ── Log ── */
 .log-head{display:flex;align-items:center;gap:10px;margin:26px 0 10px}
-.log-title{font-size:16px;font-weight:700;color:rgba(255,255,255,.8)}
+.log-title{font-family:var(--display);font-size:17px;font-weight:600;color:var(--ivory)}
 .log-box{
-  background:rgba(6,7,26,.7);border:1px solid var(--glass-border);border-radius:var(--r);
-  padding:14px 16px;font-family:var(--mono);font-size:11.5px;height:240px;overflow-y:auto;line-height:1.8;
-  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  background:var(--bg-raise);border:1px solid var(--border);border-radius:var(--r);
+  padding:14px 16px;font-family:var(--mono);font-size:11.5px;height:238px;overflow-y:auto;line-height:1.8;
 }
-.log-info{color:rgba(240,240,255,.8)}.log-success{color:var(--green)}.log-error{color:var(--red)}.log-muted{color:var(--faint)}
+.log-info{color:rgba(242,236,221,.82)}.log-success{color:var(--green)}.log-error{color:var(--red)}.log-muted{color:var(--faint)}
 .log-time{color:var(--faint);margin-right:7px}
 
 /* ── Results ── */
 .results-grid{display:flex;flex-direction:column;gap:8px}
 .result-card{
-  background:var(--glass);border:1px solid var(--glass-border);
-  border-left:3px solid var(--green);border-radius:var(--r);
-  padding:13px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;
-  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--green);
+  border-radius:var(--r);padding:13px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;
 }
 .result-title{font-size:13px;font-weight:600}
 .result-meta{font-size:11px;color:var(--muted);margin-top:3px;font-family:var(--mono)}
-.result-link{font-size:11.5px;color:var(--accent2);text-decoration:none;font-weight:600;white-space:nowrap}
+.result-link{font-size:11.5px;color:var(--gold-bright);text-decoration:none;font-weight:600;white-space:nowrap}
 .result-link:hover{text-decoration:underline}
 
 /* ── History ── */
 .history-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap}
 .search-input{
-  background:var(--glass);border:1px solid var(--glass-border);
-  border-radius:var(--r-sm);padding:9px 14px;color:var(--text);font-size:13px;width:270px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-sm);padding:9px 14px;color:var(--ivory);font-size:13px;width:270px;
 }
-.search-input:focus{outline:none;border-color:var(--accent)}
-.table-wrap{
-  overflow-x:auto;background:var(--glass);border:1px solid var(--glass-border);border-radius:var(--r);
-  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
-}
+.search-input:focus{outline:none;border-color:var(--gold)}
+.table-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--border);border-radius:var(--r)}
 table{width:100%;border-collapse:collapse;font-size:12.5px}
-th{text-align:left;padding:11px 14px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.6px;font-size:10px;border-bottom:1px solid var(--glass-border);white-space:nowrap}
-td{padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.04)}
+th{text-align:left;padding:11px 14px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.8px;font-size:10px;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.035)}
 td.mono{font-size:11.5px;font-family:var(--mono)}
 tr:last-child td{border-bottom:none}
-tr:hover td{background:rgba(124,109,250,.05)}
+tr:hover td{background:var(--gold-dim)}
 .status-ok{color:var(--green);font-weight:600}
 .status-fail{color:var(--red);font-weight:600}
 .row-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px}
 .row-del:hover{color:var(--red)}
+.hf.active{background:var(--gold)!important;color:#1b1406!important;border-color:var(--gold)!important}
 
 /* ── Settings ── */
 .settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:700px}
 .field{display:flex;flex-direction:column;gap:6px}
 .field.full{grid-column:1/-1}
-label{font-size:10.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.8px}
+label{font-size:10.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
 .field-row{display:flex;gap:8px;align-items:center}
 input[type=text],input[type=password],input[type=number]{
-  background:var(--glass);border:1px solid var(--glass-border);
-  border-radius:var(--r-sm);padding:10px 12px;color:var(--text);font-size:13px;width:100%;
+  background:var(--bg-raise);border:1px solid var(--border);
+  border-radius:var(--r-sm);padding:10px 12px;color:var(--ivory);font-size:13px;width:100%;
 }
-input:focus{outline:none;border-color:var(--accent);background:rgba(124,109,250,.06)}
+input:focus{outline:none;border-color:var(--gold);background:var(--gold-dim)}
 .save-row{grid-column:1/-1;display:flex;gap:10px;align-items:center;margin-top:4px;flex-wrap:wrap}
 .save-msg{font-size:12px;color:var(--green);display:none}
 .test-result{font-size:12px}
 .field-note{font-size:11px;color:var(--muted);line-height:1.5}
-.field-note code{font-family:var(--mono);font-size:10.5px;color:var(--accent3)}
-.quickstart{
-  margin-top:30px;padding:20px;border-radius:var(--r);max-width:560px;
-  background:var(--glass);border:1px solid var(--glass-border);
-  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
-}
-.quickstart .qs-title{font-size:15px;font-weight:700;margin-bottom:10px;color:var(--accent2)}
+.field-note code{font-family:var(--mono);font-size:10.5px;color:var(--gold-bright)}
+.quickstart{margin-top:30px;padding:20px;border-radius:var(--r);max-width:560px;background:var(--surface);border:1px solid var(--border)}
+.quickstart .qs-title{font-family:var(--display);font-size:15px;font-weight:600;margin-bottom:10px;color:var(--gold-bright)}
 .quickstart p{font-size:12px;color:var(--muted);line-height:2}
-.quickstart a{color:var(--accent3)}
-.quickstart code{font-family:var(--mono);font-size:11px;color:var(--text)}
+.quickstart a{color:var(--gold-bright)}
+.quickstart code{font-family:var(--mono);font-size:11px;color:var(--ivory)}
 
 /* ── Toasts ── */
 .toast-stack{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:9999}
 .toast{
-  background:rgba(15,16,40,.92);border:1px solid var(--glass-border);
+  background:var(--surface-hi);border:1px solid var(--border-hi);
   border-radius:var(--r-sm);padding:11px 16px;font-size:12.5px;
-  box-shadow:0 8px 32px rgba(0,0,0,.6);animation:toastin .2s ease;max-width:330px;
-  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  box-shadow:0 8px 32px rgba(0,0,0,.55);animation:toastin .2s ease;max-width:330px;
 }
 .toast.success{border-left:3px solid var(--green)}
 .toast.error{border-left:3px solid var(--red)}
 @keyframes toastin{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
 
 .empty{text-align:center;padding:44px 24px;color:var(--muted)}
-.empty-title{font-size:16px;font-weight:600;color:rgba(255,255,255,.5);margin-bottom:6px}
+.empty-title{font-family:var(--display);font-size:16px;font-weight:600;color:var(--faint);margin-bottom:6px}
 @keyframes spin{to{transform:rotate(360deg)}}
-.spinner{width:13px;height:13px;border:2px solid rgba(255,255,255,.1);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:middle}
+.spinner{width:13px;height:13px;border:2px solid rgba(255,255,255,.1);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:middle}
 
-/* ── Color picker portal ── */
-#cp-portal{position:fixed;z-index:9999;display:none}
-#cp-portal.visible{display:block}
-.cp-dd{
-  background:rgba(10,12,36,.94);border:1px solid var(--glass-border-hi);border-radius:14px;
-  padding:14px;width:480px;max-width:calc(100vw - 20px);
-  box-shadow:0 20px 60px rgba(0,0,0,.75);
-  backdrop-filter:blur(30px) saturate(160%);-webkit-backdrop-filter:blur(30px) saturate(160%);
+/* ── Shared portal dropdowns (color + tag pickers) ── */
+.portal{position:fixed;z-index:9999;display:none}
+.portal.visible{display:block}
+.dd{
+  background:var(--surface-hi);border:1px solid var(--border-hi);border-radius:14px;
+  padding:14px;width:500px;max-width:calc(100vw - 20px);
+  box-shadow:0 20px 60px rgba(0,0,0,.7);
 }
-.cp-search-box{
-  width:100%;background:rgba(255,255,255,.06);border:1px solid var(--glass-border);
-  border-radius:var(--r-xs);padding:8px 11px;color:var(--text);font-size:12px;margin-bottom:11px;
+.dd-search{
+  width:100%;background:var(--bg-raise);border:1px solid var(--border);
+  border-radius:var(--r-xs);padding:8px 11px;color:var(--ivory);font-size:12px;margin-bottom:11px;
 }
-.cp-search-box:focus{outline:none;border-color:var(--accent);background:rgba(124,109,250,.08)}
+.dd-search:focus{outline:none;border-color:var(--gold);background:var(--gold-dim)}
+.dd-scroll{
+  max-height:300px;overflow-y:auto;padding-right:4px;
+  overscroll-behavior:contain;-webkit-overflow-scrolling:touch;
+}
+.dd-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+.dd-count{font-size:11px;color:var(--muted)}
+.dd-clear{font-size:11px;color:var(--red);background:none;border:none;cursor:pointer;padding:0}
+.dd-clear:hover{text-decoration:underline}
+.dd-section{font-size:9.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1.4px;margin:10px 0 7px}
+.dd-section:first-child{margin-top:0}
+.dd-section .hl{color:var(--gold-bright)}
 
-/* 6-column card grid — 54 colors ÷ 6 = 9 clean rows */
-.cp-grid{
-  display:grid;grid-template-columns:repeat(6,1fr);gap:6px;
-  max-height:310px;overflow-y:auto;padding-right:4px;
-  overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y;
-  scrollbar-color:rgba(124,109,250,.4) rgba(255,255,255,.04);
-}
-.cp-grid::-webkit-scrollbar{width:6px}
-.cp-grid::-webkit-scrollbar-track{background:rgba(255,255,255,.04);border-radius:99px}
-.cp-grid::-webkit-scrollbar-thumb{background:rgba(124,109,250,.4);border-radius:99px}
-.cp-grid::-webkit-scrollbar-thumb:hover{background:var(--accent)}
-
+/* color chips grid */
+.cp-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
 .cp-chip{
-  display:flex;flex-direction:column;align-items:stretch;
-  border-radius:9px;cursor:pointer;
-  border:1px solid rgba(255,255,255,.08);
-  background:rgba(255,255,255,.04);overflow:hidden;
-  transition:border-color .12s,transform .12s,box-shadow .12s;
-  -webkit-tap-highlight-color:transparent;user-select:none;
+  display:flex;flex-direction:column;border-radius:9px;cursor:pointer;
+  border:1px solid var(--border);background:var(--bg-raise);overflow:hidden;
+  transition:border-color .12s,transform .12s;user-select:none;-webkit-tap-highlight-color:transparent;
 }
-.cp-chip:hover{border-color:rgba(255,255,255,.2);transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,.4)}
-.cp-chip.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),0 4px 16px rgba(124,109,250,.25)}
-
-.cp-chip-swatch{width:100%;height:34px;flex-shrink:0;position:relative}
-.cp-chip-swatch::after{content:'';position:absolute;inset:0;box-shadow:inset 0 -8px 12px -6px rgba(0,0,0,.4)}
-/* tick on selected */
+.cp-chip:hover{border-color:var(--border-hi);transform:translateY(-2px)}
+.cp-chip.sel{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
+.cp-chip-swatch{width:100%;height:32px;flex-shrink:0;position:relative}
 .cp-chip.sel .cp-chip-swatch::before{
-  content:'✓';position:absolute;top:3px;right:3px;
-  width:14px;height:14px;border-radius:50%;
-  background:var(--accent);color:#fff;font-size:9px;font-weight:800;
-  display:flex;align-items:center;justify-content:center;
-  box-shadow:0 1px 4px rgba(0,0,0,.5);z-index:1;
+  content:'✓';position:absolute;top:3px;right:3px;width:14px;height:14px;border-radius:50%;
+  background:var(--gold);color:#1b1406;font-size:9px;font-weight:800;
+  display:flex;align-items:center;justify-content:center;z-index:1;
 }
-.cp-chip-name{
-  font-size:9.5px;padding:3px 4px 4px;color:var(--muted);
-  text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  transition:color .12s;
+.cp-chip-name{font-size:9.5px;padding:3px 4px 4px;color:var(--muted);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp-chip.sel .cp-chip-name{color:var(--gold-bright);font-weight:600;background:var(--gold-dim)}
+
+/* tag chips */
+.tag-cloud{display:flex;flex-wrap:wrap;gap:6px}
+.tag-chip{
+  font-size:11px;font-weight:500;padding:5px 11px;border-radius:99px;cursor:pointer;
+  background:var(--bg-raise);color:var(--muted);border:1px solid var(--border);
+  transition:border-color .1s,color .1s,background .1s;user-select:none;white-space:nowrap;
 }
-.cp-chip.sel .cp-chip-name{color:var(--accent2);font-weight:600;background:rgba(124,109,250,.1)}
+.tag-chip:hover{border-color:var(--border-hi);color:var(--ivory)}
+.tag-chip.sel{background:var(--gold-dim);color:var(--gold-bright);border-color:var(--gold-line);font-weight:600}
+.tag-chip.custom{border-style:dashed}
+.tag-add-row{display:flex;gap:8px;flex:1}
+.tag-add-row input{flex:1;background:var(--bg-raise);border:1px solid var(--border);border-radius:var(--r-xs);padding:7px 10px;color:var(--ivory);font-size:12px}
+.tag-add-row input:focus{outline:none;border-color:var(--gold)}
 
-.cp-foot{display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--glass-border)}
-.cp-count{font-size:11px;color:var(--muted)}
-.cp-clear-btn{font-size:11px;color:var(--red);background:none;border:none;cursor:pointer;padding:0}
-.cp-clear-btn:hover{text-decoration:underline}
-
-/* trigger */
-.cp-wrap{position:relative;flex-shrink:0}
-.cp-trigger{
-  display:flex;align-items:center;gap:7px;
-  background:rgba(255,255,255,.05);border:1px solid var(--glass-border);
-  border-radius:var(--r-xs);padding:6px 10px;cursor:pointer;
-  min-width:175px;max-width:240px;user-select:none;transition:all .12s;
+/* trigger buttons for pickers */
+.pk-trigger{
+  display:flex;align-items:center;gap:7px;background:var(--bg-raise);
+  border:1px solid var(--border);border-radius:var(--r-xs);padding:6px 10px;cursor:pointer;
+  min-width:165px;max-width:250px;user-select:none;transition:border-color .12s,background .12s;
 }
-.cp-trigger:hover{border-color:var(--glass-border-hi);background:rgba(255,255,255,.08)}
-.cp-trigger.open{border-color:var(--accent);background:rgba(124,109,250,.08)}
-.cp-trigger.has-sel{border-color:rgba(124,109,250,.4)}
-.cp-preview{display:flex;gap:3px;align-items:center;flex-shrink:0}
-.cp-dot-mini{width:11px;height:11px;border-radius:50%;border:1px solid rgba(255,255,255,.15);flex-shrink:0}
-.cp-lbl{flex:1;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
-.cp-lbl.placeholder{color:var(--faint)}
-.cp-caret{color:var(--faint);font-size:10px;flex-shrink:0;transition:transform .15s}
-.cp-trigger.open .cp-caret{transform:rotate(180deg)}
+.pk-trigger:hover{border-color:var(--border-hi);background:var(--surface-hi)}
+.pk-trigger.open{border-color:var(--gold);background:var(--gold-dim)}
+.pk-trigger.has-sel{border-color:var(--gold-line)}
+.pk-preview{display:flex;gap:3px;align-items:center;flex-shrink:0}
+.pk-dot{width:11px;height:11px;border-radius:50%;border:1px solid rgba(255,255,255,.15);flex-shrink:0}
+.pk-lbl{flex:1;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ivory)}
+.pk-lbl.placeholder{color:var(--faint)}
+.pk-caret{color:var(--faint);font-size:10px;flex-shrink:0;transition:transform .15s}
+.pk-trigger.open .pk-caret{transform:rotate(180deg)}
+.pk-count{font-family:var(--mono);font-size:9.5px;font-weight:700;color:var(--gold-bright);background:var(--gold-dim);border-radius:99px;padding:1px 6px;flex-shrink:0}
 
-@media(max-width:960px){.stats-row{grid-template-columns:1fr 1fr}}
+@media(max-width:1020px){.stats-row{grid-template-columns:1fr 1fr}}
 @media(max-width:768px){
   .app{grid-template-columns:1fr}
-  .sidebar{position:static;height:auto;border-right:none;border-bottom:1px solid var(--glass-border)}
+  .sidebar{position:static;height:auto;border-right:none;border-bottom:1px solid var(--border)}
   .side-guide{display:none}
   .main{padding:0 14px 50px}
   .settings-grid{grid-template-columns:1fr}
-  .queue-item{grid-template-columns:1fr}
-  .item-actions{flex-direction:row;align-items:center}
-  .cp-dd{width:calc(100vw - 20px)}
+  .qcard{grid-template-columns:auto 1fr}
+  .item-actions{flex-direction:row;align-items:center;grid-column:1/-1;justify-content:flex-end}
+  .dd{width:calc(100vw - 20px)}
 }
 </style>
 </head>
 <body>
 
-<!-- Single portal color picker -->
-<div id="cp-portal">
-  <div class="cp-dd">
-    <input class="cp-search-box" id="cp-search" placeholder="Search colors…" autocomplete="off">
-    <div class="cp-grid" id="cp-grid"></div>
-    <div class="cp-foot">
-      <span class="cp-count" id="cp-count"></span>
-      <button class="cp-clear-btn" id="cp-clear-btn">Clear all</button>
+<div id="seam"><div class="fill" id="seam-fill"></div></div>
+
+<!-- Portal: color picker -->
+<div id="cp-portal" class="portal">
+  <div class="dd">
+    <input class="dd-search" id="cp-search" placeholder="Search colors…" autocomplete="off">
+    <div class="dd-scroll"><div class="cp-grid" id="cp-grid"></div></div>
+    <div class="dd-foot">
+      <span class="dd-count" id="cp-count"></span>
+      <button class="dd-clear" id="cp-clear-btn" type="button">Clear all</button>
+    </div>
+  </div>
+</div>
+
+<!-- Portal: tag picker (Core Tags taxonomy) -->
+<div id="tp-portal" class="portal">
+  <div class="dd">
+    <input class="dd-search" id="tp-search" placeholder="Search core tags…" autocomplete="off">
+    <div class="dd-scroll" id="tp-scroll">
+      <div id="tp-suggested-wrap">
+        <div class="dd-section">Suggested · <span class="hl" id="tp-sub-name"></span></div>
+        <div class="tag-cloud" id="tp-suggested"></div>
+      </div>
+      <div class="dd-section">All core tags</div>
+      <div class="tag-cloud" id="tp-all"></div>
+      <div id="tp-custom-wrap" style="display:none">
+        <div class="dd-section">Custom tags on this item</div>
+        <div class="tag-cloud" id="tp-custom"></div>
+      </div>
+    </div>
+    <div class="dd-foot">
+      <div class="tag-add-row">
+        <input id="tp-add-input" placeholder="Add custom tag and press Enter" autocomplete="off">
+      </div>
+      <span class="dd-count" id="tp-count"></span>
+      <button class="dd-clear" id="tp-clear-btn" type="button">Clear</button>
     </div>
   </div>
 </div>
 
 <!-- Image preview lightbox -->
-<div class="preview-modal" id="preview-modal" onclick="closePreview(event)">
-  <button class="preview-modal-close" onclick="closePreview(event)">✕</button>
+<div class="preview-modal" id="preview-modal">
+  <button class="preview-modal-close" type="button">✕</button>
   <img id="preview-modal-img" src="" alt="">
   <div class="preview-modal-name" id="preview-modal-name"></div>
 </div>
@@ -583,22 +565,26 @@ input:focus{outline:none;border-color:var(--accent);background:rgba(124,109,250,
 
 <div class="app">
   <aside class="sidebar">
-    <div class="logo">
-      <div class="logo-gem">💎</div>
+    <div class="brand">
+      <div class="brand-mark">I</div>
       <div>
-        <div class="logo-text">Ishhaara Studio</div>
-        <div class="logo-sub">Shopify pipeline</div>
+        <div class="brand-name">Ishhaara</div>
+        <div class="brand-sub">Listing Studio</div>
       </div>
     </div>
 
     <div class="status-bar">
       <div class="status-item">
+        <div class="dot {% if has_shopify %}ok{% else %}warn{% endif %}" id="dot-shopify"></div>
+        <span>Shopify {% if not has_shopify %}— not set{% endif %}</span>
+      </div>
+      <div class="status-item">
         <div class="dot {% if has_groq %}ok{% else %}warn{% endif %}" id="dot-groq"></div>
         <span>Groq AI {% if not has_groq %}— not set{% endif %}</span>
       </div>
       <div class="status-item">
-        <div class="dot {% if has_shopify %}ok{% else %}warn{% endif %}" id="dot-shopify"></div>
-        <span>Shopify {% if not has_shopify %}— not set{% endif %}</span>
+        <div class="dot" id="dot-socket"></div>
+        <span id="socket-label">Live sync</span>
       </div>
     </div>
 
@@ -608,18 +594,17 @@ input:focus{outline:none;border-color:var(--accent);background:rgba(124,109,250,
     </div>
 
     <nav class="nav">
-      <button class="nav-btn active" data-panel="upload" onclick="showPanel('upload',event)">📤 Upload <span class="nav-kbd">1</span></button>
-      <button class="nav-btn" data-panel="history" onclick="showPanel('history',event)">📋 History <span class="nav-kbd">2</span></button>
-      <button class="nav-btn" data-panel="settings" onclick="showPanel('settings',event)">⚙️ Settings <span class="nav-kbd">3</span></button>
+      <button class="nav-btn active" data-panel="upload" type="button">📤 Upload <span class="nav-kbd">1</span></button>
+      <button class="nav-btn" data-panel="history" type="button">📋 History <span class="nav-kbd">2</span></button>
+      <button class="nav-btn" data-panel="settings" type="button">⚙️ Settings <span class="nav-kbd">3</span></button>
     </nav>
 
     <div class="side-guide">
       <div class="g-block"><strong>File naming</strong>Files: <code>SKU_Cost.jpg</code><br>Folders: <code>SKU_Cost/</code> → one product.</div>
-      <div class="g-block"><strong>Category</strong>Pick the exact jewellery category per item — it grounds both the AI title and the description template so pieces are never mistitled.</div>
-      <div class="g-block"><strong>AI titles</strong>Click <code>✨ AI Title</code> on any item to preview (and edit) the Groq-written title before it's ever sent to Shopify.</div>
-      <div class="g-block"><strong>Preview</strong>Click any thumbnail to view it full-size.</div>
-      <div class="g-block"><strong>Colors</strong>Click the color selector per item. Combine with Sizes for variant grids.</div>
-      <div class="g-block"><strong>Shortcuts</strong><code>⌘↵</code> upload · <code>1 2 3</code> tabs · <code>Esc</code> close picker/preview</div>
+      <div class="g-block"><strong>Core tags</strong>Pick Category → Subcategory and the exact core tags from the brand sheet attach automatically. Add extras from the tag picker.</div>
+      <div class="g-block"><strong>AI titles</strong><code>✨ AI Title</code> previews a Groq-written title grounded in the chosen subcategory — edit it before anything reaches Shopify.</div>
+      <div class="g-block"><strong>Duplicates</strong>SKUs are checked against the live store before publishing.</div>
+      <div class="g-block"><strong>Shortcuts</strong><code>⌘↵</code> upload · <code>1 2 3</code> tabs · <code>Esc</code> close</div>
     </div>
   </aside>
 
@@ -630,7 +615,7 @@ input:focus{outline:none;border-color:var(--accent);background:rgba(124,109,250,
       <div class="command-bar">
         <div>
           <div class="page-title">Upload products</div>
-          <div class="page-sub">Drop images · pick category & colors · list everywhere</div>
+          <div class="page-sub">Drop images · classify · tag · publish everywhere</div>
         </div>
         <div class="cb-spacer"></div>
         <div class="cb-status">
@@ -639,29 +624,29 @@ input:focus{outline:none;border-color:var(--accent);background:rgba(124,109,250,
           <span class="cb-chip fail"><span class="n" id="cb-failed">0</span> failed</span>
           <span class="cb-chip done"><span class="n" id="cb-done">0</span> done</span>
         </div>
-        <button class="btn btn-primary" id="upload-all-btn" onclick="uploadAll()">⬆ Upload all <span class="kbd-hint">⌘↵</span></button>
+        <button class="btn btn-primary" id="upload-all-btn" type="button">⬆ Publish all <span class="kbd-hint">⌘↵</span></button>
       </div>
 
       <div class="stats-row">
         <div class="stat-card"><div class="stat-label">In queue</div><div class="stat-val" id="stat-queued">0</div></div>
-        <div class="stat-card green"><div class="stat-label">Uploaded</div><div class="stat-val" id="stat-success">0</div></div>
+        <div class="stat-card green"><div class="stat-label">Published</div><div class="stat-val" id="stat-success">0</div></div>
         <div class="stat-card red"><div class="stat-label">Failed</div><div class="stat-val" id="stat-failed">0</div></div>
-        <div class="stat-card purple"><div class="stat-label">Catalog value</div><div class="stat-val" id="stat-value">₹0</div></div>
+        <div class="stat-card gold"><div class="stat-label">Catalog value</div><div class="stat-val" id="stat-value">₹0</div></div>
       </div>
 
       <!-- Drop zone -->
       <div class="upload-zone" id="dropzone">
         <input type="file" id="file-input" accept="image/*" multiple style="display:none">
         <input type="file" id="folder-input" accept="image/*" webkitdirectory multiple style="display:none">
-        <div class="upload-text">✨ Drop images or folders here</div>
+        <div class="upload-text">Drop images or folders here</div>
         <div class="zone-btns">
-          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();triggerFileInput()">🖼️ Select images</button>
-          <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();triggerFolderInput()">📂 Select folder</button>
+          <button class="btn btn-ghost btn-sm" id="pick-files-btn" type="button">🖼️ Select images</button>
+          <button class="btn btn-primary btn-sm" id="pick-folder-btn" type="button">📂 Select folder</button>
         </div>
         <div class="upload-hint">JPG · PNG · WEBP · auto-cropped to 1080×1440 · each folder = one product</div>
       </div>
 
-      <!-- Toolbar -->
+      <!-- Bulk toolbar -->
       <div class="toolbar">
         <span class="toolbar-label">Markup</span>
         <label class="chip-radio"><input type="radio" name="markup" value="2"> 2×</label>
@@ -672,40 +657,21 @@ input:focus{outline:none;border-color:var(--accent);background:rgba(124,109,250,
         <div class="divider"></div>
         <span class="toolbar-label">Bulk fill</span>
         <input id="bulk-cp" type="number" class="item-input mono-in narrow" placeholder="Cost ₹">
-        <select id="bulk-category" class="item-input" style="width:160px" onchange="onBulkCategoryChange()">
-          <option value="">Category…</option>
-        </select>
-        <input id="bulk-tags" type="text" class="item-input tags-input" placeholder="Tags">
+        <select id="bulk-category" class="item-input" style="width:150px"><option value="">Category…</option></select>
+        <select id="bulk-subcategory" class="item-input" style="width:170px" disabled><option value="">Subcategory…</option></select>
+        <div class="pk-trigger" id="tp-trig-bulk" data-tagctx="bulk" tabindex="0">
+          <span class="pk-lbl placeholder">Extra tags…</span><span class="pk-caret">▾</span>
+        </div>
         <input id="bulk-hs" type="text" class="item-input mono-in narrow" placeholder="HS code">
         <input id="bulk-origin" type="text" class="item-input mono-in narrow" placeholder="Origin">
         <input id="bulk-qty" type="number" class="item-input mono-in narrow" placeholder="Qty">
-        <select id="bulk-color" class="item-input" style="width:138px">
-          <option value="">Color…</option>
-          <option>Red</option><option>Orange</option><option>Yellow</option><option>Green</option>
-          <option>Blue</option><option>Purple</option><option>Pink</option><option>Brown</option>
-          <option>Black</option><option>White</option><option>Grey</option><option>Magenta</option>
-          <option>Maroon</option><option>Indigo</option><option>Turquoise</option><option>Beige</option>
-          <option>Teal</option><option>Violet</option><option>Gold</option><option>Silver</option>
-          <option>Rose Gold</option><option>Dark Red</option><option>Dark Orange</option>
-          <option>Dark Yellow</option><option>Dark Green</option><option>Dark Blue</option>
-          <option>Dark Purple</option><option>Dark Pink</option><option>Dark Brown</option>
-          <option>Dark Grey</option><option>Dark Magenta</option><option>Dark Maroon</option>
-          <option>Dark Indigo</option><option>Dark Turquoise</option><option>Dark Beige</option>
-          <option>Dark Teal</option><option>Dark Violet</option><option>Light Red</option>
-          <option>Light Orange</option><option>Light Yellow</option><option>Light Green</option>
-          <option>Light Blue</option><option>Light Purple</option><option>Light Pink</option>
-          <option>Light Brown</option><option>Off White</option><option>Light Grey</option>
-          <option>Light Magenta</option><option>Light Maroon</option><option>Light Indigo</option>
-          <option>Light Turquoise</option><option>Light Beige</option><option>Light Teal</option>
-          <option>Light Violet</option><option>Multicolor</option>
-        </select>
         <input id="bulk-sizes" type="text" class="item-input mono-in variant-input" placeholder="Sizes 2.4,2.6,2.8">
-        <button class="btn btn-ghost btn-sm" onclick="bulkApply()">Apply all</button>
+        <button class="btn btn-ghost btn-sm" id="bulk-apply-btn" type="button">Apply</button>
         <div class="divider"></div>
-        <button class="btn btn-ghost btn-sm" onclick="generateAllTitles()">✨ AI title all</button>
+        <button class="btn btn-ghost btn-sm" id="ai-all-btn" type="button">✨ AI title all</button>
         <div class="divider"></div>
         <span class="toolbar-label">Speed</span>
-        <select id="concurrency" class="item-input" style="width:118px">
+        <select id="concurrency" class="item-input" style="width:116px">
           <option value="1">1 at a time</option>
           <option value="2">2 at a time</option>
           <option value="3" selected>3 at a time</option>
@@ -716,19 +682,20 @@ input:focus{outline:none;border-color:var(--accent);background:rgba(124,109,250,
       <!-- Queue -->
       <div id="queue-section" style="display:none">
         <div class="queue-header">
-          <span class="queue-title">Queue <span style="color:var(--muted);font-weight:400">·</span> <span style="font-family:var(--mono)" id="queue-count">0</span></span>
+          <label class="chip-radio" style="padding:4px 8px"><input type="checkbox" id="select-all-box"> All</label>
+          <span class="queue-title">Queue · <span style="font-family:var(--mono);font-size:14px" id="queue-count">0</span></span>
           <div class="queue-filters">
-            <button class="qf active" data-qf="all" onclick="setQueueFilter('all')">All</button>
-            <button class="qf" data-qf="ready" onclick="setQueueFilter('ready')">Ready<span class="c" id="qfc-ready"></span></button>
-            <button class="qf" data-qf="incomplete" onclick="setQueueFilter('incomplete')">Needs info<span class="c" id="qfc-incomplete"></span></button>
-            <button class="qf" data-qf="failed" onclick="setQueueFilter('failed')">Failed<span class="c" id="qfc-failed"></span></button>
-            <button class="qf" data-qf="success" onclick="setQueueFilter('success')">Done<span class="c" id="qfc-success"></span></button>
+            <button class="qf active" data-qf="all" type="button">All</button>
+            <button class="qf" data-qf="ready" type="button">Ready<span class="c" id="qfc-ready"></span></button>
+            <button class="qf" data-qf="incomplete" type="button">Needs info<span class="c" id="qfc-incomplete"></span></button>
+            <button class="qf" data-qf="failed" type="button">Failed<span class="c" id="qfc-failed"></span></button>
+            <button class="qf" data-qf="success" type="button">Done<span class="c" id="qfc-success"></span></button>
           </div>
+          <span class="sel-note" id="sel-note"></span>
           <div class="cb-spacer"></div>
-          <button class="btn btn-ghost btn-sm" onclick="retryFailed()">↻ Retry failed</button>
-          <button class="btn btn-ghost btn-sm" onclick="clearDone()">Clear done</button>
+          <button class="btn btn-ghost btn-sm" id="retry-failed-btn" type="button">↻ Retry failed</button>
+          <button class="btn btn-ghost btn-sm" id="clear-done-btn" type="button">Clear done</button>
         </div>
-        <div class="progress-wrap" id="progress-wrap"><div class="progress-bar" id="progress-bar"></div></div>
         <div class="progress-label" id="progress-label"></div>
         <div class="queue-list" id="queue-list"></div>
       </div>
@@ -737,9 +704,9 @@ input:focus{outline:none;border-color:var(--accent);background:rgba(124,109,250,
       <div class="log-head">
         <span class="log-title">Live log</span>
         <div class="cb-spacer"></div>
-        <label class="chip-radio" style="font-size:11px"><input type="checkbox" id="log-errors-only" onchange="renderLog()"> Errors only</label>
-        <button class="btn btn-ghost btn-sm" onclick="copyLog()">Copy</button>
-        <button class="btn btn-ghost btn-sm" onclick="clearLog()">Clear</button>
+        <label class="chip-radio" style="font-size:11px"><input type="checkbox" id="log-errors-only"> Errors only</label>
+        <button class="btn btn-ghost btn-sm" id="copy-log-btn" type="button">Copy</button>
+        <button class="btn btn-ghost btn-sm" id="clear-log-btn" type="button">Clear</button>
       </div>
       <div class="log-box" id="log-box"><span class="log-muted">Waiting for uploads…</span></div>
 
@@ -754,23 +721,23 @@ input:focus{outline:none;border-color:var(--accent);background:rgba(124,109,250,
       <div class="command-bar">
         <div><div class="page-title">Upload history</div><div class="page-sub">Every listing, newest first</div></div>
         <div class="cb-spacer"></div>
-        <button class="btn btn-ghost btn-sm" onclick="exportCsv()">⬇ Export CSV</button>
+        <button class="btn btn-ghost btn-sm" id="export-csv-btn" type="button">⬇ Export CSV</button>
       </div>
       <div class="history-toolbar">
-        <input class="search-input" id="history-search" placeholder="Search by SKU or title…" oninput="renderHistory()">
+        <input class="search-input" id="history-search" placeholder="Search by SKU, title, or subcategory…">
         <div style="display:flex;gap:6px">
-          <button class="btn btn-ghost btn-sm" onclick="setHistoryFilter('all')" id="hf-all">All</button>
-          <button class="btn btn-ghost btn-sm" onclick="setHistoryFilter('success')" id="hf-success">Success</button>
-          <button class="btn btn-ghost btn-sm" onclick="setHistoryFilter('failed')" id="hf-failed">Failed</button>
+          <button class="btn btn-ghost btn-sm hf" data-hf="all" id="hf-all" type="button">All</button>
+          <button class="btn btn-ghost btn-sm hf" data-hf="success" id="hf-success" type="button">Success</button>
+          <button class="btn btn-ghost btn-sm hf" data-hf="failed" id="hf-failed" type="button">Failed</button>
         </div>
       </div>
       <div class="table-wrap">
         <table>
           <thead><tr>
-            <th>Time</th><th>SKU</th><th>Title</th><th>Imgs</th><th>Vars</th>
+            <th>Time</th><th>SKU</th><th>Title</th><th>Subcategory</th><th>Imgs</th><th>Vars</th>
             <th>Cost</th><th>Price</th><th>HS</th><th>Origin</th><th>Status</th><th>Link</th><th></th>
           </tr></thead>
-          <tbody id="history-tbody"><tr><td colspan="12" style="text-align:center;color:var(--muted);padding:32px">Loading…</td></tr></tbody>
+          <tbody id="history-tbody"><tr><td colspan="13" style="text-align:center;color:var(--muted);padding:32px">Loading…</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -785,7 +752,7 @@ input:focus{outline:none;border-color:var(--accent);background:rgba(124,109,250,
           <label>Shopify store URL</label>
           <div class="field-row">
             <input type="text" id="s-store" placeholder="yourstore.myshopify.com" value="{{ shopify_store }}">
-            <button class="btn btn-ghost btn-sm" onclick="testShopify()">Test</button>
+            <button class="btn btn-ghost btn-sm" id="test-shopify-btn" type="button">Test</button>
           </div>
           <span class="test-result" id="test-shopify-result"></span>
         </div>
@@ -795,10 +762,10 @@ input:focus{outline:none;border-color:var(--accent);background:rgba(124,109,250,
           <span class="field-note">Scopes: <code>write_products</code> <code>read_products</code> <code>write_inventory</code> <code>read_inventory</code> <code>write_publications</code></span>
         </div>
         <div class="field full">
-          <label>Groq API key <a href="https://console.groq.com" target="_blank" style="color:var(--accent3);font-weight:400;text-transform:none;letter-spacing:0">Get free key →</a></label>
+          <label>Groq API key <a href="https://console.groq.com" target="_blank" style="color:var(--gold-bright);font-weight:400;text-transform:none;letter-spacing:0">Get free key →</a></label>
           <div class="field-row">
             <input type="password" id="s-groq" placeholder="gsk_xxxxxxxxxxxx">
-            <button class="btn btn-ghost btn-sm" onclick="testGroq()">Test</button>
+            <button class="btn btn-ghost btn-sm" id="test-groq-btn" type="button">Test</button>
           </div>
           <span class="test-result" id="test-groq-result"></span>
         </div>
@@ -810,7 +777,7 @@ input:focus{outline:none;border-color:var(--accent);background:rgba(124,109,250,
         <div class="field"><label>Default inventory qty</label><input type="number" id="s-qty" placeholder="10"></div>
         <div class="field full"><label>Default bangle sizes</label><input type="text" id="s-bangle-sizes" placeholder="2.4,2.6,2.8"></div>
         <div class="save-row">
-          <button class="btn btn-primary" onclick="saveSettings()">Save settings</button>
+          <button class="btn btn-primary" id="save-settings-btn" type="button">Save settings</button>
           <span class="save-msg" id="save-msg">✅ Saved</span>
         </div>
       </div>
@@ -819,20 +786,42 @@ input:focus{outline:none;border-color:var(--accent);background:rgba(124,109,250,
         <p>
           1. Groq key → <a href="https://console.groq.com" target="_blank">console.groq.com</a><br>
           2. Shopify token → Admin → Settings → Apps → Develop apps<br>
-          3. Scopes: <code>write_products</code>, <code>write_inventory</code>, <code>write_publications</code><br>
-          4. Drop images · pick category · set prices · pick colors · Upload all<br>
-          5. Auto-published to every connected sales channel
+          3. Scopes: <code>write_products</code>, <code>read_products</code>, <code>write_inventory</code>, <code>write_publications</code><br>
+          4. Drop images · pick Category → Subcategory · set cost · Publish all<br>
+          5. Core tags from the brand sheet attach automatically; auto-published to every sales channel
         </p>
       </div>
     </div>
 
   </main>
 </div>
-
 <script>
-const socket = io();
+'use strict';
+/* ════════════════════════════════════════════════════════════════════════════
+   Ishhaara Listing Studio v2 — application script
+   Stability & speed notes:
+   • ONE delegated listener set on the queue (no per-card inline handlers).
+   • All user-entered strings pass through esc() before touching innerHTML.
+   • Thumbnails via createImageBitmap when available (fast path).
+   • Pickers are single portals built once, repositioned per trigger.
+   • Stats/duplicate scans batched on requestAnimationFrame.
+   ════════════════════════════════════════════════════════════════════════════ */
 
-// ── 54 brand colors ───────────────────────────────────────────────────────────
+// ── Utilities ────────────────────────────────────────────────────────────────
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const debounce=(fn,ms)=>{let t;return(...a)=>{clearTimeout(t);t=setTimeout(()=>fn(...a),ms)}};
+const parseList=s=>(s||'').split(',').map(x=>x.trim()).filter(Boolean);
+function toast(msg,type='success'){
+  const el=document.createElement('div');
+  el.className=`toast ${type}`;el.textContent=msg;
+  $('toast-stack').appendChild(el);
+  setTimeout(()=>el.remove(),4200);
+}
+function prefGet(k,d){try{const v=localStorage.getItem('ish_'+k);return v===null?d:v}catch(e){return d}}
+function prefSet(k,v){try{localStorage.setItem('ish_'+k,v)}catch(e){}}
+
+// ── Brand colors (54) ────────────────────────────────────────────────────────
 const BRAND_COLORS=[
   {n:'Red',h:'#dc3232'},{n:'Orange',h:'#e67828'},{n:'Yellow',h:'#e6c832'},
   {n:'Green',h:'#32a046'},{n:'Blue',h:'#3259c8'},{n:'Purple',h:'#8232b4'},
@@ -855,263 +844,325 @@ const BRAND_COLORS=[
   {n:'Multicolor',h:'linear-gradient(135deg,#dc3232,#e6c832,#32a046,#3259c8,#9650dc)'},
 ];
 
-// ── Category presets (auto-loaded from server) ────────────────────────────────
-let CATEGORIES=[];   // list of category names, populated on boot
-let TAG_PRESETS={};  // category name -> comma-joined tag preset string
+// ── App state ────────────────────────────────────────────────────────────────
+let TAX={},CATS=[],ALL_TAGS=[];              // Core-tag taxonomy from /taxonomy
+let queue=[],history=[],logLines=[];
+let queueFilter='all',historyFilter='all';
+let selectedIds=new Set();
+let bulkTags='';                             // extra tags staged in the bulk bar
+let DEFAULT_BANGLE_SIZES='2.4,2.6,2.8';
+let firstLog=true;
+const logBox=()=>$('log-box');
 
-function _categoryOptionsHtml(selected){
-  return '<option value="">No category template</option>'+
-    CATEGORIES.map(c=>`<option value="${c}"${c===selected?' selected':''}>${c}</option>`).join('');
-}
+const socket=io();
 
-function populateCategorySelects(){
-  const bulkSel=document.getElementById('bulk-category');
-  if(bulkSel){
-    const cur=bulkSel.value;
-    bulkSel.innerHTML='<option value="">Category…</option>'+CATEGORIES.map(c=>`<option value="${c}">${c}</option>`).join('');
-    bulkSel.value=cur;
-  }
-  // refresh any already-rendered per-item selects
-  document.querySelectorAll('.cat-select').forEach(sel=>{
-    const cur=sel.value;
-    sel.innerHTML=_categoryOptionsHtml(cur);
-  });
-}
+// ── Socket status ────────────────────────────────────────────────────────────
+socket.on('connect',()=>{ $('dot-socket').className='dot ok'; $('socket-label').textContent='Live sync'; });
+socket.on('disconnect',()=>{ $('dot-socket').className='dot err'; $('socket-label').textContent='Reconnecting…'; });
+socket.io.on('reconnect',()=>toast('Live sync restored','success'));
+socket.on('log',({msg,level})=>addLog(msg,level));
+socket.on('product_done',data=>{
+  const item=queue.find(q=>q.sku===data.sku&&q.status==='uploading');
+  if(item){item.status=data.status;item.error=data.error||null;patchCard(item.id);}
+  if(data.status==='success'){addResult(data);toast(`${data.sku} listed on Shopify`,'success');}
+  else toast(`${data.sku} failed: ${data.error||'see log'}`,'error');
+  scheduleStats();checkAllDone();
+});
 
-async function loadCategoryData(){
+// ── Taxonomy ─────────────────────────────────────────────────────────────────
+async function loadTaxonomy(){
   try{
-    const res=await fetch('/tag_presets');
-    const data=await res.json();
-    CATEGORIES=data.categories||[];
-    TAG_PRESETS=data.presets||{};
-  }catch(e){
-    CATEGORIES=['Necklace','Choker','Pendant','Earring','Ear Cuff','Maang Tikka','Mathapatti','Nath',
-      'Bangles','Kada','Handcuff','Bracelet','Hathphool','Brooch','Ring','Hair Accessories'];
-  }
-  populateCategorySelects();
+    const d=await(await fetch('/taxonomy')).json();
+    TAX=d.taxonomy||{};CATS=d.categories||Object.keys(TAX);ALL_TAGS=d.all_tags||[];
+  }catch(e){TAX={};CATS=[];ALL_TAGS=[];toast('Could not load tag taxonomy','error');}
+  // bulk cascade
+  $('bulk-category').innerHTML='<option value="">Category…</option>'+CATS.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  buildTagAllCloud();
+}
+function subsOf(cat){return cat&&TAX[cat]?Object.keys(TAX[cat]):[]}
+function presetOf(sub){
+  for(const cat of CATS){if(TAX[cat]&&TAX[cat][sub])return TAX[cat][sub];}
+  return [];
+}
+function catOptions(sel){return '<option value="">Category…</option>'+CATS.map(c=>`<option value="${esc(c)}"${c===sel?' selected':''}>${esc(c)}</option>`).join('')}
+function subOptions(cat,sel){
+  const subs=subsOf(cat);
+  return '<option value="">Subcategory…</option>'+subs.map(s=>`<option value="${esc(s)}"${s===sel?' selected':''}>${esc(s)}</option>`).join('');
 }
 
-function onBulkCategoryChange(){
-  const cat=document.getElementById('bulk-category').value;
-  const tagsInput=document.getElementById('bulk-tags');
-  if(cat&&TAG_PRESETS[cat]){
-    tagsInput.value=TAG_PRESETS[cat];
-  }
+$('bulk-category').addEventListener('change',e=>{
+  const cat=e.target.value;
+  const sub=$('bulk-subcategory');
+  sub.disabled=!cat;
+  sub.innerHTML=subOptions(cat,'');
+});
+
+// ── Selling price ────────────────────────────────────────────────────────────
+const PRICE_TIERS=[99,199,299,399,499,599,699,799,899,999,1499,1999,2499,2999,3499,3999,4499,4999,5999,6999,7999,8999,9999,12999,14999,19999,24999,29999,39999,49999,99999];
+function getMarkup(){return parseFloat(document.querySelector('input[name="markup"]:checked')?.value||4)}
+function calcSP(cp,markup){
+  const raw=cp*(markup||getMarkup());
+  for(const t of PRICE_TIERS)if(t>=raw)return t;
+  return Math.floor(raw/1000)*1000+999;
 }
 
-// ── Color picker (single portal, never rebuilds queue DOM) ────────────────────
-let _cpActiveId=null;
-const _portal=document.getElementById('cp-portal');
-const _cpGrid=document.getElementById('cp-grid');
-const _cpSearch=document.getElementById('cp-search');
-const _cpCount=document.getElementById('cp-count');
+// ── Item helpers ─────────────────────────────────────────────────────────────
+const byId=id=>queue.find(q=>q.id===id);
+function isReady(i){return i.status==='pending'&&!!i.sku&&!!i.costPrice}
+function bucketOf(i){return i.status==='pending'?(isReady(i)?'ready':'incomplete'):i.status}
+function dupSkus(){
+  const seen={},d=new Set();
+  queue.forEach(q=>{const s=(q.sku||'').trim();if(!s)return;if(seen[s])d.add(s);seen[s]=true;});
+  return d;
+}
+function variantCountFor(i){
+  const c=parseList(i.colors).length,s=parseList(i.sizes).length;
+  if(!c&&!s)return 1;
+  return Math.max(c,1)*Math.max(s,1);
+}
 
-// Build chip grid ONCE
-_cpGrid.innerHTML=BRAND_COLORS.map(c=>`
-  <div class="cp-chip" data-color="${c.n}" onclick="cpChipClick('${c.n}')">
+// ── Color picker portal ──────────────────────────────────────────────────────
+let cpCtx=null; // item id
+const cpPortal=$('cp-portal'),cpGrid=$('cp-grid');
+cpGrid.innerHTML=BRAND_COLORS.map(c=>`
+  <div class="cp-chip" data-color="${esc(c.n)}">
     <div class="cp-chip-swatch" style="background:${c.h}"></div>
-    <div class="cp-chip-name">${c.n}</div>
+    <div class="cp-chip-name">${esc(c.n)}</div>
   </div>`).join('');
 
-_cpSearch.addEventListener('input',()=>{
-  const q=_cpSearch.value.toLowerCase();
-  _cpGrid.querySelectorAll('.cp-chip').forEach(ch=>{ch.style.display=ch.dataset.color.toLowerCase().includes(q)?'':'none'});
+$('cp-search').addEventListener('input',e=>{
+  const q=e.target.value.toLowerCase();
+  cpGrid.querySelectorAll('.cp-chip').forEach(ch=>ch.style.display=ch.dataset.color.toLowerCase().includes(q)?'':'none');
+});
+cpGrid.addEventListener('click',e=>{
+  const chip=e.target.closest('.cp-chip');if(!chip||!cpCtx)return;
+  const item=byId(cpCtx);if(!item)return;
+  const name=chip.dataset.color;
+  const sel=parseList(item.colors);
+  const idx=sel.indexOf(name);
+  if(idx>=0)sel.splice(idx,1);else sel.push(name);
+  item.colors=sel.join(', ');
+  chip.classList.toggle('sel',idx<0);
+  $('cp-count').textContent=sel.length?`${sel.length} selected`:'';
+  refreshColorTrigger(cpCtx);refreshNamePill(cpCtx);scheduleStats();
+});
+$('cp-clear-btn').addEventListener('click',()=>{
+  if(!cpCtx)return;const item=byId(cpCtx);if(item)item.colors='';
+  cpGrid.querySelectorAll('.cp-chip').forEach(ch=>ch.classList.remove('sel'));
+  $('cp-count').textContent='';refreshColorTrigger(cpCtx);refreshNamePill(cpCtx);scheduleStats();
 });
 
-document.getElementById('cp-clear-btn').addEventListener('click',e=>{
-  e.stopPropagation();
-  if(!_cpActiveId)return;
-  const item=queue.find(q=>q.id==_cpActiveId);
-  if(item)item.colors='';
-  _cpGrid.querySelectorAll('.cp-chip').forEach(ch=>ch.classList.remove('sel'));
-  _cpCount.textContent='';
-  _cpRefreshTrigger(_cpActiveId);
-  updateStats();
+function openColorPicker(itemId,trigger){
+  if(cpCtx===itemId&&cpPortal.classList.contains('visible')){closePickers();return;}
+  closePickers();
+  cpCtx=itemId;trigger.classList.add('open');
+  const item=byId(itemId);const sel=item?parseList(item.colors):[];
+  cpGrid.querySelectorAll('.cp-chip').forEach(ch=>{ch.classList.toggle('sel',sel.includes(ch.dataset.color));ch.style.display='';});
+  $('cp-count').textContent=sel.length?`${sel.length} selected`:'';
+  $('cp-search').value='';
+  positionPortal(cpPortal,trigger);
+  $('cp-search').focus();
+}
+
+function refreshColorTrigger(itemId){
+  const item=byId(itemId);
+  const trig=document.querySelector(`[data-colorctx="${CSS.escape(itemId)}"]`);
+  if(!trig||!item)return;
+  const sel=parseList(item.colors);
+  trig.classList.toggle('has-sel',sel.length>0);
+  const pre=trig.querySelector('.pk-preview');
+  const lbl=trig.querySelector('.pk-lbl');
+  if(pre)pre.innerHTML=sel.slice(0,5).map(n=>{
+    const c=BRAND_COLORS.find(x=>x.n===n);
+    const s=c?(c.h.startsWith('linear')?`background:${c.h};border-radius:2px;width:14px;height:11px;border:none`:`background:${c.h}`):'background:#888';
+    return `<span class="pk-dot" style="${s}"></span>`;
+  }).join('');
+  if(lbl){lbl.textContent=sel.length?sel.join(', '):'Colors…';lbl.className=sel.length?'pk-lbl':'pk-lbl placeholder';}
+}
+
+// ── Tag picker portal (core-tag taxonomy) ────────────────────────────────────
+let tpCtx=null; // 'bulk' or item id
+const tpPortal=$('tp-portal');
+
+function buildTagAllCloud(){
+  $('tp-all').innerHTML=ALL_TAGS.map(t=>`<div class="tag-chip" data-tag="${esc(t)}">${esc(t)}</div>`).join('');
+}
+function tpGetTags(){
+  if(tpCtx==='bulk')return parseList(bulkTags);
+  const item=byId(tpCtx);return item?parseList(item.tags):[];
+}
+function tpSetTags(list){
+  const s=list.join(', ');
+  if(tpCtx==='bulk'){bulkTags=s;refreshTagTrigger('bulk');}
+  else{const item=byId(tpCtx);if(item){item.tags=s;refreshTagTrigger(tpCtx);}}
+}
+function tpSubcategory(){
+  if(tpCtx==='bulk')return $('bulk-subcategory').value||'';
+  const item=byId(tpCtx);return item?item.subcategory:'';
+}
+function tpSync(){
+  const sel=tpGetTags();
+  const selLower=new Set(sel.map(t=>t.toLowerCase()));
+  const sub=tpSubcategory();
+  const preset=sub?presetOf(sub):[];
+  const presetLower=new Set(preset.map(t=>t.toLowerCase()));
+  // Suggested (auto-attached) section
+  const wrap=$('tp-suggested-wrap');
+  if(sub&&preset.length){
+    wrap.style.display='';
+    $('tp-sub-name').textContent=sub;
+    $('tp-suggested').innerHTML=preset.map(t=>
+      `<div class="tag-chip sel" style="pointer-events:none;opacity:.85" title="Attached automatically at publish">${esc(t)} ·auto</div>`).join('');
+  }else wrap.style.display='none';
+  // All tags cloud selection state (hide ones already auto-attached)
+  $('tp-all').querySelectorAll('.tag-chip').forEach(ch=>{
+    const t=ch.dataset.tag;
+    ch.classList.toggle('sel',selLower.has(t.toLowerCase()));
+    ch.style.display=presetLower.has(t.toLowerCase())?'none':'';
+  });
+  // Custom (non-core) tags on this item
+  const coreLower=new Set(ALL_TAGS.map(t=>t.toLowerCase()));
+  const custom=sel.filter(t=>!coreLower.has(t.toLowerCase()));
+  const cw=$('tp-custom-wrap');
+  if(custom.length){
+    cw.style.display='';
+    $('tp-custom').innerHTML=custom.map(t=>`<div class="tag-chip sel custom" data-tag="${esc(t)}" title="Click to remove">${esc(t)} ✕</div>`).join('');
+  }else cw.style.display='none';
+  $('tp-count').textContent=sel.length?`${sel.length} extra tag${sel.length>1?'s':''}`:'';
+}
+function tpToggle(tag){
+  const sel=tpGetTags();
+  const i=sel.findIndex(t=>t.toLowerCase()===tag.toLowerCase());
+  if(i>=0)sel.splice(i,1);else sel.push(tag);
+  tpSetTags(sel);tpSync();
+}
+$('tp-all').addEventListener('click',e=>{
+  const ch=e.target.closest('.tag-chip');if(ch&&tpCtx!==null)tpToggle(ch.dataset.tag);
 });
+$('tp-custom').addEventListener('click',e=>{
+  const ch=e.target.closest('.tag-chip');if(ch&&tpCtx!==null)tpToggle(ch.dataset.tag);
+});
+$('tp-search').addEventListener('input',e=>{
+  const q=e.target.value.toLowerCase();
+  const sub=tpSubcategory();
+  const presetLower=new Set((sub?presetOf(sub):[]).map(t=>t.toLowerCase()));
+  $('tp-all').querySelectorAll('.tag-chip').forEach(ch=>{
+    const t=ch.dataset.tag;
+    const hidden=presetLower.has(t.toLowerCase())||!t.toLowerCase().includes(q);
+    ch.style.display=hidden?'none':'';
+  });
+});
+$('tp-add-input').addEventListener('keydown',e=>{
+  if(e.key!=='Enter')return;
+  e.preventDefault();
+  const v=e.target.value.trim().replace(/,/g,'');
+  if(!v)return;
+  const sel=tpGetTags();
+  if(!sel.some(t=>t.toLowerCase()===v.toLowerCase()))sel.push(v);
+  tpSetTags(sel);e.target.value='';tpSync();
+});
+$('tp-clear-btn').addEventListener('click',()=>{tpSetTags([]);tpSync();});
 
-function cpOpen(itemId,triggerEl){
-  if(_cpActiveId===itemId){cpClose();return;}
-  cpClose();
-  _cpActiveId=itemId;
-  triggerEl.classList.add('open');
+function openTagPicker(ctx,trigger){
+  if(tpCtx===ctx&&tpPortal.classList.contains('visible')){closePickers();return;}
+  closePickers();
+  tpCtx=ctx;trigger.classList.add('open');
+  $('tp-search').value='';
+  tpSync();
+  positionPortal(tpPortal,trigger);
+  $('tp-search').focus();
+}
+function refreshTagTrigger(ctx){
+  const trig=document.querySelector(`[data-tagctx="${CSS.escape(ctx)}"]`);
+  if(!trig)return;
+  const sel=ctx==='bulk'?parseList(bulkTags):parseList((byId(ctx)||{}).tags);
+  trig.classList.toggle('has-sel',sel.length>0);
+  const lbl=trig.querySelector('.pk-lbl');
+  let cnt=trig.querySelector('.pk-count');
+  if(sel.length){
+    if(!cnt){cnt=document.createElement('span');cnt.className='pk-count';trig.insertBefore(cnt,trig.querySelector('.pk-caret'));}
+    cnt.textContent=sel.length;
+    if(lbl){lbl.textContent=sel.join(', ');lbl.className='pk-lbl';}
+  }else{
+    if(cnt)cnt.remove();
+    if(lbl){lbl.textContent=ctx==='bulk'?'Extra tags…':'Tags…';lbl.className='pk-lbl placeholder';}
+  }
+}
 
-  // Position: viewport-relative (portal is position:fixed)
-  const rect=triggerEl.getBoundingClientRect();
-  _portal.style.left=rect.left+'px';
-  _portal.style.top=(rect.bottom+6)+'px';
-  _portal.classList.add('visible');
-
-  // Sync chip states
-  const item=queue.find(q=>q.id==itemId);
-  const sel=item?_parseColors(item.colors):[];
-  _cpGrid.querySelectorAll('.cp-chip').forEach(ch=>ch.classList.toggle('sel',sel.includes(ch.dataset.color)));
-  _cpCount.textContent=sel.length?`${sel.length} selected`:'';
-  _cpSearch.value='';
-  _cpGrid.querySelectorAll('.cp-chip').forEach(ch=>ch.style.display='');
-  _cpSearch.focus();
-
-  // Clamp after paint
+// ── Portal positioning / close ───────────────────────────────────────────────
+function positionPortal(portal,trigger){
+  const rect=trigger.getBoundingClientRect();
+  portal.style.left=rect.left+'px';
+  portal.style.top=(rect.bottom+6)+'px';
+  portal.classList.add('visible');
   requestAnimationFrame(()=>{
-    const dd=_portal.firstElementChild.getBoundingClientRect();
+    const dd=portal.firstElementChild.getBoundingClientRect();
     const vw=window.innerWidth,vh=window.innerHeight;
     let left=rect.left,top=rect.bottom+6;
     if(left+dd.width>vw-10)left=Math.max(10,vw-dd.width-10);
     if(left<10)left=10;
-    if(top+dd.height>vh-10){
-      top=rect.top-dd.height-6>10?rect.top-dd.height-6:Math.max(10,vh-dd.height-10);
-    }
-    _portal.style.left=left+'px';
-    _portal.style.top=top+'px';
+    if(top+dd.height>vh-10)top=rect.top-dd.height-6>10?rect.top-dd.height-6:Math.max(10,vh-dd.height-10);
+    portal.style.left=left+'px';portal.style.top=top+'px';
   });
 }
-
-function cpClose(){
-  if(!_cpActiveId)return;
-  const t=document.getElementById('cp-trig-'+_cpActiveId);
-  if(t)t.classList.remove('open');
-  _portal.classList.remove('visible');
-  _cpActiveId=null;
+function closePickers(){
+  if(cpCtx!==null){const t=document.querySelector(`[data-colorctx="${CSS.escape(cpCtx)}"]`);if(t)t.classList.remove('open');}
+  if(tpCtx!==null){const t=document.querySelector(`[data-tagctx="${CSS.escape(tpCtx)}"]`);if(t)t.classList.remove('open');}
+  cpPortal.classList.remove('visible');tpPortal.classList.remove('visible');
+  cpCtx=null;tpCtx=null;
 }
-
-function cpChipClick(colorName){
-  if(!_cpActiveId)return;
-  const item=queue.find(q=>q.id==_cpActiveId);
-  if(!item)return;
-  let sel=_parseColors(item.colors);
-  const idx=sel.indexOf(colorName);
-  if(idx>=0)sel.splice(idx,1);else sel.push(colorName);
-  item.colors=sel.join(', ');
-  const chip=_cpGrid.querySelector(`[data-color="${CSS.escape(colorName)}"]`);
-  if(chip)chip.classList.toggle('sel',idx<0);
-  _cpCount.textContent=sel.length?`${sel.length} selected`:'';
-  _cpRefreshTrigger(_cpActiveId);
-  const nameEl=document.getElementById('iname-'+_cpActiveId);
-  if(nameEl)nameEl.innerHTML=_variantPillHtml(item);
-  updateStats();
-}
-
-function _cpRefreshTrigger(itemId){
-  const item=queue.find(q=>q.id==itemId);
-  const trig=document.getElementById('cp-trig-'+itemId);
-  if(!trig||!item)return;
-  const sel=_parseColors(item.colors);
-  trig.classList.toggle('has-sel',sel.length>0);
-  const pre=trig.querySelector('.cp-preview');
-  const lbl=trig.querySelector('.cp-lbl');
-  if(pre)pre.innerHTML=sel.slice(0,5).map(n=>{
-    const c=BRAND_COLORS.find(x=>x.n===n);
-    const s=c?(c.h.startsWith('linear')?`background:${c.h};border-radius:2px;width:14px;height:11px;border:none`:`background:${c.h}`):'background:#888';
-    return `<span class="cp-dot-mini" style="${s}"></span>`;
-  }).join('');
-  if(lbl){lbl.textContent=sel.length?sel.join(', '):'Select colors…';lbl.className=sel.length?'cp-lbl':'cp-lbl placeholder';}
-}
-
-function _parseColors(str){return(str||'').split(',').map(s=>s.trim()).filter(Boolean)}
-
-// Close on outside click/resize; keep open when scrolling the grid itself
 document.addEventListener('click',e=>{
-  if(!_cpActiveId)return;
-  if(_portal.contains(e.target))return;
-  const t=document.getElementById('cp-trig-'+_cpActiveId);
-  if(t&&t.contains(e.target))return;
-  cpClose();
+  // open triggers (delegated, works for dynamic cards + bulk bar)
+  const ct=e.target.closest('[data-colorctx]');
+  if(ct){e.stopPropagation();openColorPicker(ct.dataset.colorctx,ct);return;}
+  const tt=e.target.closest('[data-tagctx]');
+  if(tt){e.stopPropagation();openTagPicker(tt.dataset.tagctx,tt);return;}
+  // outside-click close
+  if(cpPortal.contains(e.target)||tpPortal.contains(e.target))return;
+  if(cpCtx!==null||tpCtx!==null)closePickers();
 },true);
 document.addEventListener('scroll',e=>{
-  if(!_cpActiveId)return;
-  if(_portal.contains(e.target))return;
-  cpClose();
+  if(cpCtx===null&&tpCtx===null)return;
+  if(cpPortal.contains(e.target)||tpPortal.contains(e.target))return;
+  closePickers();
 },true);
-window.addEventListener('resize',cpClose);
+window.addEventListener('resize',closePickers);
 
-function buildCpTrigger(itemId,colors,locked){
-  const sel=_parseColors(colors);
-  if(locked)return`<div style="font-size:11.5px;color:var(--muted);padding:5px 0">${sel.join(', ')||'—'}</div>`;
-  const dots=sel.slice(0,5).map(n=>{
-    const c=BRAND_COLORS.find(x=>x.n===n);
-    const s=c?(c.h.startsWith('linear')?`background:${c.h};border-radius:2px;width:14px;height:11px;border:none`:`background:${c.h}`):'background:#888';
-    return`<span class="cp-dot-mini" style="${s}"></span>`;
-  }).join('');
-  return`<div class="cp-wrap">
-    <div class="cp-trigger${sel.length?' has-sel':''}" id="cp-trig-${itemId}"
-      onclick="event.stopPropagation();cpOpen('${itemId}',this)" tabindex="0"
-      onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();cpOpen('${itemId}',this)}">
-      <div class="cp-preview">${dots}</div>
-      <span class="cp-lbl${sel.length?'':' placeholder'}">${sel.length?sel.join(', '):'Select colors…'}</span>
-      <span class="cp-caret">▾</span>
-    </div>
-  </div>`;
-}
-
-// ── App state ─────────────────────────────────────────────────────────────────
-let queue=[],history=[],historyFilter='all',queueFilter='all',logLines=[];
-let DEFAULT_BANGLE_SIZES='2.4,2.6,2.8';
-const logBox=document.getElementById('log-box');
-let firstLog=true;
-
-// ── Toasts ────────────────────────────────────────────────────────────────────
-function toast(msg,type='success'){
-  const el=document.createElement('div');
-  el.className=`toast ${type}`;el.textContent=msg;
-  document.getElementById('toast-stack').appendChild(el);
-  setTimeout(()=>el.remove(),4000);
-}
-
-// ── Socket ────────────────────────────────────────────────────────────────────
-socket.on('log',({msg,level})=>addLog(msg,level));
-socket.on('product_done',data=>{
-  const item=queue.find(q=>q.sku===data.sku&&q.status==='uploading');
-  if(item){item.status=data.status;item.error=data.error||null;renderQueue();}
-  if(data.status==='success'){addResult(data);toast(`${data.sku} listed on Shopify`,'success');}
-  else toast(`${data.sku} failed: ${data.error||'see log'}`,'error');
-  updateStats();checkAllDone();
-});
-
-// ── Nav ───────────────────────────────────────────────────────────────────────
-function showPanel(name,evt){
-  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
-  document.getElementById('panel-'+name).classList.add('active');
-  const btn=evt?evt.currentTarget:document.querySelector(`.nav-btn[data-panel="${name}"]`);
-  if(btn)btn.classList.add('active');
-  if(name==='history')loadHistory();
-}
-
-// ── Fast thumbnail via canvas (avoid full-res base64 freezing the thread) ────
-function fileToThumb(file,maxDim=160,q=0.72){
+// ── Thumbnails (fast path) ───────────────────────────────────────────────────
+async function fileToThumb(file,maxDim=160,q=0.72){
+  try{
+    if(window.createImageBitmap){
+      const bmp=await createImageBitmap(file);
+      const scale=Math.min(1,maxDim/Math.max(bmp.width,bmp.height));
+      const w=Math.max(1,Math.round(bmp.width*scale)),h=Math.max(1,Math.round(bmp.height*scale));
+      const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+      cv.getContext('2d').drawImage(bmp,0,0,w,h);
+      bmp.close&&bmp.close();
+      return cv.toDataURL('image/jpeg',q);
+    }
+  }catch(e){/* fall through */}
   return new Promise(resolve=>{
     const url=URL.createObjectURL(file);
     const img=new Image();
     img.onload=()=>{
       const scale=Math.min(1,maxDim/Math.max(img.width,img.height));
-      const w=Math.max(1,Math.round(img.width*scale));
-      const h=Math.max(1,Math.round(img.height*scale));
+      const w=Math.max(1,Math.round(img.width*scale)),h=Math.max(1,Math.round(img.height*scale));
       const cv=document.createElement('canvas');cv.width=w;cv.height=h;
       cv.getContext('2d').drawImage(img,0,0,w,h);
       URL.revokeObjectURL(url);
-      try{resolve(cv.toDataURL('image/jpeg',q));}catch{resolve('');}
+      try{resolve(cv.toDataURL('image/jpeg',q))}catch(e){resolve('')}
     };
-    img.onerror=()=>{URL.revokeObjectURL(url);resolve('');};
+    img.onerror=()=>{URL.revokeObjectURL(url);resolve('')};
     img.src=url;
   });
 }
 
-// ── File intake ───────────────────────────────────────────────────────────────
-const dropzone=document.getElementById('dropzone');
-const fileInput=document.getElementById('file-input');
-const folderInput=document.getElementById('folder-input');
-
-// Separate trigger functions so buttons can call them directly
-// without any click event bubbling back to the dropzone
-function triggerFileInput(){fileInput.click();}
-function triggerFolderInput(){folderInput.click();}
-
-// Dropzone click: only fire if the click was directly on the zone background,
-// not on a child button or input (those handle themselves)
-dropzone.addEventListener('click',e=>{
-  if(e.target.closest('button,input'))return;
-  triggerFileInput();
-});
-dropzone.addEventListener('dragover',e=>{e.preventDefault();dropzone.classList.add('drag');});
+// ── File intake ──────────────────────────────────────────────────────────────
+const dropzone=$('dropzone'),fileInput=$('file-input'),folderInput=$('folder-input');
+$('pick-files-btn').addEventListener('click',e=>{e.stopPropagation();fileInput.click()});
+$('pick-folder-btn').addEventListener('click',e=>{e.stopPropagation();folderInput.click()});
+dropzone.addEventListener('click',e=>{if(!e.target.closest('button,input'))fileInput.click()});
+dropzone.addEventListener('dragover',e=>{e.preventDefault();dropzone.classList.add('drag')});
 dropzone.addEventListener('dragleave',()=>dropzone.classList.remove('drag'));
 dropzone.addEventListener('drop',async e=>{
   e.preventDefault();dropzone.classList.remove('drag');
@@ -1124,7 +1175,6 @@ dropzone.addEventListener('drop',async e=>{
     handleEntries([...e.dataTransfer.files].map(f=>({file:f,relativePath:f.name})));
   }
 });
-
 fileInput.addEventListener('change',()=>{
   if(!fileInput.files.length)return;
   handleEntries([...fileInput.files].map(f=>({file:f,relativePath:f.webkitRelativePath||f.name})));
@@ -1139,12 +1189,12 @@ folderInput.addEventListener('change',function(){
 function traverseFileTree(entry,path=''){
   return new Promise(resolve=>{
     if(!entry)return resolve([]);
-    if(entry.isFile){entry.file(file=>resolve([{file,relativePath:path+file.name}]));}
+    if(entry.isFile){entry.file(file=>resolve([{file,relativePath:path+file.name}]),()=>resolve([]));}
     else if(entry.isDirectory){
       const reader=entry.createReader();let collected=[];
       const readBatch=()=>reader.readEntries(async batch=>{
         if(!batch.length){
-          const nested=await Promise.all(collected.map(e=>traverseFileTree(e,path+entry.name+'/')));
+          const nested=await Promise.all(collected.map(en=>traverseFileTree(en,path+entry.name+'/')));
           resolve(nested.flat());
         }else{collected=collected.concat(batch);readBatch();}
       },()=>resolve([]));
@@ -1163,7 +1213,6 @@ function parseFilename(filename){
   const sku=(m?m[1]:stem).toUpperCase().replace(/[^A-Z0-9-]/g,'');
   return{sku,cost:'',groupKey:sku};
 }
-
 function groupKeyFor({file,relativePath}){
   const parts=relativePath.split('/');
   if(parts.length>1){
@@ -1177,312 +1226,370 @@ function groupKeyFor({file,relativePath}){
   return parseFilename(file.name);
 }
 
-// Batch ALL reads with fast canvas thumbs → single render at end
 async function handleEntries(entries){
   const images=entries.filter(e=>e.file.type.startsWith('image/')||/\.(jpe?g|png|webp)$/i.test(e.file.name));
   if(!images.length)return;
-
-  const results=await Promise.all(images.map(async en=>{
-    const parsed=groupKeyFor(en);
-    const thumb=await fileToThumb(en.file);
-    return{file:en.file,parsed,thumb};
-  }));
-
+  const results=await Promise.all(images.map(async en=>({
+    file:en.file,parsed:groupKeyFor(en),thumb:await fileToThumb(en.file)
+  })));
   results.forEach(({file,parsed,thumb})=>{
     let item=queue.find(q=>q.groupKey===parsed.groupKey&&q.status==='pending');
     if(item){item.images.push({file,thumb,name:file.name});item.serverFilenames=null;}
     else{
       queue.push({
-        id:'itm'+Date.now()+'r'+Math.floor(Math.random()*1000000),
+        id:'itm'+Date.now()+'r'+Math.floor(Math.random()*1e6),
         groupKey:parsed.groupKey,sku:parsed.sku,costPrice:parsed.cost,
-        title:'',category:'',tags:'',weight:'',hscode:'',origin:'',qty:'',
+        title:'',category:'',subcategory:'',tags:'',weight:'',hscode:'',origin:'',qty:'',
         colors:'',sizes:'',
         images:[{file,thumb,name:file.name}],
-        status:'pending',error:null,
+        status:'pending',error:null,inStore:false,
         serverFilenames:null,aiGenerated:false
       });
     }
   });
-  renderQueue();updateStats();
+  renderQueue();scheduleStats();
+  toast(`${results.length} image(s) added to queue`,'success');
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function isReady(item){return item.status==='pending'&&item.sku&&item.costPrice;}
-function bucketOf(item){if(item.status==='pending')return isReady(item)?'ready':'incomplete';return item.status;}
-function dupSkus(){
-  const seen={},dups=new Set();
-  queue.forEach(q=>{const s=(q.sku||'').trim();if(!s)return;if(seen[s])dups.add(s);seen[s]=true;});
-  return dups;
-}
-function variantCountFor(item){
-  const colors=_parseColors(item.colors);
-  const sizes=(item.sizes||'').split(',').map(s=>s.trim()).filter(Boolean);
-  if(!colors.length&&!sizes.length)return 1;
-  return Math.max(colors.length,1)*Math.max(sizes.length,1);
-}
-function _variantPillHtml(item){
+// ── Queue rendering ──────────────────────────────────────────────────────────
+function namePillHtml(item){
   const v=variantCountFor(item),dups=dupSkus();
-  const extra=item.images.length>1?`${item.images[0].name} +${item.images.length-1}`:item.images[0].name;
-  return`<span class="sku-txt">${item.sku||'(no SKU)'}</span>
-    <span class="file-txt">${extra}</span>
-    ${item.category?`<span class="variant-pill" style="background:rgba(56,189,248,.15);color:var(--accent3);border-color:rgba(56,189,248,.3)">${item.category}</span>`:''}
-    ${v>1?`<span class="variant-pill">${v} variants</span>`:''}
-    ${item.sku&&dups.has(item.sku.trim())?'<span class="dup-pill">duplicate SKU</span>':''}`;
+  const first=item.images[0]?item.images[0].name:'';
+  const extra=item.images.length>1?`${first} +${item.images.length-1}`:first;
+  return `<span class="sku-txt">${esc(item.sku||'(no SKU)')}</span>
+    <span class="file-txt">${esc(extra)}</span>
+    ${item.subcategory?`<span class="pill pill-sub">${esc(item.subcategory)}</span>`:''}
+    ${v>1?`<span class="pill pill-var">${v} variants</span>`:''}
+    ${item.sku&&dups.has(item.sku.trim())?'<span class="pill pill-dup">duplicate in queue</span>':''}
+    ${item.inStore?'<span class="pill pill-store">already in store</span>':''}`;
 }
-
-function setQueueFilter(f){
-  queueFilter=f;
-  document.querySelectorAll('.qf').forEach(b=>b.classList.toggle('active',b.dataset.qf===f));
-  renderQueue();
+function metaHtml(item,sp){
+  if(!item.costPrice)return `<span style="color:var(--amber)">Enter cost price to see selling price</span>`;
+  return `<span>CP ₹${esc(item.costPrice)}</span><span class="item-mrp">MRP ₹${sp*2}</span><span class="item-price">SP ₹${sp}</span>`;
 }
-
-// ── Queue render ──────────────────────────────────────────────────────────────
-function renderQueue(){
-  cpClose();
-  const list=document.getElementById('queue-list');
-  const section=document.getElementById('queue-section');
-  section.style.display=queue.length?'block':'none';
-  document.getElementById('queue-count').textContent=queue.length;
-
-  const counts={ready:0,incomplete:0,failed:0,success:0};
-  queue.forEach(q=>{const b=bucketOf(q);if(counts[b]!==undefined)counts[b]++;});
-  ['ready','incomplete','failed','success'].forEach(k=>{
-    const el=document.getElementById('qfc-'+k);
-    if(el)el.textContent=counts[k]?` ${counts[k]}`:'';
-  });
-
-  const dups=dupSkus();
-  const visible=queue.filter(q=>queueFilter==='all'||bucketOf(q)===queueFilter);
-  if(!visible.length){
-    list.innerHTML='<div class="empty"><div class="empty-title">Nothing here</div>No items match this filter.</div>';
-  }else{
-    list.innerHTML=visible.map(item=>buildQueueItemHtml(item,dups)).join('');
-  }
-}
-
 function thumbsHtml(item,locked){
-  const id=item.id;
   return item.images.map((img,i)=>`
     <div class="thumb-wrap${i===0?' cover':''}">
-      <img class="thumb" src="${img.thumb}" title="Click to preview · ${img.name}" alt=""
-        loading="lazy" onclick="event.stopPropagation();openPreview('${id}',${i})">
+      <img class="thumb" src="${img.thumb}" title="Click to preview · ${esc(img.name)}" alt="" loading="lazy"
+        data-action="preview" data-idx="${i}">
       ${i===0?'<span class="cover-tag">COVER</span>':''}
-      ${!locked&&i>0?`<button class="thumb-cover" title="Make cover" onclick="event.stopPropagation();makeCover('${id}',${i})">★</button>`:''}
-      ${!locked?`<button class="thumb-remove" title="Remove" onclick="event.stopPropagation();removeImage('${id}',${i})">×</button>`:''}
-    </div>`).join('')+(!locked?`<button class="thumb-add" title="Add images" onclick="addImages('${id}')">+</button>`:'');
+      ${!locked&&i>0?`<button class="thumb-cover" title="Make cover" data-action="make-cover" data-idx="${i}" type="button">★</button>`:''}
+      ${!locked?`<button class="thumb-remove" title="Remove" data-action="remove-image" data-idx="${i}" type="button">×</button>`:''}
+    </div>`).join('')+(!locked?`<button class="thumb-add" title="Add images" data-action="add-images" type="button">+</button>`:'');
 }
-
-// ── Image preview lightbox ────────────────────────────────────────────────────
-function openPreview(itemId,idx){
-  const item=queue.find(q=>q.id==itemId);if(!item)return;
-  const img=item.images[idx];if(!img)return;
-  const modal=document.getElementById('preview-modal');
-  const modalImg=document.getElementById('preview-modal-img');
-  if(modalImg.dataset.blobUrl){URL.revokeObjectURL(modalImg.dataset.blobUrl);}
-  const url=URL.createObjectURL(img.file);
-  modalImg.src=url;
-  modalImg.dataset.blobUrl=url;
-  document.getElementById('preview-modal-name').textContent=`${item.sku||'(no SKU)'} · ${img.name}`;
-  modal.classList.add('visible');
-}
-function closePreview(e){
-  if(e&&e.target&&e.target.id!=='preview-modal'&&!e.target.classList.contains('preview-modal-close'))return;
-  const modal=document.getElementById('preview-modal');
-  const modalImg=document.getElementById('preview-modal-img');
-  if(!modal.classList.contains('visible'))return;
-  if(modalImg.dataset.blobUrl){URL.revokeObjectURL(modalImg.dataset.blobUrl);delete modalImg.dataset.blobUrl;}
-  modal.classList.remove('visible');modalImg.src='';
-}
-
-function buildQueueItemHtml(item,dups){
-  const sp=item.costPrice?calcSP(parseFloat(item.costPrice),getMarkup()):null;
+function cardHtml(item){
+  const sp=item.costPrice?calcSP(parseFloat(item.costPrice)):null;
   const ready=isReady(item),locked=item.status!=='pending';
   const badge={
     pending:ready?['badge-ready','Ready']:['badge-pending','Needs info'],
-    uploading:['badge-running','Uploading…'],
+    uploading:['badge-running','Publishing…'],
     success:['badge-success','Done ✅'],
     failed:['badge-failed','Failed ❌'],
   }[item.status];
-
-  return`
-  <div class="queue-item ${item.status}${ready?' ready':''}" id="qi-${item.id}">
+  const tagsSel=parseList(item.tags);
+  const colorsSel=parseList(item.colors);
+  const colorDots=colorsSel.slice(0,5).map(n=>{
+    const c=BRAND_COLORS.find(x=>x.n===n);
+    const s=c?(c.h.startsWith('linear')?`background:${c.h};border-radius:2px;width:14px;height:11px;border:none`:`background:${c.h}`):'background:#888';
+    return `<span class="pk-dot" style="${s}"></span>`;
+  }).join('');
+  return `
+  <div class="qcard ${item.status}${ready?' ready':''}${selectedIds.has(item.id)?' selected':''}" data-id="${item.id}">
+    <input type="checkbox" class="sel-box" data-action="select" ${selectedIds.has(item.id)?'checked':''} ${locked?'disabled':''}>
     <div>
-      <div class="thumb-stack" id="ts-${item.id}">${thumbsHtml(item,locked)}</div>
-      <div class="img-count-badge" id="ic-${item.id}">${item.images.length} image${item.images.length>1?'s':''}</div>
+      <div class="thumb-stack">${thumbsHtml(item,locked)}</div>
+      <div class="img-count-badge">${item.images.length} image${item.images.length>1?'s':''}</div>
     </div>
     <div class="item-info">
-      <div class="item-name" id="iname-${item.id}">${_variantPillHtml(item)}</div>
+      <div class="item-name">${namePillHtml(item)}</div>
       <div class="item-inputs">
-        <input class="item-input mono-in${!item.sku?' invalid':''}" placeholder="SKU" value="${item.sku}"
-          oninput="onField('${item.id}','sku',this.value)" ${locked?'disabled':''}>
-        <input class="item-input mono-in narrow${!item.costPrice?' invalid':''}" placeholder="Cost ₹" value="${item.costPrice}" type="number"
-          oninput="onField('${item.id}','costPrice',this.value)" ${locked?'disabled':''}>
-        <input class="item-input title-input" id="title-input-${item.id}" placeholder="Custom title (blank = AI writes it)" value="${item.title}"
-          oninput="onField('${item.id}','title',this.value)" ${locked?'disabled':''}>
-        ${!locked?`<button class="ai-btn" id="ai-btn-${item.id}" onclick="generateTitle('${item.id}')" title="Preview an AI-written title from the photo before uploading">✨ AI Title</button>`:''}
-        ${item.aiGenerated?`<span class="ai-badge" id="ai-badge-${item.id}">✨ AI</span>`:''}
+        <input class="item-input mono-in${!item.sku?' invalid':''}" placeholder="SKU" value="${esc(item.sku)}"
+          data-field="sku" ${locked?'disabled':''}>
+        <input class="item-input mono-in narrow${!item.costPrice?' invalid':''}" placeholder="Cost ₹" value="${esc(item.costPrice)}" type="number"
+          data-field="costPrice" ${locked?'disabled':''}>
+        <input class="item-input title-input" placeholder="Custom title (blank = AI writes it)" value="${esc(item.title)}"
+          data-field="title" ${locked?'disabled':''}>
+        ${!locked?`<button class="ai-btn" data-action="ai-title" type="button" title="Preview an AI title grounded in the chosen subcategory">✨ AI Title</button>`:''}
+        ${item.aiGenerated?`<span class="ai-badge">✨ AI</span>`:''}
       </div>
       <div class="item-inputs">
-        <select class="item-input cat-select" onchange="onCategoryChange('${item.id}',this.value)" ${locked?'disabled':''}>
-          ${_categoryOptionsHtml(item.category)}
-        </select>
-        <input class="item-input tags-input" placeholder="Tags" value="${item.tags}"
-          oninput="onField('${item.id}','tags',this.value)" ${locked?'disabled':''}>
-        <input class="item-input mono-in narrow" placeholder="Wt g" value="${item.weight}" type="number"
-          oninput="onField('${item.id}','weight',this.value)" ${locked?'disabled':''}>
-        <input class="item-input mono-in narrow" placeholder="HS code" value="${item.hscode}"
-          oninput="onField('${item.id}','hscode',this.value)" ${locked?'disabled':''}>
-        <input class="item-input mono-in narrow" placeholder="Origin" value="${item.origin}"
-          oninput="onField('${item.id}','origin',this.value)" ${locked?'disabled':''}>
-        <input class="item-input mono-in narrow" placeholder="Qty" value="${item.qty}" type="number"
-          oninput="onField('${item.id}','qty',this.value)" ${locked?'disabled':''}>
+        <select class="item-input" data-field="category" ${locked?'disabled':''}>${catOptions(item.category)}</select>
+        <select class="item-input" style="width:172px" data-field="subcategory" ${locked||!item.category?'disabled':''}>${subOptions(item.category,item.subcategory)}</select>
+        <div class="pk-trigger${tagsSel.length?' has-sel':''}" data-tagctx="${item.id}" tabindex="0" ${locked?'style="pointer-events:none;opacity:.55"':''}>
+          <span class="pk-lbl${tagsSel.length?'':' placeholder'}">${tagsSel.length?esc(tagsSel.join(', ')):'Tags…'}</span>
+          ${tagsSel.length?`<span class="pk-count">${tagsSel.length}</span>`:''}
+          <span class="pk-caret">▾</span>
+        </div>
+        <input class="item-input mono-in narrow" placeholder="Wt g" value="${esc(item.weight)}" type="number" data-field="weight" ${locked?'disabled':''}>
+        <input class="item-input mono-in narrow" placeholder="HS code" value="${esc(item.hscode)}" data-field="hscode" ${locked?'disabled':''}>
+        <input class="item-input mono-in narrow" placeholder="Origin" value="${esc(item.origin)}" data-field="origin" ${locked?'disabled':''}>
+        <input class="item-input mono-in narrow" placeholder="Qty" value="${esc(item.qty)}" type="number" data-field="qty" ${locked?'disabled':''}>
       </div>
       <div class="item-inputs" style="align-items:flex-start">
-        ${buildCpTrigger(item.id,item.colors,locked)}
-        <input class="item-input mono-in variant-input" placeholder="Sizes e.g. 2.4,2.6,2.8" value="${item.sizes}"
-          oninput="onField('${item.id}','sizes',this.value)" ${locked?'disabled':''}>
-        ${!locked?`<button class="preset-btn" onclick="applyBangleSizes('${item.id}')">📏 Bangle sizes</button>`:''}
-        ${!locked&&item.category&&TAG_PRESETS[item.category]?`<button class="preset-btn" onclick="applyTagPreset('${item.id}')">🏷️ Preset tags</button>`:''}
+        <div class="pk-trigger${colorsSel.length?' has-sel':''}" data-colorctx="${item.id}" tabindex="0" ${locked?'style="pointer-events:none;opacity:.55"':''}>
+          <div class="pk-preview">${colorDots}</div>
+          <span class="pk-lbl${colorsSel.length?'':' placeholder'}">${colorsSel.length?esc(colorsSel.join(', ')):'Colors…'}</span>
+          <span class="pk-caret">▾</span>
+        </div>
+        <input class="item-input mono-in variant-input" placeholder="Sizes e.g. 2.4,2.6,2.8" value="${esc(item.sizes)}" data-field="sizes" ${locked?'disabled':''}>
+        ${!locked?`<button class="preset-btn" data-action="bangle-sizes" type="button">📏 Bangle sizes</button>`:''}
       </div>
-      <div class="item-meta" id="imeta-${item.id}">${metaHtml(item,sp)}</div>
-      ${item.status==='failed'&&item.error?`<div class="item-error-msg">⚠ ${item.error}</div>`:''}
+      <div class="item-meta">${metaHtml(item,sp)}</div>
+      ${item.status==='failed'&&item.error?`<div class="item-error-msg">⚠ ${esc(item.error)}</div>`:''}
     </div>
     <div class="item-actions">
       <span class="badge ${badge[0]}">${badge[1]}</span>
-      ${item.status==='pending'?`<button class="remove-btn" onclick="removeItem('${item.id}')">×</button>`:''}
-      ${item.status==='failed'?`<button class="btn btn-ghost btn-sm" onclick="retryItem('${item.id}')">↻ Retry</button>`:''}
+      ${item.status==='pending'?`<button class="remove-btn" data-action="remove" type="button">×</button>`:''}
+      ${item.status==='failed'?`<button class="btn btn-ghost btn-sm" data-action="retry" type="button">↻ Retry</button>`:''}
     </div>
   </div>`;
 }
 
-function metaHtml(item,sp){
-  if(!item.costPrice)return`<span style="color:var(--yellow)">Enter cost price to see selling price</span>`;
-  return`<span>CP ₹${item.costPrice}</span><span class="item-mrp">MRP ₹${sp*2}</span><span class="item-price">SP ₹${sp}</span>`;
+function renderQueue(){
+  closePickers();
+  const list=$('queue-list');
+  $('queue-section').style.display=queue.length?'block':'none';
+  $('queue-count').textContent=queue.length;
+  const visible=queue.filter(q=>queueFilter==='all'||bucketOf(q)===queueFilter);
+  if(!visible.length){
+    list.innerHTML='<div class="empty"><div class="empty-title">Nothing here</div>No items match this filter.</div>';
+  }else{
+    list.innerHTML=visible.map(cardHtml).join('');
+  }
+  refreshSelNote();
+}
+function patchCard(id){
+  const item=byId(id);
+  const el=document.querySelector(`.qcard[data-id="${CSS.escape(id)}"]`);
+  if(!item||!el)return;
+  if(queueFilter!=='all'&&bucketOf(item)!==queueFilter){renderQueue();return;}
+  el.outerHTML=cardHtml(item);
+}
+function refreshNamePill(id){
+  const el=document.querySelector(`.qcard[data-id="${CSS.escape(id)}"] .item-name`);
+  const item=byId(id);
+  if(el&&item)el.innerHTML=namePillHtml(item);
+}
+function refreshSelNote(){
+  const n=selectedIds.size;
+  $('sel-note').textContent=n?`${n} selected — bulk fill applies to selection`:'';
+  $('bulk-apply-btn').textContent=n?`Apply to ${n} selected`:'Apply to all';
 }
 
-// ── Targeted DOM patches — never calls renderQueue() for minor updates ────────
-function onField(id,field,val){
-  const item=queue.find(q=>q.id==id);if(!item)return;
-  item[field]=val;
-  if(field==='sku'||field==='sizes'){
-    const el=document.getElementById('iname-'+id);
-    if(el)el.innerHTML=_variantPillHtml(item);
+// ── Delegated queue events ───────────────────────────────────────────────────
+const queueList=$('queue-list');
+
+queueList.addEventListener('input',e=>{
+  const field=e.target.dataset.field;
+  if(!field)return;
+  const card=e.target.closest('.qcard');if(!card)return;
+  const item=byId(card.dataset.id);if(!item)return;
+  onField(item,field,e.target.value,card);
+});
+queueList.addEventListener('change',e=>{
+  const card=e.target.closest('.qcard');if(!card)return;
+  const item=byId(card.dataset.id);if(!item)return;
+  if(e.target.dataset.action==='select'){
+    if(e.target.checked)selectedIds.add(item.id);else selectedIds.delete(item.id);
+    card.classList.toggle('selected',e.target.checked);
+    refreshSelNote();syncSelectAllBox();return;
   }
+  const field=e.target.dataset.field;
+  if(field==='category'){
+    item.category=e.target.value;item.subcategory='';
+    const subSel=card.querySelector('select[data-field="subcategory"]');
+    if(subSel){subSel.disabled=!item.category;subSel.innerHTML=subOptions(item.category,'');}
+    refreshNamePill(item.id);
+  }else if(field==='subcategory'){
+    item.subcategory=e.target.value;
+    refreshNamePill(item.id);refreshTagTrigger(item.id);
+  }
+});
+queueList.addEventListener('click',e=>{
+  const btn=e.target.closest('[data-action]');
+  if(!btn||btn.dataset.action==='select')return;
+  const card=btn.closest('.qcard');if(!card)return;
+  const item=byId(card.dataset.id);if(!item)return;
+  const idx=parseInt(btn.dataset.idx||'0',10);
+  switch(btn.dataset.action){
+    case 'preview':      e.stopPropagation();openPreview(item,idx);break;
+    case 'make-cover':   e.stopPropagation();makeCover(item,idx);break;
+    case 'remove-image': e.stopPropagation();removeImage(item,idx);break;
+    case 'add-images':   addImages(item);break;
+    case 'ai-title':     generateTitle(item.id);break;
+    case 'bangle-sizes': applyBangleSizes(item);break;
+    case 'remove':       selectedIds.delete(item.id);queue=queue.filter(q=>q.id!==item.id);renderQueue();scheduleStats();break;
+    case 'retry':        item.status='pending';item.error=null;patchCard(item.id);scheduleStats();break;
+  }
+});
+
+function onField(item,field,val,card){
+  item[field]=val;
+  if(field==='sku'){item.inStore=false;}
+  if(field==='sku'||field==='sizes')refreshNamePill(item.id);
   if(field==='title'){
     item.aiGenerated=false;
-    const badge=document.getElementById('ai-badge-'+id);
-    if(badge)badge.remove();
+    const badge=card.querySelector('.ai-badge');if(badge)badge.remove();
   }
   if(field==='costPrice'||field==='sku'){
-    const sp=item.costPrice?calcSP(parseFloat(item.costPrice),getMarkup()):null;
-    const m=document.getElementById('imeta-'+id);if(m)m.innerHTML=metaHtml(item,sp);
-    const card=document.getElementById('qi-'+id);
-    if(card&&item.status==='pending'){
-      card.classList.toggle('ready',isReady(item));
-      const b=card.querySelector('.badge');
-      if(b){b.className='badge '+(isReady(item)?'badge-ready':'badge-pending');b.textContent=isReady(item)?'Ready':'Needs info';}
-    }
+    const sp=item.costPrice?calcSP(parseFloat(item.costPrice)):null;
+    const meta=card.querySelector('.item-meta');if(meta)meta.innerHTML=metaHtml(item,sp);
+    e_validity(item,card,field);
   }
-  updateStats();
+  scheduleStats();
 }
-
-// Category change: grounds both the AI title-generation prompt and the
-// static description template. Auto-fills tag preset when tags are empty.
-function onCategoryChange(id,val){
-  const item=queue.find(q=>q.id==id);if(!item)return;
-  item.category=val;
-  const el=document.getElementById('iname-'+id);if(el)el.innerHTML=_variantPillHtml(item);
-  if(val&&TAG_PRESETS[val]&&!item.tags){
-    item.tags=TAG_PRESETS[val];
-    const tagsInp=document.querySelector(`#qi-${id} input.tags-input`);
-    if(tagsInp)tagsInp.value=item.tags;
-  }
-  // re-render this card only, so the preset-tags button appears/disappears correctly
-  const cardWrap=document.getElementById('qi-'+id);
-  if(cardWrap){
-    const dups=dupSkus();
-    cardWrap.outerHTML=buildQueueItemHtml(item,dups);
+function e_validity(item,card,field){
+  const inp=card.querySelector(`[data-field="${field}"]`);
+  if(inp)inp.classList.toggle('invalid',!item[field]);
+  if(item.status==='pending'){
+    const r=isReady(item);
+    card.classList.toggle('ready',r);
+    const b=card.querySelector('.badge');
+    if(b){b.className='badge '+(r?'badge-ready':'badge-pending');b.textContent=r?'Ready':'Needs info';}
   }
 }
 
-function applyTagPreset(id){
-  const item=queue.find(q=>q.id==id);if(!item||!item.category)return;
-  const preset=TAG_PRESETS[item.category];if(!preset)return;
-  item.tags=preset;
-  const inp=document.querySelector(`#qi-${id} input.tags-input`);if(inp)inp.value=preset;
-  toast(`Tag preset applied for ${item.category}`,'success');
+// select all
+$('select-all-box').addEventListener('change',e=>{
+  const visible=queue.filter(q=>(queueFilter==='all'||bucketOf(q)===queueFilter)&&q.status==='pending');
+  if(e.target.checked)visible.forEach(q=>selectedIds.add(q.id));
+  else visible.forEach(q=>selectedIds.delete(q.id));
+  renderQueue();
+});
+function syncSelectAllBox(){
+  const visible=queue.filter(q=>(queueFilter==='all'||bucketOf(q)===queueFilter)&&q.status==='pending');
+  $('select-all-box').checked=visible.length>0&&visible.every(q=>selectedIds.has(q.id));
 }
 
-function applyBangleSizes(id){
-  const item=queue.find(q=>q.id==id);if(!item)return;
-  item.sizes=DEFAULT_BANGLE_SIZES;
-  const inp=document.querySelector(`#qi-${id} input.variant-input`);if(inp)inp.value=DEFAULT_BANGLE_SIZES;
-  const el=document.getElementById('iname-'+id);if(el)el.innerHTML=_variantPillHtml(item);
-  updateStats();toast(`Bangle sizes applied (${DEFAULT_BANGLE_SIZES})`,'success');
-}
+// filters
+document.querySelector('.queue-filters').addEventListener('click',e=>{
+  const b=e.target.closest('.qf');if(!b)return;
+  queueFilter=b.dataset.qf;
+  document.querySelectorAll('.qf').forEach(x=>x.classList.toggle('active',x===b));
+  renderQueue();
+});
 
-document.querySelectorAll('input[name="markup"]').forEach(r=>r.addEventListener('change',()=>{
-  queue.forEach(item=>{
-    const sp=item.costPrice?calcSP(parseFloat(item.costPrice),getMarkup()):null;
-    const m=document.getElementById('imeta-'+item.id);if(m)m.innerHTML=metaHtml(item,sp);
-  });
-  updateStats();
-}));
-
-// Patch thumb stack in-place (no renderQueue)
-function _patchThumbStack(id){
-  const item=queue.find(q=>q.id==id);if(!item)return;
-  const locked=item.status!=='pending';
-  const ts=document.getElementById('ts-'+id);if(ts)ts.innerHTML=thumbsHtml(item,locked);
-  const ic=document.getElementById('ic-'+id);if(ic)ic.textContent=`${item.images.length} image${item.images.length>1?'s':''}`;
-  const nm=document.getElementById('iname-'+id);if(nm)nm.innerHTML=_variantPillHtml(item);
-}
-
-function makeCover(id,idx){
-  const item=queue.find(q=>q.id==id);if(!item||!item.images[idx])return;
+// ── Image actions ────────────────────────────────────────────────────────────
+function makeCover(item,idx){
+  if(!item.images[idx])return;
   const[img]=item.images.splice(idx,1);item.images.unshift(img);
-  item.serverFilenames=null;
-  _patchThumbStack(id);toast('Cover updated','success');
+  item.serverFilenames=null;patchCard(item.id);toast('Cover updated','success');
 }
-
-// Add images to existing item — canvas thumbs, batch, single DOM patch
-function addImages(id){
+function removeImage(item,idx){
+  item.images.splice(idx,1);item.serverFilenames=null;
+  if(!item.images.length){selectedIds.delete(item.id);queue=queue.filter(q=>q.id!==item.id);renderQueue();scheduleStats();return;}
+  patchCard(item.id);scheduleStats();
+}
+function addImages(item){
   const inp=document.createElement('input');
   inp.type='file';inp.accept='image/*';inp.multiple=true;
   inp.onchange=async()=>{
-    const item=queue.find(q=>q.id==id);
-    if(!item||!inp.files.length)return;
-    const files=[...inp.files];
-    const newImgs=await Promise.all(files.map(async f=>({file:f,thumb:await fileToThumb(f),name:f.name})));
-    item.images.push(...newImgs);
-    item.serverFilenames=null;
-    _patchThumbStack(id);
-    updateStats();
+    if(!inp.files.length)return;
+    const newImgs=await Promise.all([...inp.files].map(async f=>({file:f,thumb:await fileToThumb(f),name:f.name})));
+    item.images.push(...newImgs);item.serverFilenames=null;
+    patchCard(item.id);scheduleStats();
   };
   inp.click();
 }
-
-function removeImage(id,idx){
-  const item=queue.find(q=>q.id==id);if(!item)return;
-  item.images.splice(idx,1);
-  item.serverFilenames=null;
-  if(!item.images.length){queue=queue.filter(q=>q.id!=id);renderQueue();updateStats();return;}
-  _patchThumbStack(id);updateStats();
+function applyBangleSizes(item){
+  item.sizes=DEFAULT_BANGLE_SIZES;
+  patchCard(item.id);scheduleStats();
+  toast(`Bangle sizes applied (${DEFAULT_BANGLE_SIZES})`,'success');
 }
 
-function removeItem(id){queue=queue.filter(q=>q.id!=id);renderQueue();updateStats();}
-function clearDone(){queue=queue.filter(q=>q.status!=='success');renderQueue();updateStats();}
-function retryItem(id){const item=queue.find(q=>q.id==id);if(item){item.status='pending';item.error=null;renderQueue();}}
-function retryFailed(){
-  let n=0;queue.forEach(q=>{if(q.status==='failed'){q.status='pending';q.error=null;n++;}});
-  renderQueue();
-  if(n){toast(`Re-queued ${n} item(s)`,'success');uploadAll();}else toast('No failed items','error');
+// ── Lightbox ─────────────────────────────────────────────────────────────────
+const previewModal=$('preview-modal'),previewImg=$('preview-modal-img');
+function openPreview(item,idx){
+  const img=item.images[idx];if(!img)return;
+  if(previewImg.dataset.blobUrl)URL.revokeObjectURL(previewImg.dataset.blobUrl);
+  const url=URL.createObjectURL(img.file);
+  previewImg.src=url;previewImg.dataset.blobUrl=url;
+  $('preview-modal-name').textContent=`${item.sku||'(no SKU)'} · ${img.name}`;
+  previewModal.classList.add('visible');
+}
+function closePreview(){
+  if(!previewModal.classList.contains('visible'))return;
+  if(previewImg.dataset.blobUrl){URL.revokeObjectURL(previewImg.dataset.blobUrl);delete previewImg.dataset.blobUrl;}
+  previewModal.classList.remove('visible');previewImg.src='';
+}
+previewModal.addEventListener('click',e=>{
+  if(e.target===previewModal||e.target.closest('.preview-modal-close'))closePreview();
+});
+
+// ── Bulk apply ───────────────────────────────────────────────────────────────
+$('bulk-apply-btn').addEventListener('click',()=>{
+  const vals={
+    cp:$('bulk-cp').value.trim(),
+    cat:$('bulk-category').value,
+    sub:$('bulk-subcategory').value,
+    tags:bulkTags.trim(),
+    hs:$('bulk-hs').value.trim(),
+    origin:$('bulk-origin').value.trim(),
+    qty:$('bulk-qty').value.trim(),
+    sizes:$('bulk-sizes').value.trim(),
+  };
+  if(!Object.values(vals).some(Boolean)){toast('Fill at least one bulk field','error');return;}
+  const targets=queue.filter(q=>q.status==='pending'&&(selectedIds.size===0||selectedIds.has(q.id)));
+  if(!targets.length){toast('No pending items to apply to','error');return;}
+  targets.forEach(q=>{
+    if(vals.cp)q.costPrice=vals.cp;
+    if(vals.cat){q.category=vals.cat;if(!vals.sub)q.subcategory='';}
+    if(vals.sub){q.subcategory=vals.sub;q.category=vals.cat||q.category;}
+    if(vals.tags)q.tags=vals.tags;
+    if(vals.hs)q.hscode=vals.hs;
+    if(vals.origin)q.origin=vals.origin;
+    if(vals.qty)q.qty=vals.qty;
+    if(vals.sizes)q.sizes=vals.sizes;
+  });
+  renderQueue();scheduleStats();
+  toast(`Applied to ${targets.length} item${targets.length>1?'s':''}`,'success');
+});
+
+// markup change: refresh meta rows + stats
+document.querySelectorAll('input[name="markup"]').forEach(r=>r.addEventListener('change',()=>{
+  prefSet('markup',getMarkup());
+  document.querySelectorAll('.qcard').forEach(card=>{
+    const item=byId(card.dataset.id);if(!item)return;
+    const sp=item.costPrice?calcSP(parseFloat(item.costPrice)):null;
+    const meta=card.querySelector('.item-meta');if(meta)meta.innerHTML=metaHtml(item,sp);
+  });
+  scheduleStats();
+}));
+$('concurrency').addEventListener('change',e=>prefSet('concurrency',e.target.value));
+
+// ── Stats (rAF-batched) ──────────────────────────────────────────────────────
+let statsQueued=false;
+function scheduleStats(){
+  if(statsQueued)return;statsQueued=true;
+  requestAnimationFrame(()=>{statsQueued=false;updateStats();});
+}
+function updateStats(){
+  const ready=queue.filter(isReady).length;
+  const incomplete=queue.filter(q=>q.status==='pending'&&!isReady(q)).length;
+  const queued=queue.filter(q=>q.status==='pending'||q.status==='uploading').length;
+  const success=queue.filter(q=>q.status==='success').length;
+  const failed=queue.filter(q=>q.status==='failed').length;
+  const value=queue.reduce((s,q)=>s+(q.costPrice?calcSP(parseFloat(q.costPrice))*variantCountFor(q):0),0);
+  $('stat-queued').textContent=queued;
+  $('stat-success').textContent=success;
+  $('stat-failed').textContent=failed;
+  $('stat-value').textContent='₹'+value.toLocaleString('en-IN');
+  $('cb-ready').textContent=ready;
+  $('cb-incomplete').textContent=incomplete;
+  $('cb-failed').textContent=failed;
+  $('cb-done').textContent=success;
+  const btn=$('upload-all-btn');
+  if(!btn.disabled)btn.innerHTML=ready?`⬆ Publish ${ready} ready <span class="kbd-hint">⌘↵</span>`:`⬆ Publish all <span class="kbd-hint">⌘↵</span>`;
+  $('ms-total').textContent=success;
+  const tot=success+failed;
+  $('ms-rate').textContent=tot?Math.round((success/tot)*100)+'%':'—';
+  const counts={ready,incomplete,failed,success};
+  ['ready','incomplete','failed','success'].forEach(k=>{
+    const el=$('qfc-'+k);if(el)el.textContent=counts[k]?` ${counts[k]}`:'';
+  });
 }
 
-// ── AI title preview (calls /generate_title BEFORE the real Shopify upload) ──
-// Uploads the images once (cached on the item), asks Groq for a title/tags
-// preview, then fills the (still editable) title input so the seller can
-// check it — and change it — before ever creating the Shopify listing.
+// ── AI title preview ─────────────────────────────────────────────────────────
 async function ensureUploaded(item){
   if(item.serverFilenames&&item.serverFilenames.length===item.images.length)return item.serverFilenames;
   const fd=new FormData();
@@ -1494,309 +1601,322 @@ async function ensureUploaded(item){
   item.serverFilenames=data.filenames;
   return data.filenames;
 }
-
 async function generateTitle(id){
-  const item=queue.find(q=>q.id==id);if(!item)return;
+  const item=byId(id);if(!item)return;
   if(!item.images.length){toast('Add an image first','error');return;}
-  const btn=document.getElementById('ai-btn-'+id);
+  const card=document.querySelector(`.qcard[data-id="${CSS.escape(id)}"]`);
+  const btn=card&&card.querySelector('[data-action="ai-title"]');
   if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Thinking…';}
   try{
     const filenames=await ensureUploaded(item);
     const res=await fetch('/generate_title',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({filenames,sku:item.sku||'PREVIEW',category:item.category,socket_id:socket.id})
+      body:JSON.stringify({filenames,sku:item.sku||'PREVIEW',category:item.category,
+                           subcategory:item.subcategory,socket_id:socket.id})
     });
     const data=await res.json();
     if(!res.ok)throw new Error(data.error||'Failed to generate title');
     item.title=data.title||item.title;
     item.aiGenerated=true;
     if(!item.tags&&data.tags)item.tags=data.tags;
-    const cardWrap=document.getElementById('qi-'+id);
-    if(cardWrap){const dups=dupSkus();cardWrap.outerHTML=buildQueueItemHtml(item,dups);}
+    patchCard(id);
     toast(`AI title ready: "${item.title}"`,'success');
   }catch(e){
     toast('AI title failed: '+e.message,'error');
     if(btn){btn.disabled=false;btn.innerHTML='✨ AI Title';}
-  }finally{
-    updateStats();
-  }
+  }finally{scheduleStats();}
 }
-
-async function generateAllTitles(){
+$('ai-all-btn').addEventListener('click',async()=>{
   const targets=queue.filter(q=>q.status==='pending'&&q.images.length&&!q.title);
   if(!targets.length){toast('No items need titles','error');return;}
-  toast(`Generating ${targets.length} title(s)…`,'success');
-  for(const item of targets){
-    await generateTitle(item.id);
-  }
+  toast(`Writing ${targets.length} title(s)…`,'success');
+  for(const item of targets)await generateTitle(item.id);
+});
+
+// ── Publish flow ─────────────────────────────────────────────────────────────
+const seamFill=$('seam-fill');
+let batchRunning=false;
+
+async function preflightSkuCheck(items){
+  try{
+    const res=await fetch('/check_skus',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({skus:items.map(i=>i.sku)})
+    });
+    const data=await res.json();
+    const existing=data.existing||{};
+    let hits=0;
+    items.forEach(i=>{
+      const hit=!!existing[(i.sku||'').toUpperCase()];
+      if(hit&&!i.inStore)hits++;
+      i.inStore=hit;
+      refreshNamePill(i.id);
+    });
+    if(hits){
+      const list=items.filter(i=>i.inStore).map(i=>i.sku).join(', ');
+      addLog(`⚠ SKUs already exist in the store: ${list}`,'error');
+      return confirm(`These SKUs already exist in your Shopify store:\n\n${list}\n\nPublishing will create duplicate products. Continue anyway?`);
+    }
+    if(data.error)addLog(`ℹ SKU check skipped: ${data.error}`,'muted');
+  }catch(e){addLog(`ℹ SKU check skipped: ${e.message}`,'muted');}
+  return true;
 }
 
-// ── Bulk apply ────────────────────────────────────────────────────────────────
-function bulkApply(){
-  const vals={
-    cp:document.getElementById('bulk-cp').value.trim(),
-    cat:document.getElementById('bulk-category').value,
-    tags:document.getElementById('bulk-tags').value.trim(),
-    hs:document.getElementById('bulk-hs').value.trim(),
-    origin:document.getElementById('bulk-origin').value.trim(),
-    qty:document.getElementById('bulk-qty').value.trim(),
-    color:document.getElementById('bulk-color').value.trim(),
-    sizes:document.getElementById('bulk-sizes').value.trim(),
-  };
-  if(!Object.values(vals).some(Boolean)){toast('Fill at least one field','error');return;}
-  let n=0;
-  queue.forEach(q=>{
-    if(q.status!=='pending')return;
-    if(vals.cp)     q.costPrice=vals.cp;
-    if(vals.cat)    q.category=vals.cat;
-    if(vals.tags)   q.tags=vals.tags;
-    if(vals.hs)     q.hscode=vals.hs;
-    if(vals.origin) q.origin=vals.origin;
-    if(vals.qty)    q.qty=vals.qty;
-    if(vals.color)  q.colors=vals.color;
-    if(vals.sizes)  q.sizes=vals.sizes;
-    n++;
-  });
-  renderQueue();updateStats();
-  toast(n?`Applied to ${n} items`:'No pending items',n?'success':'error');
-}
-
-// ── Price ─────────────────────────────────────────────────────────────────────
-function getMarkup(){return parseFloat(document.querySelector('input[name="markup"]:checked')?.value||4);}
-function calcSP(cp,markup){
-  markup=markup||getMarkup();const raw=cp*markup;
-  const t=[99,199,299,399,499,599,699,799,899,999,1499,1999,2499,2999,3499,3999,4499,4999,5999,6999,7999,8999,9999,12999,14999,19999,24999,29999,39999,49999,99999];
-  for(const v of t)if(v>=raw)return v;
-  return Math.floor(raw/1000)*1000+999;
-}
-
-// ── Stats ─────────────────────────────────────────────────────────────────────
-function updateStats(){
-  const ready=queue.filter(isReady).length;
-  const incomplete=queue.filter(q=>q.status==='pending'&&!isReady(q)).length;
-  const queued=queue.filter(q=>q.status==='pending'||q.status==='uploading').length;
-  const success=queue.filter(q=>q.status==='success').length;
-  const failed=queue.filter(q=>q.status==='failed').length;
-  const value=queue.reduce((s,q)=>s+(q.costPrice?calcSP(parseFloat(q.costPrice),getMarkup())*variantCountFor(q):0),0);
-  document.getElementById('stat-queued').textContent=queued;
-  document.getElementById('stat-success').textContent=success;
-  document.getElementById('stat-failed').textContent=failed;
-  document.getElementById('stat-value').textContent='₹'+value.toLocaleString('en-IN');
-  document.getElementById('cb-ready').textContent=ready;
-  document.getElementById('cb-incomplete').textContent=incomplete;
-  document.getElementById('cb-failed').textContent=failed;
-  document.getElementById('cb-done').textContent=success;
-  const btn=document.getElementById('upload-all-btn');
-  if(!btn.disabled)btn.innerHTML=ready?`⬆ Upload ${ready} ready <span class="kbd-hint">⌘↵</span>`:`⬆ Upload all <span class="kbd-hint">⌘↵</span>`;
-  document.getElementById('ms-total').textContent=success;
-  const tot=success+failed;
-  document.getElementById('ms-rate').textContent=tot?Math.round((success/tot)*100)+'%':'—';
-  const counts={ready,incomplete,failed,success};
-  ['ready','incomplete','failed','success'].forEach(k=>{
-    const el=document.getElementById('qfc-'+k);if(el)el.textContent=counts[k]?` ${counts[k]}`:'';
-  });
-}
-
-// ── Upload ────────────────────────────────────────────────────────────────────
+$('upload-all-btn').addEventListener('click',uploadAll);
 async function uploadAll(){
+  if(batchRunning)return;
   const pending=queue.filter(q=>q.status==='pending');
-  if(!pending.length){toast('Nothing to upload','error');return;}
+  if(!pending.length){toast('Nothing to publish','error');return;}
   const valid=pending.filter(q=>q.sku&&q.costPrice);
   pending.filter(q=>!q.sku||!q.costPrice).forEach(q=>addLog(`⚠ Skipping ${q.sku||q.images[0]?.name||'item'} — missing SKU or cost`,'error'));
   if(!valid.length){toast('All items missing SKU or cost price','error');return;}
-  const btn=document.getElementById('upload-all-btn');
-  btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Uploading…';
-  if(firstLog){logBox.innerHTML='';firstLog=false;}
-  const pw=document.getElementById('progress-wrap'),pb=document.getElementById('progress-bar'),pl=document.getElementById('progress-label');
-  pw.style.display='block';pl.style.display='block';
+  const noSub=valid.filter(q=>!q.subcategory).length;
+  if(noSub)addLog(`ℹ ${noSub} item(s) have no subcategory — core tags & description template will be skipped, AI description used`,'muted');
+
+  const btn=$('upload-all-btn');
+  btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Checking SKUs…';
+  const proceed=await preflightSkuCheck(valid);
+  if(!proceed){btn.disabled=false;scheduleStats();toast('Publish cancelled','error');return;}
+
+  batchRunning=true;
+  btn.innerHTML='<span class="spinner"></span> Publishing…';
+  if(firstLog){logBox().innerHTML='';firstLog=false;}
+  const pl=$('progress-label');pl.style.display='block';
   let done=0;const total=valid.length,t0=Date.now();
   const tick=()=>{
-    pb.style.width=Math.round((done/total)*100)+'%';
+    seamFill.style.width=Math.round((done/total)*100)+'%';
     let eta='';
     if(done>0&&done<total){const s=Math.round(((Date.now()-t0)/done)*(total-done)/1000);eta=` · ~${s>=60?Math.round(s/60)+'m':s+'s'} left`;}
     pl.textContent=`${done}/${total} processed${eta}`;
   };
   tick();
-  const concurrency=parseInt(document.getElementById('concurrency').value||'3');
+  const concurrency=parseInt($('concurrency').value||'3',10);
   let cursor=0;
   async function worker(){while(cursor<valid.length){const item=valid[cursor++];await uploadOne(item);done++;tick();}}
   await Promise.all(Array.from({length:Math.min(concurrency,valid.length)},worker));
-  setTimeout(()=>{pw.style.display='none';pl.style.display='none';},1500);
+  batchRunning=false;
+  setTimeout(()=>{seamFill.style.width='0%';pl.style.display='none';},1600);
+  checkAllDone();
 }
-
 async function uploadOne(item){
-  item.status='uploading';renderQueue();
+  item.status='uploading';patchCard(item.id);
   try{
     const filenames=await ensureUploaded(item);
     socket.emit('start_upload',{
       filenames,sku:item.sku,cost_price:item.costPrice,
-      markup:getMarkup(),title:item.title,category:item.category,
+      markup:getMarkup(),title:item.title,
+      category:item.category,subcategory:item.subcategory,
       tags:item.tags,weight_g:item.weight||null,hs_code:item.hscode,
       country_of_origin:item.origin,inventory_qty:item.qty||null,
-      colors:_parseColors(item.colors),
-      sizes:(item.sizes||'').split(',').map(s=>s.trim()).filter(Boolean)
+      colors:parseList(item.colors),sizes:parseList(item.sizes)
     });
     await new Promise(resolve=>{const check=()=>{if(item.status!=='uploading')return resolve();setTimeout(check,300);};check();});
   }catch(e){
-    item.status='failed';item.error=e.message;renderQueue();
-    addLog(`❌ Upload failed for ${item.sku}: ${e.message}`,'error');
+    item.status='failed';item.error=e.message;patchCard(item.id);
+    addLog(`❌ Publish failed for ${item.sku}: ${e.message}`,'error');
   }
 }
-
 function checkAllDone(){
-  if(queue.every(q=>q.status!=='uploading'&&q.status!=='pending')){
-    const btn=document.getElementById('upload-all-btn');btn.disabled=false;updateStats();
+  if(queue.every(q=>q.status!=='uploading')&&!batchRunning){
+    $('upload-all-btn').disabled=false;scheduleStats();
   }
 }
+$('retry-failed-btn').addEventListener('click',()=>{
+  let n=0;queue.forEach(q=>{if(q.status==='failed'){q.status='pending';q.error=null;n++;}});
+  renderQueue();
+  if(n){toast(`Re-queued ${n} item(s)`,'success');uploadAll();}else toast('No failed items','error');
+});
+$('clear-done-btn').addEventListener('click',()=>{
+  const keep=new Set(queue.filter(q=>q.status!=='success').map(q=>q.id));
+  queue=queue.filter(q=>keep.has(q.id));
+  selectedIds.forEach(id=>{if(!keep.has(id))selectedIds.delete(id);});
+  renderQueue();scheduleStats();
+});
+
 function addResult(data){
-  document.getElementById('results-section').style.display='block';
+  $('results-section').style.display='block';
   const card=document.createElement('div');card.className='result-card';
-  card.innerHTML=`<div><div class="result-title">${data.title||data.sku}</div>
-    <div class="result-meta">SKU ${data.sku} · ₹${data.selling_price} · all channels</div></div>
-    <a href="${data.shopify_url}" target="_blank" class="result-link">View in Shopify →</a>`;
-  document.getElementById('results-list').prepend(card);
+  card.innerHTML=`<div><div class="result-title">${esc(data.title||data.sku)}</div>
+    <div class="result-meta">SKU ${esc(data.sku)} · ₹${esc(data.selling_price)} · all channels</div></div>
+    <a href="${esc(data.shopify_url)}" target="_blank" class="result-link">View in Shopify →</a>`;
+  $('results-list').prepend(card);
 }
 
-// ── Log ───────────────────────────────────────────────────────────────────────
+// ── Log ──────────────────────────────────────────────────────────────────────
 function addLog(msg,level='info'){
   logLines.push({time:new Date().toLocaleTimeString(),msg,level});
   if(logLines.length>800)logLines.shift();
-  if(firstLog){logBox.innerHTML='';firstLog=false;}
-  if(document.getElementById('log-errors-only').checked&&level!=='error')return;
+  if(firstLog){logBox().innerHTML='';firstLog=false;}
+  if($('log-errors-only').checked&&level!=='error')return;
   const line=document.createElement('div');line.className='log-'+level;
   line.innerHTML=`<span class="log-time">${logLines[logLines.length-1].time}</span>`;
   line.appendChild(document.createTextNode(msg));
-  logBox.appendChild(line);logBox.scrollTop=logBox.scrollHeight;
+  logBox().appendChild(line);logBox().scrollTop=logBox().scrollHeight;
 }
 function renderLog(){
-  const eo=document.getElementById('log-errors-only').checked;
-  logBox.innerHTML='';
+  const eo=$('log-errors-only').checked;
+  logBox().innerHTML='';
   const lines=logLines.filter(l=>!eo||l.level==='error');
-  if(!lines.length){logBox.innerHTML=`<span class="log-muted">No${eo?' error':''} entries</span>`;return;}
+  if(!lines.length){logBox().innerHTML=`<span class="log-muted">No${eo?' error':''} entries</span>`;return;}
   lines.forEach(({time,msg,level})=>{
     const d=document.createElement('div');d.className='log-'+level;
-    d.innerHTML=`<span class="log-time">${time}</span>`;d.appendChild(document.createTextNode(msg));logBox.appendChild(d);
+    d.innerHTML=`<span class="log-time">${time}</span>`;d.appendChild(document.createTextNode(msg));logBox().appendChild(d);
   });
 }
-function copyLog(){navigator.clipboard.writeText(logLines.map(l=>`[${l.time}] ${l.msg}`).join('\n')).then(()=>toast('Log copied','success'));}
-function clearLog(){logLines=[];logBox.innerHTML='';firstLog=true;}
+$('log-errors-only').addEventListener('change',renderLog);
+$('copy-log-btn').addEventListener('click',()=>{
+  navigator.clipboard.writeText(logLines.map(l=>`[${l.time}] ${l.msg}`).join('\n')).then(()=>toast('Log copied','success'));
+});
+$('clear-log-btn').addEventListener('click',()=>{logLines=[];logBox().innerHTML='';firstLog=true;});
 
-// ── History ───────────────────────────────────────────────────────────────────
-async function loadHistory(){
-  const tbody=document.getElementById('history-tbody');
-  tbody.innerHTML='<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:32px">Loading…</td></tr>';
-  const res=await fetch('/history');history=await res.json();renderHistory();
+// ── Panels ───────────────────────────────────────────────────────────────────
+function showPanel(name){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.panel===name));
+  $('panel-'+name).classList.add('active');
+  if(name==='history')loadHistory();
 }
-function setHistoryFilter(f){
-  historyFilter=f;
-  ['all','success','failed'].forEach(k=>{
-    const b=document.getElementById('hf-'+k);
-    b.style.background=k===f?'var(--accent)':'';
-    b.style.color=k===f?'#fff':'';
-    b.style.borderColor=k===f?'var(--accent)':'';
-  });
+document.querySelector('.nav').addEventListener('click',e=>{
+  const b=e.target.closest('.nav-btn');if(b)showPanel(b.dataset.panel);
+});
+
+// ── History ──────────────────────────────────────────────────────────────────
+async function loadHistory(){
+  const tbody=$('history-tbody');
+  tbody.innerHTML='<tr><td colspan="13" style="text-align:center;color:var(--muted);padding:32px">Loading…</td></tr>';
+  try{
+    const res=await fetch('/history');history=await res.json();
+  }catch(e){history=[];}
   renderHistory();
 }
 function renderHistory(){
-  const tbody=document.getElementById('history-tbody');
-  const q=(document.getElementById('history-search').value||'').toLowerCase();
+  const tbody=$('history-tbody');
+  const q=($('history-search').value||'').toLowerCase();
   let rows=history;
   if(historyFilter!=='all')rows=rows.filter(r=>r.status===historyFilter);
-  if(q)rows=rows.filter(r=>(r.sku||'').toLowerCase().includes(q)||(r.title||'').toLowerCase().includes(q));
-  if(!rows.length){tbody.innerHTML='<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:32px">No matches</td></tr>';return;}
+  if(q)rows=rows.filter(r=>
+    (r.sku||'').toLowerCase().includes(q)||
+    (r.title||'').toLowerCase().includes(q)||
+    (r.subcategory||'').toLowerCase().includes(q));
+  if(!rows.length){tbody.innerHTML='<tr><td colspan="13" style="text-align:center;color:var(--muted);padding:32px">No matches</td></tr>';return;}
   tbody.innerHTML=rows.map(r=>{
     const i=history.indexOf(r);
-    return`<tr>
-      <td class="mono" style="color:var(--muted)">${r.timestamp?.slice(0,19).replace('T',' ')||'—'}</td>
-      <td class="mono" style="color:var(--accent2)"><strong>${r.sku}</strong></td>
-      <td>${r.title||'—'}</td>
-      <td class="mono" style="color:var(--muted)">${r.image_count||1}</td>
-      <td class="mono" style="color:var(--muted)">${r.variant_count||1}</td>
-      <td class="mono">₹${r.cost_price}</td>
-      <td class="mono" style="color:var(--green)">₹${r.selling_price}</td>
-      <td class="mono" style="color:var(--muted)">${r.hs_code||'—'}</td>
-      <td class="mono" style="color:var(--muted)">${r.country_of_origin||'—'}</td>
-      <td class="${r.status==='success'?'status-ok':'status-fail'}">${r.status}</td>
-      <td>${r.shopify_url?`<a href="${r.shopify_url}" target="_blank" class="result-link">View →</a>`:`<span style="color:var(--red);font-size:11px">${(r.error||'—').slice(0,40)}</span>`}</td>
-      <td><button class="row-del" onclick="deleteHistoryRow(${i})">🗑</button></td>
+    return `<tr>
+      <td class="mono" style="color:var(--muted)">${esc(r.timestamp?.slice(0,19).replace('T',' ')||'—')}</td>
+      <td class="mono" style="color:var(--gold-bright)"><strong>${esc(r.sku)}</strong></td>
+      <td>${esc(r.title||'—')}</td>
+      <td style="color:var(--muted)">${esc(r.subcategory||'—')}</td>
+      <td class="mono" style="color:var(--muted)">${esc(r.image_count||1)}</td>
+      <td class="mono" style="color:var(--muted)">${esc(r.variant_count||1)}</td>
+      <td class="mono">₹${esc(r.cost_price)}</td>
+      <td class="mono" style="color:var(--green)">₹${esc(r.selling_price)}</td>
+      <td class="mono" style="color:var(--muted)">${esc(r.hs_code||'—')}</td>
+      <td class="mono" style="color:var(--muted)">${esc(r.country_of_origin||'—')}</td>
+      <td class="${r.status==='success'?'status-ok':'status-fail'}">${esc(r.status)}</td>
+      <td>${r.shopify_url?`<a href="${esc(r.shopify_url)}" target="_blank" class="result-link">View →</a>`:`<span style="color:var(--red);font-size:11px">${esc((r.error||'—').slice(0,40))}</span>`}</td>
+      <td><button class="row-del" data-idx="${i}" type="button">🗑</button></td>
     </tr>`;
   }).join('');
 }
-async function deleteHistoryRow(idx){await fetch(`/history/${idx}`,{method:'DELETE'});history.splice(idx,1);renderHistory();}
-function exportCsv(){window.open('/history/csv','_blank');}
+$('history-search').addEventListener('input',debounce(renderHistory,180));
+document.querySelectorAll('.hf').forEach(b=>b.addEventListener('click',()=>{
+  historyFilter=b.dataset.hf;
+  document.querySelectorAll('.hf').forEach(x=>x.classList.toggle('active',x===b));
+  renderHistory();
+}));
+$('history-tbody').addEventListener('click',async e=>{
+  const b=e.target.closest('.row-del');if(!b)return;
+  const idx=parseInt(b.dataset.idx,10);
+  await fetch(`/history/${idx}`,{method:'DELETE'});
+  history.splice(idx,1);renderHistory();
+});
+$('export-csv-btn').addEventListener('click',()=>window.open('/history/csv','_blank'));
 
-// ── Settings ──────────────────────────────────────────────────────────────────
+// ── Settings ─────────────────────────────────────────────────────────────────
 async function saveSettings(){
   const p={
-    shopify_store:document.getElementById('s-store').value.trim(),
-    shopify_token:document.getElementById('s-token').value.trim(),
-    groq_api_key:document.getElementById('s-groq').value.trim(),
-    product_vendor:document.getElementById('s-vendor').value.trim(),
-    product_type:document.getElementById('s-type').value.trim(),
-    default_hs_code:document.getElementById('s-hscode').value.trim(),
-    default_weight_g:document.getElementById('s-weight').value.trim(),
-    default_country_of_origin:document.getElementById('s-origin').value.trim(),
-    default_inventory_qty:document.getElementById('s-qty').value.trim(),
-    default_bangle_sizes:document.getElementById('s-bangle-sizes').value.trim(),
+    shopify_store:$('s-store').value.trim(),
+    shopify_token:$('s-token').value.trim(),
+    groq_api_key:$('s-groq').value.trim(),
+    product_vendor:$('s-vendor').value.trim(),
+    product_type:$('s-type').value.trim(),
+    default_hs_code:$('s-hscode').value.trim(),
+    default_weight_g:$('s-weight').value.trim(),
+    default_country_of_origin:$('s-origin').value.trim(),
+    default_inventory_qty:$('s-qty').value.trim(),
+    default_bangle_sizes:$('s-bangle-sizes').value.trim(),
   };
   await fetch('/save_settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
-  const msg=document.getElementById('save-msg');msg.style.display='inline';
-  if(p.groq_api_key)document.getElementById('dot-groq').className='dot ok';
-  if(p.shopify_store)document.getElementById('dot-shopify').className='dot ok';
+  const msg=$('save-msg');msg.style.display='inline';
+  if(p.groq_api_key)$('dot-groq').className='dot ok';
+  if(p.shopify_store)$('dot-shopify').className='dot ok';
   if(p.default_bangle_sizes)DEFAULT_BANGLE_SIZES=p.default_bangle_sizes;
   toast('Settings saved','success');setTimeout(()=>msg.style.display='none',2500);
 }
-async function testShopify(){
-  await saveSettings();const el=document.getElementById('test-shopify-result');
+$('save-settings-btn').addEventListener('click',saveSettings);
+$('test-shopify-btn').addEventListener('click',async()=>{
+  await saveSettings();const el=$('test-shopify-result');
   el.textContent='Testing…';el.style.color='var(--muted)';
   try{const r=await(await fetch('/test_shopify',{method:'POST'})).json();
     if(r.ok){el.textContent=`✅ Connected to ${r.shop_name}`;el.style.color='var(--green)';}
     else{el.textContent=`❌ ${r.error}`;el.style.color='var(--red)';}}
   catch(e){el.textContent=`❌ ${e.message}`;el.style.color='var(--red)';}
-}
-async function testGroq(){
-  await saveSettings();const el=document.getElementById('test-groq-result');
+});
+$('test-groq-btn').addEventListener('click',async()=>{
+  await saveSettings();const el=$('test-groq-result');
   el.textContent='Testing…';el.style.color='var(--muted)';
   try{const r=await(await fetch('/test_groq',{method:'POST'})).json();
     if(r.ok){el.textContent='✅ Groq key works';el.style.color='var(--green)';}
     else{el.textContent=`❌ ${r.error}`;el.style.color='var(--red)';}}
   catch(e){el.textContent=`❌ ${e.message}`;el.style.color='var(--red)';}
-}
-
-// ── Boot ──────────────────────────────────────────────────────────────────────
+});
 async function loadSettingsForm(){
   try{
     const d=await(await fetch('/get_settings')).json();
-    if(d.shopify_store)document.getElementById('s-store').value=d.shopify_store;
-    if(d.shopify_token)document.getElementById('s-token').value=d.shopify_token;
-    if(d.groq_api_key)document.getElementById('s-groq').value=d.groq_api_key;
-    if(d.product_vendor)document.getElementById('s-vendor').value=d.product_vendor;
-    if(d.product_type)document.getElementById('s-type').value=d.product_type;
-    document.getElementById('s-hscode').value=d.default_hs_code||'7117.90';
-    document.getElementById('s-weight').value=d.default_weight_g||1;
-    document.getElementById('s-origin').value=d.default_country_of_origin||'IN';
-    document.getElementById('s-qty').value=d.default_inventory_qty||10;
+    if(d.shopify_store)$('s-store').value=d.shopify_store;
+    if(d.shopify_token)$('s-token').value=d.shopify_token;
+    if(d.groq_api_key)$('s-groq').value=d.groq_api_key;
+    if(d.product_vendor)$('s-vendor').value=d.product_vendor;
+    if(d.product_type)$('s-type').value=d.product_type;
+    $('s-hscode').value=d.default_hs_code||'7117.90';
+    $('s-weight').value=d.default_weight_g||1;
+    $('s-origin').value=d.default_country_of_origin||'IN';
+    $('s-qty').value=d.default_inventory_qty||10;
     const bs=Array.isArray(d.default_bangle_sizes)?d.default_bangle_sizes.join(','):(d.default_bangle_sizes||'2.4,2.6,2.8');
-    document.getElementById('s-bangle-sizes').value=bs;DEFAULT_BANGLE_SIZES=bs;
-    if(d.groq_api_key)document.getElementById('dot-groq').className='dot ok';
-    if(d.shopify_store)document.getElementById('dot-shopify').className='dot ok';
+    $('s-bangle-sizes').value=bs;DEFAULT_BANGLE_SIZES=bs;
+    if(d.groq_api_key)$('dot-groq').className='dot ok';
+    if(d.shopify_store)$('dot-shopify').className='dot ok';
   }catch(e){}
 }
 
+// ── Keyboard + safety ────────────────────────────────────────────────────────
 document.addEventListener('keydown',e=>{
   const typing=document.activeElement&&['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName);
   if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();uploadAll();return;}
-  if(e.key==='Escape'){cpClose();closePreview();return;}
+  if(e.key==='Escape'){closePickers();closePreview();return;}
   if(typing)return;
   if(e.key==='1')showPanel('upload');
   if(e.key==='2')showPanel('history');
   if(e.key==='3')showPanel('settings');
 });
+window.addEventListener('beforeunload',e=>{
+  if(batchRunning||queue.some(q=>q.status==='uploading')){
+    e.preventDefault();e.returnValue='Publishing is still in progress.';
+  }
+});
 
-loadSettingsForm();
-loadCategoryData();
-updateStats();
-setHistoryFilter('all');
+// ── Boot ─────────────────────────────────────────────────────────────────────
+(function boot(){
+  const savedMarkup=prefGet('markup','4');
+  const mk=document.querySelector(`input[name="markup"][value="${savedMarkup}"]`);
+  if(mk)mk.checked=true;
+  const savedConc=prefGet('concurrency','3');
+  $('concurrency').value=savedConc;
+  loadSettingsForm();
+  loadTaxonomy();
+  updateStats();
+  document.querySelector('.hf[data-hf="all"]').classList.add('active');
+})();
 </script>
 </body>
 </html>
