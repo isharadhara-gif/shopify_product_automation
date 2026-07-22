@@ -215,20 +215,9 @@ select.item-input option{background:#1c1913;color:var(--ivory)}
 .item-input.mono-in{font-family:var(--mono);font-size:11.5px}
 .item-input.invalid{border-color:var(--red)!important;background:var(--red-dim)}
 
-/* ── AI title button / badge ── */
-.ai-btn{
-  font-size:10.5px;font-weight:600;padding:6px 11px;border-radius:var(--r-xs);
-  background:var(--gold-dim);color:var(--gold-bright);
-  border:1px solid var(--gold-line);cursor:pointer;
-  display:inline-flex;align-items:center;gap:6px;transition:background .15s,border-color .15s;white-space:nowrap;
-}
-.ai-btn:hover{border-color:var(--gold);background:rgba(211,168,76,.22)}
-.ai-btn:disabled{opacity:.6;cursor:wait}
-.ai-badge{
-  font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px;letter-spacing:.5px;
-  background:var(--gold-dim);color:var(--gold-bright);border:1px solid var(--gold-line);
-  display:inline-flex;align-items:center;gap:3px;
-}
+/* ── Editable price inputs ── */
+.item-input.price-in{color:var(--gold-bright)}
+.item-input.price-in::placeholder{color:var(--faint)}
 
 /* ── Queue header ── */
 .queue-header{display:flex;align-items:center;margin:24px 0 12px;flex-wrap:wrap;gap:10px}
@@ -534,7 +523,7 @@ input:focus{outline:none;border-color:var(--gold);background:var(--gold-dim)}
     <input class="dd-search" id="tp-search" placeholder="Search core tags…" autocomplete="off">
     <div class="dd-scroll" id="tp-scroll">
       <div id="tp-suggested-wrap">
-        <div class="dd-section">Suggested · <span class="hl" id="tp-sub-name"></span></div>
+        <div class="dd-section">Core tags · <span class="hl" id="tp-sub-name"></span></div>
         <div class="tag-cloud" id="tp-suggested"></div>
       </div>
       <div class="dd-section">All core tags</div>
@@ -579,10 +568,6 @@ input:focus{outline:none;border-color:var(--gold);background:var(--gold-dim)}
         <span>Shopify {% if not has_shopify %}— not set{% endif %}</span>
       </div>
       <div class="status-item">
-        <div class="dot {% if has_groq %}ok{% else %}warn{% endif %}" id="dot-groq"></div>
-        <span>Groq AI {% if not has_groq %}— not set{% endif %}</span>
-      </div>
-      <div class="status-item">
         <div class="dot" id="dot-socket"></div>
         <span id="socket-label">Live sync</span>
       </div>
@@ -601,8 +586,8 @@ input:focus{outline:none;border-color:var(--gold);background:var(--gold-dim)}
 
     <div class="side-guide">
       <div class="g-block"><strong>File naming</strong>Files: <code>SKU_Cost.jpg</code><br>Folders: <code>SKU_Cost/</code> → one product.</div>
-      <div class="g-block"><strong>Core tags</strong>Pick Category → Subcategory and the exact core tags from the brand sheet attach automatically. Add extras from the tag picker.</div>
-      <div class="g-block"><strong>AI titles</strong><code>✨ AI Title</code> previews a Groq-written title grounded in the chosen subcategory — edit it before anything reaches Shopify.</div>
+      <div class="g-block"><strong>Core tags</strong>Pick Category → Subcategory and the tags field prefills with the exact core tags from the brand sheet — edit them freely before publishing.</div>
+      <div class="g-block"><strong>Naming</strong>Type each product name yourself. The URL handle, SEO title, meta description and image alt text are all built from that name.</div>
       <div class="g-block"><strong>Duplicates</strong>SKUs are checked against the live store before publishing.</div>
       <div class="g-block"><strong>Shortcuts</strong><code>⌘↵</code> upload · <code>1 2 3</code> tabs · <code>Esc</code> close</div>
     </div>
@@ -660,15 +645,13 @@ input:focus{outline:none;border-color:var(--gold);background:var(--gold-dim)}
         <select id="bulk-category" class="item-input" style="width:150px"><option value="">Category…</option></select>
         <select id="bulk-subcategory" class="item-input" style="width:170px" disabled><option value="">Subcategory…</option></select>
         <div class="pk-trigger" id="tp-trig-bulk" data-tagctx="bulk" tabindex="0">
-          <span class="pk-lbl placeholder">Extra tags…</span><span class="pk-caret">▾</span>
+          <span class="pk-lbl placeholder">Tags…</span><span class="pk-caret">▾</span>
         </div>
         <input id="bulk-hs" type="text" class="item-input mono-in narrow" placeholder="HS code">
         <input id="bulk-origin" type="text" class="item-input mono-in narrow" placeholder="Origin">
         <input id="bulk-qty" type="number" class="item-input mono-in narrow" placeholder="Qty">
         <input id="bulk-sizes" type="text" class="item-input mono-in variant-input" placeholder="Sizes 2.4,2.6,2.8">
         <button class="btn btn-ghost btn-sm" id="bulk-apply-btn" type="button">Apply</button>
-        <div class="divider"></div>
-        <button class="btn btn-ghost btn-sm" id="ai-all-btn" type="button">✨ AI title all</button>
         <div class="divider"></div>
         <span class="toolbar-label">Speed</span>
         <select id="concurrency" class="item-input" style="width:116px">
@@ -761,14 +744,6 @@ input:focus{outline:none;border-color:var(--gold);background:var(--gold-dim)}
           <input type="password" id="s-token" placeholder="shpat_xxxxxxxxxxxx">
           <span class="field-note">Scopes: <code>write_products</code> <code>read_products</code> <code>write_inventory</code> <code>read_inventory</code> <code>write_publications</code></span>
         </div>
-        <div class="field full">
-          <label>Groq API key <a href="https://console.groq.com" target="_blank" style="color:var(--gold-bright);font-weight:400;text-transform:none;letter-spacing:0">Get free key →</a></label>
-          <div class="field-row">
-            <input type="password" id="s-groq" placeholder="gsk_xxxxxxxxxxxx">
-            <button class="btn btn-ghost btn-sm" id="test-groq-btn" type="button">Test</button>
-          </div>
-          <span class="test-result" id="test-groq-result"></span>
-        </div>
         <div class="field"><label>Product vendor</label><input type="text" id="s-vendor" placeholder="Ishhaara"></div>
         <div class="field"><label>Product type</label><input type="text" id="s-type" placeholder="Jewellery"></div>
         <div class="field"><label>Default HS code</label><input type="text" id="s-hscode" placeholder="7117.90"></div>
@@ -784,11 +759,11 @@ input:focus{outline:none;border-color:var(--gold);background:var(--gold-dim)}
       <div class="quickstart">
         <div class="qs-title">Quick start</div>
         <p>
-          1. Groq key → <a href="https://console.groq.com" target="_blank">console.groq.com</a><br>
-          2. Shopify token → Admin → Settings → Apps → Develop apps<br>
-          3. Scopes: <code>write_products</code>, <code>read_products</code>, <code>write_inventory</code>, <code>write_publications</code><br>
-          4. Drop images · pick Category → Subcategory · set cost · Publish all<br>
-          5. Core tags from the brand sheet attach automatically; auto-published to every sales channel
+          1. Shopify token → Admin → Settings → Apps → Develop apps<br>
+          2. Scopes: <code>write_products</code>, <code>read_products</code>, <code>write_inventory</code>, <code>write_publications</code><br>
+          3. Drop images · pick Category → Subcategory · name each piece · set cost<br>
+          4. Review the prefilled tags, selling price and MRP on every card — all editable<br>
+          5. Publish all → auto-published to every sales channel
         </p>
       </div>
     </div>
@@ -849,7 +824,8 @@ let TAX={},CATS=[],ALL_TAGS=[];              // Core-tag taxonomy from /taxonomy
 let queue=[],history=[],logLines=[];
 let queueFilter='all',historyFilter='all';
 let selectedIds=new Set();
-let bulkTags='';                             // extra tags staged in the bulk bar
+let bulkTags='';                             // tags staged in the bulk bar (prefilled from subcategory preset)
+let bulkPrevSub='';                          // last bulk subcategory, to know when tags are still the untouched preset
 let DEFAULT_BANGLE_SIZES='2.4,2.6,2.8';
 let firstLog=true;
 const logBox=()=>$('log-box');
@@ -884,6 +860,13 @@ function presetOf(sub){
   for(const cat of CATS){if(TAX[cat]&&TAX[cat][sub])return TAX[cat][sub];}
   return [];
 }
+function presetJoin(sub){return presetOf(sub).join(', ')}
+function prefillTags(obj,oldSub){
+  // Fill the editable tags field with the new subcategory's core preset,
+  // unless the operator already customised the tags.
+  const cur=(obj.tags||'').trim();
+  if(cur===''||cur===presetJoin(oldSub))obj.tags=presetJoin(obj.subcategory);
+}
 function catOptions(sel){return '<option value="">Category…</option>'+CATS.map(c=>`<option value="${esc(c)}"${c===sel?' selected':''}>${esc(c)}</option>`).join('')}
 function subOptions(cat,sel){
   const subs=subsOf(cat);
@@ -896,6 +879,12 @@ $('bulk-category').addEventListener('change',e=>{
   sub.disabled=!cat;
   sub.innerHTML=subOptions(cat,'');
 });
+$('bulk-subcategory').addEventListener('change',e=>{
+  const cur=(bulkTags||'').trim();
+  if(cur===''||cur===presetJoin(bulkPrevSub))bulkTags=presetJoin(e.target.value);
+  bulkPrevSub=e.target.value;
+  refreshTagTrigger('bulk');
+});
 
 // ── Selling price ────────────────────────────────────────────────────────────
 const PRICE_TIERS=[99,199,299,399,499,599,699,799,899,999,1499,1999,2499,2999,3499,3999,4499,4999,5999,6999,7999,8999,9999,12999,14999,19999,24999,29999,39999,49999,99999];
@@ -905,10 +894,25 @@ function calcSP(cp,markup){
   for(const t of PRICE_TIERS)if(t>=raw)return t;
   return Math.floor(raw/1000)*1000+999;
 }
+function autoPrice(item){
+  // Prefill editable SP/MRP from cost × markup; never touch manual overrides.
+  const cp=parseFloat(item.costPrice);
+  if(!item.spManual)item.sp=cp>0?String(calcSP(cp)):'';
+  if(!item.mrpManual){
+    const sp=parseFloat(item.sp);
+    item.mrp=sp>0?String(Math.round(sp*2)):'';
+  }
+}
+function effSP(item){
+  const sp=parseFloat(item.sp);
+  if(sp>0)return sp;
+  const cp=parseFloat(item.costPrice);
+  return cp>0?calcSP(cp):0;
+}
 
 // ── Item helpers ─────────────────────────────────────────────────────────────
 const byId=id=>queue.find(q=>q.id===id);
-function isReady(i){return i.status==='pending'&&!!i.sku&&!!i.costPrice}
+function isReady(i){return i.status==='pending'&&!!i.sku&&!!i.costPrice&&!!(i.title||'').trim()}
 function bucketOf(i){return i.status==='pending'?(isReady(i)?'ready':'incomplete'):i.status}
 function dupSkus(){
   const seen={},d=new Set();
@@ -1006,13 +1010,13 @@ function tpSync(){
   const sub=tpSubcategory();
   const preset=sub?presetOf(sub):[];
   const presetLower=new Set(preset.map(t=>t.toLowerCase()));
-  // Suggested (auto-attached) section
+  // Core preset section — prefilled into the field, freely toggleable
   const wrap=$('tp-suggested-wrap');
   if(sub&&preset.length){
     wrap.style.display='';
     $('tp-sub-name').textContent=sub;
     $('tp-suggested').innerHTML=preset.map(t=>
-      `<div class="tag-chip sel" style="pointer-events:none;opacity:.85" title="Attached automatically at publish">${esc(t)} ·auto</div>`).join('');
+      `<div class="tag-chip${selLower.has(t.toLowerCase())?' sel':''}" data-tag="${esc(t)}" title="Core tag for ${esc(sub)} — click to toggle">${esc(t)}</div>`).join('');
   }else wrap.style.display='none';
   // All tags cloud selection state (hide ones already auto-attached)
   $('tp-all').querySelectorAll('.tag-chip').forEach(ch=>{
@@ -1028,7 +1032,7 @@ function tpSync(){
     cw.style.display='';
     $('tp-custom').innerHTML=custom.map(t=>`<div class="tag-chip sel custom" data-tag="${esc(t)}" title="Click to remove">${esc(t)} ✕</div>`).join('');
   }else cw.style.display='none';
-  $('tp-count').textContent=sel.length?`${sel.length} extra tag${sel.length>1?'s':''}`:'';
+  $('tp-count').textContent=sel.length?`${sel.length} tag${sel.length>1?'s':''}`:'';
 }
 function tpToggle(tag){
   const sel=tpGetTags();
@@ -1037,6 +1041,9 @@ function tpToggle(tag){
   tpSetTags(sel);tpSync();
 }
 $('tp-all').addEventListener('click',e=>{
+  const ch=e.target.closest('.tag-chip');if(ch&&tpCtx!==null)tpToggle(ch.dataset.tag);
+});
+$('tp-suggested').addEventListener('click',e=>{
   const ch=e.target.closest('.tag-chip');if(ch&&tpCtx!==null)tpToggle(ch.dataset.tag);
 });
 $('tp-custom').addEventListener('click',e=>{
@@ -1236,15 +1243,18 @@ async function handleEntries(entries){
     let item=queue.find(q=>q.groupKey===parsed.groupKey&&q.status==='pending');
     if(item){item.images.push({file,thumb,name:file.name});item.serverFilenames=null;}
     else{
-      queue.push({
+      const it={
         id:'itm'+Date.now()+'r'+Math.floor(Math.random()*1e6),
         groupKey:parsed.groupKey,sku:parsed.sku,costPrice:parsed.cost,
+        sp:'',mrp:'',spManual:false,mrpManual:false,
         title:'',category:'',subcategory:'',tags:'',weight:'',hscode:'',origin:'',qty:'',
         colors:'',sizes:'',
         images:[{file,thumb,name:file.name}],
         status:'pending',error:null,inStore:false,
-        serverFilenames:null,aiGenerated:false
-      });
+        serverFilenames:null
+      };
+      autoPrice(it);
+      queue.push(it);
     }
   });
   renderQueue();scheduleStats();
@@ -1263,9 +1273,11 @@ function namePillHtml(item){
     ${item.sku&&dups.has(item.sku.trim())?'<span class="pill pill-dup">duplicate in queue</span>':''}
     ${item.inStore?'<span class="pill pill-store">already in store</span>':''}`;
 }
-function metaHtml(item,sp){
-  if(!item.costPrice)return `<span style="color:var(--amber)">Enter cost price to see selling price</span>`;
-  return `<span>CP ₹${esc(item.costPrice)}</span><span class="item-mrp">MRP ₹${sp*2}</span><span class="item-price">SP ₹${sp}</span>`;
+function metaHtml(item){
+  if(!item.costPrice)return `<span style="color:var(--amber)">Enter cost price — SP & MRP prefill automatically</span>`;
+  const sp=effSP(item),mrp=parseFloat(item.mrp)||Math.round(sp*2);
+  const src=item.spManual?'manual':`auto · CP × ${getMarkup()}× → tier`;
+  return `<span>CP ₹${esc(item.costPrice)}</span><span class="item-mrp">MRP ₹${mrp}</span><span class="item-price">SP ₹${sp}</span><span>${src}${item.mrpManual?' · MRP manual':''}</span>`;
 }
 function thumbsHtml(item,locked){
   return item.images.map((img,i)=>`
@@ -1278,7 +1290,6 @@ function thumbsHtml(item,locked){
     </div>`).join('')+(!locked?`<button class="thumb-add" title="Add images" data-action="add-images" type="button">+</button>`:'');
 }
 function cardHtml(item){
-  const sp=item.costPrice?calcSP(parseFloat(item.costPrice)):null;
   const ready=isReady(item),locked=item.status!=='pending';
   const badge={
     pending:ready?['badge-ready','Ready']:['badge-pending','Needs info'],
@@ -1307,10 +1318,12 @@ function cardHtml(item){
           data-field="sku" ${locked?'disabled':''}>
         <input class="item-input mono-in narrow${!item.costPrice?' invalid':''}" placeholder="Cost ₹" value="${esc(item.costPrice)}" type="number"
           data-field="costPrice" ${locked?'disabled':''}>
-        <input class="item-input title-input" placeholder="Custom title (blank = AI writes it)" value="${esc(item.title)}"
+        <input class="item-input mono-in narrow price-in" placeholder="SP ₹" value="${esc(item.sp)}" type="number"
+          title="Selling price — auto from cost × markup, edit to override" data-field="sp" ${locked?'disabled':''}>
+        <input class="item-input mono-in narrow price-in" placeholder="MRP ₹" value="${esc(item.mrp)}" type="number"
+          title="Compare-at price — auto 2× SP, edit to override" data-field="mrp" ${locked?'disabled':''}>
+        <input class="item-input title-input${!(item.title||'').trim()?' invalid':''}" placeholder="Product name *" value="${esc(item.title)}"
           data-field="title" ${locked?'disabled':''}>
-        ${!locked?`<button class="ai-btn" data-action="ai-title" type="button" title="Preview an AI title grounded in the chosen subcategory">✨ AI Title</button>`:''}
-        ${item.aiGenerated?`<span class="ai-badge">✨ AI</span>`:''}
       </div>
       <div class="item-inputs">
         <select class="item-input" data-field="category" ${locked?'disabled':''}>${catOptions(item.category)}</select>
@@ -1334,7 +1347,7 @@ function cardHtml(item){
         <input class="item-input mono-in variant-input" placeholder="Sizes e.g. 2.4,2.6,2.8" value="${esc(item.sizes)}" data-field="sizes" ${locked?'disabled':''}>
         ${!locked?`<button class="preset-btn" data-action="bangle-sizes" type="button">📏 Bangle sizes</button>`:''}
       </div>
-      <div class="item-meta">${metaHtml(item,sp)}</div>
+      <div class="item-meta">${metaHtml(item)}</div>
       ${item.status==='failed'&&item.error?`<div class="item-error-msg">⚠ ${esc(item.error)}</div>`:''}
     </div>
     <div class="item-actions">
@@ -1401,7 +1414,9 @@ queueList.addEventListener('change',e=>{
     if(subSel){subSel.disabled=!item.category;subSel.innerHTML=subOptions(item.category,'');}
     refreshNamePill(item.id);
   }else if(field==='subcategory'){
+    const oldSub=item.subcategory;
     item.subcategory=e.target.value;
+    prefillTags(item,oldSub);
     refreshNamePill(item.id);refreshTagTrigger(item.id);
   }
 });
@@ -1416,7 +1431,6 @@ queueList.addEventListener('click',e=>{
     case 'make-cover':   e.stopPropagation();makeCover(item,idx);break;
     case 'remove-image': e.stopPropagation();removeImage(item,idx);break;
     case 'add-images':   addImages(item);break;
-    case 'ai-title':     generateTitle(item.id);break;
     case 'bangle-sizes': applyBangleSizes(item);break;
     case 'remove':       selectedIds.delete(item.id);queue=queue.filter(q=>q.id!==item.id);renderQueue();scheduleStats();break;
     case 'retry':        item.status='pending';item.error=null;patchCard(item.id);scheduleStats();break;
@@ -1427,14 +1441,30 @@ function onField(item,field,val,card){
   item[field]=val;
   if(field==='sku'){item.inStore=false;}
   if(field==='sku'||field==='sizes')refreshNamePill(item.id);
-  if(field==='title'){
-    item.aiGenerated=false;
-    const badge=card.querySelector('.ai-badge');if(badge)badge.remove();
+  if(field==='costPrice'){
+    autoPrice(item);
+    const spIn=card.querySelector('input[data-field="sp"]'),mrpIn=card.querySelector('input[data-field="mrp"]');
+    if(spIn&&!item.spManual)spIn.value=item.sp;
+    if(mrpIn&&!item.mrpManual)mrpIn.value=item.mrp;
   }
-  if(field==='costPrice'||field==='sku'){
-    const sp=item.costPrice?calcSP(parseFloat(item.costPrice)):null;
-    const meta=card.querySelector('.item-meta');if(meta)meta.innerHTML=metaHtml(item,sp);
+  if(field==='sp'){
+    item.spManual=val!=='';
+    if(!item.spManual)autoPrice(item);
+    if(!item.mrpManual){
+      const sp=parseFloat(item.sp);
+      item.mrp=sp>0?String(Math.round(sp*2)):'';
+      const mrpIn=card.querySelector('input[data-field="mrp"]');if(mrpIn)mrpIn.value=item.mrp;
+    }
+  }
+  if(field==='mrp'){
+    item.mrpManual=val!=='';
+    if(!item.mrpManual)autoPrice(item);
+  }
+  if(field==='costPrice'||field==='sku'||field==='title'){
     e_validity(item,card,field);
+  }
+  if(field==='costPrice'||field==='sp'||field==='mrp'){
+    const meta=card.querySelector('.item-meta');if(meta)meta.innerHTML=metaHtml(item);
   }
   scheduleStats();
 }
@@ -1532,9 +1562,13 @@ $('bulk-apply-btn').addEventListener('click',()=>{
   const targets=queue.filter(q=>q.status==='pending'&&(selectedIds.size===0||selectedIds.has(q.id)));
   if(!targets.length){toast('No pending items to apply to','error');return;}
   targets.forEach(q=>{
-    if(vals.cp)q.costPrice=vals.cp;
+    if(vals.cp){q.costPrice=vals.cp;autoPrice(q);}
     if(vals.cat){q.category=vals.cat;if(!vals.sub)q.subcategory='';}
-    if(vals.sub){q.subcategory=vals.sub;q.category=vals.cat||q.category;}
+    if(vals.sub){
+      const oldSub=q.subcategory;
+      q.subcategory=vals.sub;q.category=vals.cat||q.category;
+      if(!vals.tags)prefillTags(q,oldSub);
+    }
     if(vals.tags)q.tags=vals.tags;
     if(vals.hs)q.hscode=vals.hs;
     if(vals.origin)q.origin=vals.origin;
@@ -1548,12 +1582,8 @@ $('bulk-apply-btn').addEventListener('click',()=>{
 // markup change: refresh meta rows + stats
 document.querySelectorAll('input[name="markup"]').forEach(r=>r.addEventListener('change',()=>{
   prefSet('markup',getMarkup());
-  document.querySelectorAll('.qcard').forEach(card=>{
-    const item=byId(card.dataset.id);if(!item)return;
-    const sp=item.costPrice?calcSP(parseFloat(item.costPrice)):null;
-    const meta=card.querySelector('.item-meta');if(meta)meta.innerHTML=metaHtml(item,sp);
-  });
-  scheduleStats();
+  queue.forEach(q=>{if(q.status==='pending')autoPrice(q);});
+  renderQueue();scheduleStats();
 }));
 $('concurrency').addEventListener('change',e=>prefSet('concurrency',e.target.value));
 
@@ -1569,7 +1599,7 @@ function updateStats(){
   const queued=queue.filter(q=>q.status==='pending'||q.status==='uploading').length;
   const success=queue.filter(q=>q.status==='success').length;
   const failed=queue.filter(q=>q.status==='failed').length;
-  const value=queue.reduce((s,q)=>s+(q.costPrice?calcSP(parseFloat(q.costPrice))*variantCountFor(q):0),0);
+  const value=queue.reduce((s,q)=>s+effSP(q)*variantCountFor(q),0);
   $('stat-queued').textContent=queued;
   $('stat-success').textContent=success;
   $('stat-failed').textContent=failed;
@@ -1589,7 +1619,7 @@ function updateStats(){
   });
 }
 
-// ── AI title preview ─────────────────────────────────────────────────────────
+// ── Server-side image staging ────────────────────────────────────────────────
 async function ensureUploaded(item){
   if(item.serverFilenames&&item.serverFilenames.length===item.images.length)return item.serverFilenames;
   const fd=new FormData();
@@ -1601,38 +1631,6 @@ async function ensureUploaded(item){
   item.serverFilenames=data.filenames;
   return data.filenames;
 }
-async function generateTitle(id){
-  const item=byId(id);if(!item)return;
-  if(!item.images.length){toast('Add an image first','error');return;}
-  const card=document.querySelector(`.qcard[data-id="${CSS.escape(id)}"]`);
-  const btn=card&&card.querySelector('[data-action="ai-title"]');
-  if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Thinking…';}
-  try{
-    const filenames=await ensureUploaded(item);
-    const res=await fetch('/generate_title',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({filenames,sku:item.sku||'PREVIEW',category:item.category,
-                           subcategory:item.subcategory,socket_id:socket.id})
-    });
-    const data=await res.json();
-    if(!res.ok)throw new Error(data.error||'Failed to generate title');
-    item.title=data.title||item.title;
-    item.aiGenerated=true;
-    if(!item.tags&&data.tags)item.tags=data.tags;
-    patchCard(id);
-    toast(`AI title ready: "${item.title}"`,'success');
-  }catch(e){
-    toast('AI title failed: '+e.message,'error');
-    if(btn){btn.disabled=false;btn.innerHTML='✨ AI Title';}
-  }finally{scheduleStats();}
-}
-$('ai-all-btn').addEventListener('click',async()=>{
-  const targets=queue.filter(q=>q.status==='pending'&&q.images.length&&!q.title);
-  if(!targets.length){toast('No items need titles','error');return;}
-  toast(`Writing ${targets.length} title(s)…`,'success');
-  for(const item of targets)await generateTitle(item.id);
-});
-
 // ── Publish flow ─────────────────────────────────────────────────────────────
 const seamFill=$('seam-fill');
 let batchRunning=false;
@@ -1667,11 +1665,11 @@ async function uploadAll(){
   if(batchRunning)return;
   const pending=queue.filter(q=>q.status==='pending');
   if(!pending.length){toast('Nothing to publish','error');return;}
-  const valid=pending.filter(q=>q.sku&&q.costPrice);
-  pending.filter(q=>!q.sku||!q.costPrice).forEach(q=>addLog(`⚠ Skipping ${q.sku||q.images[0]?.name||'item'} — missing SKU or cost`,'error'));
-  if(!valid.length){toast('All items missing SKU or cost price','error');return;}
+  const valid=pending.filter(isReady);
+  pending.filter(q=>!isReady(q)).forEach(q=>addLog(`⚠ Skipping ${q.sku||q.images[0]?.name||'item'} — missing SKU, cost or product name`,'error'));
+  if(!valid.length){toast('Items need a SKU, cost price and product name','error');return;}
   const noSub=valid.filter(q=>!q.subcategory).length;
-  if(noSub)addLog(`ℹ ${noSub} item(s) have no subcategory — core tags & description template will be skipped, AI description used`,'muted');
+  if(noSub)addLog(`ℹ ${noSub} item(s) have no subcategory — no description template, a generic brand description is used`,'muted');
 
   const btn=$('upload-all-btn');
   btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Checking SKUs…';
@@ -1705,6 +1703,7 @@ async function uploadOne(item){
     socket.emit('start_upload',{
       filenames,sku:item.sku,cost_price:item.costPrice,
       markup:getMarkup(),title:item.title,
+      selling_price:item.sp||null,compare_at_price:item.mrp||null,
       category:item.category,subcategory:item.subcategory,
       tags:item.tags,weight_g:item.weight||null,hs_code:item.hscode,
       country_of_origin:item.origin,inventory_qty:item.qty||null,
@@ -1837,7 +1836,6 @@ async function saveSettings(){
   const p={
     shopify_store:$('s-store').value.trim(),
     shopify_token:$('s-token').value.trim(),
-    groq_api_key:$('s-groq').value.trim(),
     product_vendor:$('s-vendor').value.trim(),
     product_type:$('s-type').value.trim(),
     default_hs_code:$('s-hscode').value.trim(),
@@ -1848,7 +1846,6 @@ async function saveSettings(){
   };
   await fetch('/save_settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
   const msg=$('save-msg');msg.style.display='inline';
-  if(p.groq_api_key)$('dot-groq').className='dot ok';
   if(p.shopify_store)$('dot-shopify').className='dot ok';
   if(p.default_bangle_sizes)DEFAULT_BANGLE_SIZES=p.default_bangle_sizes;
   toast('Settings saved','success');setTimeout(()=>msg.style.display='none',2500);
@@ -1862,20 +1859,11 @@ $('test-shopify-btn').addEventListener('click',async()=>{
     else{el.textContent=`❌ ${r.error}`;el.style.color='var(--red)';}}
   catch(e){el.textContent=`❌ ${e.message}`;el.style.color='var(--red)';}
 });
-$('test-groq-btn').addEventListener('click',async()=>{
-  await saveSettings();const el=$('test-groq-result');
-  el.textContent='Testing…';el.style.color='var(--muted)';
-  try{const r=await(await fetch('/test_groq',{method:'POST'})).json();
-    if(r.ok){el.textContent='✅ Groq key works';el.style.color='var(--green)';}
-    else{el.textContent=`❌ ${r.error}`;el.style.color='var(--red)';}}
-  catch(e){el.textContent=`❌ ${e.message}`;el.style.color='var(--red)';}
-});
 async function loadSettingsForm(){
   try{
     const d=await(await fetch('/get_settings')).json();
     if(d.shopify_store)$('s-store').value=d.shopify_store;
     if(d.shopify_token)$('s-token').value=d.shopify_token;
-    if(d.groq_api_key)$('s-groq').value=d.groq_api_key;
     if(d.product_vendor)$('s-vendor').value=d.product_vendor;
     if(d.product_type)$('s-type').value=d.product_type;
     $('s-hscode').value=d.default_hs_code||'7117.90';
@@ -1884,7 +1872,6 @@ async function loadSettingsForm(){
     $('s-qty').value=d.default_inventory_qty||10;
     const bs=Array.isArray(d.default_bangle_sizes)?d.default_bangle_sizes.join(','):(d.default_bangle_sizes||'2.4,2.6,2.8');
     $('s-bangle-sizes').value=bs;DEFAULT_BANGLE_SIZES=bs;
-    if(d.groq_api_key)$('dot-groq').className='dot ok';
     if(d.shopify_store)$('dot-shopify').className='dot ok';
   }catch(e){}
 }
